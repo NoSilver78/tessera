@@ -8,8 +8,14 @@ source of truth; the compiler projects it into native group policies. See
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+from homeassistant.components.frontend import async_remove_panel
+from homeassistant.components.http import StaticPathConfig
+from homeassistant.components.panel_custom import async_register_panel
+
+from . import websocket as tessera_websocket
 from .const import DOMAIN, MODE_ENFORCE, MODE_MONITOR, MODE_OFF
 from .monitor import compile_current, log_monitor_preview
 from .resolver import AreaEntityResolver
@@ -22,6 +28,12 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 SERVICE_RECOMPILE = "recompile"
 DATA_SERVICE_REGISTERED = "__recompile_service_registered"
+DATA_WEBSOCKET_REGISTERED = "__websocket_registered"
+DATA_PANEL_REGISTERED = "__panel_registered"
+PANEL_URL_PATH = "tessera"
+PANEL_WEBCOMPONENT = "tessera-matrix-panel"
+PANEL_STATIC_URL = "/tessera_static/tessera-panel.js"
+PANEL_STATIC_DIR = Path(__file__).parent / "static"
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -37,6 +49,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     domain_data = _domain_data(hass)
     domain_data[entry.entry_id] = {"store": TesseraStore(hass)}
     _register_recompile_service(hass)
+    _register_websocket_api(hass)
+    await _async_register_matrix_panel(hass)
     await _compile_for_mode_safely(hass, entry.entry_id, domain_data[entry.entry_id])
     return True
 
@@ -57,6 +71,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     domain_data = _domain_data(hass)
     domain_data.pop(entry.entry_id, None)
     if not _has_loaded_entries(domain_data):
+        if domain_data.pop(DATA_PANEL_REGISTERED, None) is True:
+            async_remove_panel(hass, PANEL_URL_PATH, warn_if_unknown=False)
         hass.services.async_remove(DOMAIN, SERVICE_RECOMPILE)
         domain_data.pop(DATA_SERVICE_REGISTERED, None)
     return True
@@ -78,6 +94,41 @@ def _register_recompile_service(hass: HomeAssistant) -> None:
 
     hass.services.async_register(DOMAIN, SERVICE_RECOMPILE, _handle_recompile)
     domain_data[DATA_SERVICE_REGISTERED] = True
+
+
+def _register_websocket_api(hass: HomeAssistant) -> None:
+    """Register Tessera's WebSocket API once per HA instance."""
+    domain_data = _domain_data(hass)
+    if domain_data.get(DATA_WEBSOCKET_REGISTERED) is True:
+        return
+
+    tessera_websocket.async_register(hass)
+    domain_data[DATA_WEBSOCKET_REGISTERED] = True
+
+
+async def _async_register_matrix_panel(hass: HomeAssistant) -> None:
+    """Register the Tessera custom panel and its static JS module."""
+    domain_data = _domain_data(hass)
+    if domain_data.get(DATA_PANEL_REGISTERED) is True:
+        return
+    if not hasattr(hass, "http"):
+        LOGGER.debug("Skipping Tessera panel registration without HA HTTP server")
+        return
+
+    await hass.http.async_register_static_paths(
+        [StaticPathConfig("/tessera_static", str(PANEL_STATIC_DIR), False)]
+    )
+    await async_register_panel(
+        hass,
+        frontend_url_path=PANEL_URL_PATH,
+        webcomponent_name=PANEL_WEBCOMPONENT,
+        sidebar_title="Tessera",
+        sidebar_icon="mdi:shield-account",
+        module_url=PANEL_STATIC_URL,
+        require_admin=True,
+        config_panel_domain=DOMAIN,
+    )
+    domain_data[DATA_PANEL_REGISTERED] = True
 
 
 async def _compile_for_mode_safely(
