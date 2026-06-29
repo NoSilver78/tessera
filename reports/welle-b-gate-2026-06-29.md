@@ -25,3 +25,21 @@ Drei `high`-Claims auf **Tier-1-Pfaden** (D5-Korrupt-Store-Rescue, Native-Write/
 
 ## DoD Re-Spin
 A1–A4 **umgesetzt ODER ehrlich als PARTIAL/BLOCKED** markiert (kein falsches grünes PASS) · A5 · CI grün · PR #7-Update mit Bericht → **Re-Gate per Agenten-Panel**.
+
+
+---
+
+## Re-Gate (Re-Spin `ec717c34` → gemerged `0a49518`) — PASS
+Adversariales Re-Gate-Panel (6 Skeptiker), **problemCount=0**. Entscheidung: **PASS** — Spike als *ehrliches Instrument* akzeptiert, **kein Enforce-Go**.
+- **A1 D5** → ehrlich **PARTIAL**: Gate strukturell gegen Streu-Grün verriegelt (`and`-Kette über `auth_store_corrupted`/`boot_rescue_corruption_tested`/`no_admin_lockout` = false/false/null); nicht im `gate_results[]`-Kanal. ✓
+- **A2** → **REPLACE empirisch bewiesen** (`_probe_native_write_replace_contract`: Subset-Write droppt Gruppe, Superset stellt wieder her); „gruppenverlust-sicher"-Behauptung restlos entfernt (0 grep-Treffer). ✓
+- **A3** → Namespace-Guard (`_validate_managed_group_id`) auf dem **echten** Restore-Pfad; `system-users`-Snapshot **gemessen abgelehnt**. ✓
+- **A4 D12** → ehrlich **BLOCKED** (kein PASS-Claim, keine synthetische Map als Beweis). ✓
+- **A5** → `failure_redaction` **gemessen** (JWT/Bearer-Scan); stale Reports OBSOLETE-markiert. ✓
+- **Keine Regression**: `custom_components/` byte-identisch zu `main`, enforce-frei. ✓
+
+### Enforce-Go bleibt gated
+Auf die spätere **echte** Runde: **D5** (Korrupt-`.storage/auth`-Rescue + No-Admin-Lockout) + **D12** (Live-OIDC-Token→Rolle; braucht Produkt-Login-Hook + `op`-Login).
+
+### Mitnehmen (nicht-blockierend)
+(1) OBSOLETE-Banner-Link → `reports/welle-b-gate-...` ist jetzt auf `main` vorhanden (löst sich auto). (2) Live-D12: synthetisches Schema-Mapping nicht als Produkt-Hook-Beweis missdeuten. (3) Cosmetic: totes `rescue_restore_namespace_guarded=True` + statischer A2-Markdown-PASS aufräumen.
