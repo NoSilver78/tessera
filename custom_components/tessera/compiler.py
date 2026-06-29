@@ -29,6 +29,7 @@ class NativePolicy(TypedDict):
 
 
 CompiledPolicies = dict[str, NativePolicy]
+BY_GROUP_PROJECTION_MODE = "v1-inert"
 
 
 def compile_policies(
@@ -51,6 +52,9 @@ def compile_policies(
     policy_data = validate_policy_data(policy)
     _validate_referenced_roles(config_data, policy_data)
 
+    # ADR 0005: membership.by_group is schema-valid and persisted, but v1-inert.
+    # This compiler emits role policies only and never projects external group
+    # membership into native HA policies or user bindings.
     compiled: dict[str, dict[str, PermissionLeaf]] = {
         role_id: {} for role_id in sorted(config_data["roles"])
     }
