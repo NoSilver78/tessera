@@ -5,7 +5,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, TypedDict, cast
 
 import voluptuous as vol
-from homeassistant.components import websocket_api
+from homeassistant.components.websocket_api import async_register_command
+from homeassistant.components.websocket_api import const as websocket_const
+from homeassistant.components.websocket_api import decorators as websocket_decorators
+from homeassistant.components.websocket_api.connection import ActiveConnection
 from homeassistant.helpers import area_registry as ar
 
 from .config_flow import add_area_grant, remove_area_grant
@@ -59,16 +62,16 @@ class MatrixResponse(TypedDict):
 
 def async_register(hass: HomeAssistant) -> None:
     """Register Tessera matrix WebSocket commands."""
-    websocket_api.async_register_command(hass, websocket_matrix_get)
-    websocket_api.async_register_command(hass, websocket_matrix_set_grant)
+    async_register_command(hass, websocket_matrix_get)
+    async_register_command(hass, websocket_matrix_set_grant)
 
 
-@websocket_api.require_admin
-@websocket_api.websocket_command({vol.Required("type"): TYPE_MATRIX_GET})
-@websocket_api.async_response
+@websocket_decorators.require_admin
+@websocket_decorators.websocket_command({vol.Required("type"): TYPE_MATRIX_GET})
+@websocket_decorators.async_response
 async def websocket_matrix_get(
     hass: HomeAssistant,
-    connection: websocket_api.ActiveConnection,
+    connection: ActiveConnection,
     msg: dict[str, Any],
 ) -> None:
     """Return the current Area x Role grant matrix."""
@@ -77,11 +80,11 @@ async def websocket_matrix_get(
     except TesseraSchemaError as err:
         connection.send_error(msg["id"], "invalid_store", str(err))
     except LookupError as err:
-        connection.send_error(msg["id"], websocket_api.ERR_NOT_FOUND, str(err))
+        connection.send_error(msg["id"], websocket_const.ERR_NOT_FOUND, str(err))
 
 
-@websocket_api.require_admin
-@websocket_api.websocket_command(
+@websocket_decorators.require_admin
+@websocket_decorators.websocket_command(
     {
         vol.Required("type"): TYPE_MATRIX_SET_GRANT,
         vol.Required("area_id"): str,
@@ -90,10 +93,10 @@ async def websocket_matrix_get(
         vol.Required("control"): bool,
     }
 )
-@websocket_api.async_response
+@websocket_decorators.async_response
 async def websocket_matrix_set_grant(
     hass: HomeAssistant,
-    connection: websocket_api.ActiveConnection,
+    connection: ActiveConnection,
     msg: dict[str, Any],
 ) -> None:
     """Persist one Area x Role grant and return the refreshed matrix."""
@@ -106,10 +109,10 @@ async def websocket_matrix_set_grant(
             control=cast(bool, msg["control"]),
         )
     except TesseraSchemaError as err:
-        connection.send_error(msg["id"], websocket_api.ERR_INVALID_FORMAT, str(err))
+        connection.send_error(msg["id"], websocket_const.ERR_INVALID_FORMAT, str(err))
         return
     except LookupError as err:
-        connection.send_error(msg["id"], websocket_api.ERR_NOT_FOUND, str(err))
+        connection.send_error(msg["id"], websocket_const.ERR_NOT_FOUND, str(err))
         return
 
     connection.send_result(msg["id"], result)
