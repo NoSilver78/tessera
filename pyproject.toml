@@ -1,0 +1,36 @@
+[project]
+name = "tessera"
+version = "0.1.0"
+description = "RBAC for Home Assistant — Rollen × Area/Entity × view/operate/change, durchgesetzt auf nativen HA-Policies."
+requires-python = ">=3.13"
+readme = "README.md"
+license = { text = "MIT" }
+
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+src = ["custom_components"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "RUF", "D"]
+# D = pydocstyle (Docstrings); Google-Konvention
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.black]
+target-version = ["py313"]
+line-length = 88
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+warn_unreachable = true
+files = ["custom_components/tessera"]
+
+[[tool.mypy.overrides]]
+module = "homeassistant.*"
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

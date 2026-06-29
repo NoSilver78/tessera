@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "core/**", "welle-**"]
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install tools
+        run: pip install ruff black mypy pytest pytest-asyncio pytest-homeassistant-custom-component
+      - name: ruff (lint)
+        run: ruff check .
+      - name: black (format check)
+        run: black --check .
+      - name: mypy (types, strict)
+        run: mypy custom_components/tessera
+      - name: pytest
+        # exit code 5 = "no tests collected" (ok solange noch keine Tests existieren)
+        run: pytest -q || [ $? -eq 5 ]
