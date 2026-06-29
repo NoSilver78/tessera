@@ -18,3 +18,6 @@ Du bist hier der **Implementierer**: kleine, klar begrenzte Codeänderungen, Tes
 
 ## Zusammenarbeit
 Blackboard via `exchange/` · Claude reviewt jede Welle (Gate) · **Merge nach `main` nur mit grünem Gate + Evidence** · ACCEPT/MODIFY/REJECT bei Reviews mit Begründung + `file:line`/URL-Belegen.
+
+## Übergabe (Pflicht — PR-basiert)
+Schritt/Modul fertig → **commit auf Branch** (`core/*` bzw. `welle-*`) → **push** → **`gh pr create`** (PR-Body = Bericht: was geändert · Tests+Ergebnis · offene Risiken). **Code NICHT uncommitted im Arbeitsbaum liegen lassen** — sonst sieht Claude kein Signal. Claude gate't den **PR** (Review + CI grün) → Merge nach `main`. Reine Reviews/Analysen ohne Code → Datei nach `exchange/YYYY-MM-DD/`.
