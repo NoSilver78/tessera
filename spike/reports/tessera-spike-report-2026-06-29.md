@@ -1,6 +1,6 @@
 # Tessera Phase-0 Spike Report
 
-Stand: 2026-06-29T13:42:36
+Stand: 2026-06-29T13:45:50
 
 Modus: Dev-only gegen `ha-tessera-dev`; keine Secrets/Token/Auth-Codes ausgegeben. Live-/`/Volumes/config`-Scans sind im Standardlauf bewusst deaktiviert und brauchen ein eigenes Gate.
 
@@ -8,7 +8,7 @@ Modus: Dev-only gegen `ha-tessera-dev`; keine Secrets/Token/Auth-Codes ausgegebe
 
 **PARTIAL / kein Enforce-Go.**
 
-D0 ist gruen genug, um den dev-only Messlauf zu starten. D1, D2, D3, D4, D6, D7, D8, A2, A3 und B3 liefern belastbare Dev-Signale. D5 bleibt bewusst **PARTIAL**, weil kein echter `/config/.storage/auth`-Korruptions-/No-Admin-Lockout-Rescue bewiesen ist. D9 bleibt bis Welle D **PARTIAL**. D12 bleibt **BLOCKED**. Welle C nimmt damit nur die Runtime-/Leak-Matrix ab, nicht Enforce/Product.
+D0 ist gruen genug, um den dev-only Messlauf zu starten. D1, D2, D3, D4, D6, D8, A2, A3 und B3 liefern belastbare Dev-Signale. D7 liefert eine ehrliche Leak-Matrix, bleibt aber wegen nicht verifizierbarer Registry-/History-/Logbook-Baselines **PARTIAL**. D5 bleibt bewusst **PARTIAL**, weil kein echter `/config/.storage/auth`-Korruptions-/No-Admin-Lockout-Rescue bewiesen ist. D9 bleibt bis Welle D **PARTIAL**. D12 bleibt **BLOCKED**. Welle C nimmt damit nur die Runtime-/Leak-Matrix ab, nicht Enforce/Product.
 
 ## DoD Matrix
 
@@ -117,13 +117,13 @@ Gate-Results:
   "device": {
     "area_id": "tessera_living",
     "config_entry_id_present": true,
-    "device_id": "e4f8dffa1906502b45ab80db4878ec0f"
+    "device_id": "0053d38ec47804b79e36ca02b53629d9"
   },
   "entities": [
     {
       "area_id": null,
       "class": "device_area_allowed_light",
-      "device_id": "e4f8dffa1906502b45ab80db4878ec0f",
+      "device_id": "0053d38ec47804b79e36ca02b53629d9",
       "disabled_by": null,
       "domain": "light",
       "entity_id": "light.tessera_seed_allowed_light",
@@ -141,7 +141,7 @@ Gate-Results:
     {
       "area_id": null,
       "class": "device_area_allowed_cover",
-      "device_id": "e4f8dffa1906502b45ab80db4878ec0f",
+      "device_id": "0053d38ec47804b79e36ca02b53629d9",
       "disabled_by": null,
       "domain": "cover",
       "entity_id": "cover.tessera_seed_allowed_cover",
