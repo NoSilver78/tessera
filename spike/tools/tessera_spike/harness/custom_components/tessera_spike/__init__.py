@@ -18,12 +18,13 @@ from homeassistant.auth.permissions.const import (
     POLICY_CONTROL,
     POLICY_READ,
 )
-from homeassistant.const import ATTR_ENTITY_ID
+from homeassistant.const import ATTR_ENTITY_ID, __version__ as HA_VERSION
 from homeassistant.core import Context, HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.helpers import aiohttp_client
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.typing import ConfigType
 
 DOMAIN = "tessera_spike"
@@ -41,6 +42,8 @@ STATE_ONLY_ENTITY = "sensor.tessera_state_only"
 GROUP_ID = "tessera:test"
 GROUP_ID_EXTRA = "tessera:extra"
 GROUP_ID_D2 = "tessera:d2"
+GROUP_ID_HACS_ROLLBACK = "tessera:hacs_rollback"
+GROUP_ID_LIFECYCLE = "tessera:lifecycle"
 TEST_USER_NAME = "tessera-test-user"
 TEST_D2_USER_NAME = "tessera-d2-user"
 TEST_RESCUE_USER_NAME = "tessera-rescue-user"
@@ -294,9 +297,7 @@ async def _ws_roundtrip(
     return results
 
 
-async def _probe_d3_ws(
-    hass: HomeAssistant, access_token: str
-) -> dict[str, Any]:
+async def _probe_d3_ws(hass: HomeAssistant, access_token: str) -> dict[str, Any]:
     """Measure read/control consistency through Home Assistant WebSocket."""
     commands = [
         {"type": "get_states"},
@@ -422,7 +423,9 @@ async def _probe_ws_render_template(
             event: dict[str, Any] | None = None
             if initial.get("success"):
                 event = await ws.receive_json(timeout=20)
-                await ws.send_json({"id": 2, "type": "unsubscribe_events", "subscription": 1})
+                await ws.send_json(
+                    {"id": 2, "type": "unsubscribe_events", "subscription": 1}
+                )
                 await ws.receive_json(timeout=20)
             return {
                 "success": initial.get("success"),
@@ -437,7 +440,9 @@ async def _probe_ws_render_template(
             }
 
     result = await _run(access_token)
-    admin_result = await _run(admin_access_token) if admin_access_token is not None else {}
+    admin_result = (
+        await _run(admin_access_token) if admin_access_token is not None else {}
+    )
     return _matrix_cell(
         transport="ws",
         vector="render_template",
@@ -448,9 +453,11 @@ async def _probe_ws_render_template(
         },
         error=str(result.get("error")) if not result.get("success") else None,
         leak_hint=result.get("result_present") is True,
-        baseline_present=admin_result.get("result_present")
-        if admin_access_token is not None
-        else None,
+        baseline_present=(
+            admin_result.get("result_present")
+            if admin_access_token is not None
+            else None
+        ),
     )
 
 
@@ -489,9 +496,7 @@ async def _probe_d6_system_context(hass: HomeAssistant) -> dict[str, Any]:
         "verdict": (
             "ENFORCE_BYPASS"
             if error is None and before_state != after_state
-            else "NO_EFFECT"
-            if error is None
-            else "BLOCKED"
+            else "NO_EFFECT" if error is None else "BLOCKED"
         ),
         "not_tested_contexts": ["automation", "script", "assist"],
     }
@@ -560,7 +565,8 @@ async def _probe_d7_rest_matrix(
             vector="/api/template",
             status=template["status"],
             body=template.get("body"),
-            leak_hint=template["status"] == 200 and template.get("body") not in (None, ""),
+            leak_hint=template["status"] == 200
+            and template.get("body") not in (None, ""),
             baseline_present=admin_template.get("body") not in (None, ""),
         ),
         _matrix_cell(
@@ -1087,6 +1093,518 @@ async def _probe_system_users_gate(hass: HomeAssistant) -> dict[str, Any]:
     }
 
 
+def _stable_json(data: Any) -> str:
+    """Return deterministic JSON for equality fingerprints."""
+    return json.dumps(data, sort_keys=True, separators=(",", ":"))
+
+
+async def _auth_fingerprint(hass: HomeAssistant) -> dict[str, Any]:
+    """Return a secret-free auth fingerprint for lifecycle probes."""
+    users = await hass.auth.async_get_users()
+    groups = await hass.auth._store.async_get_groups()  # noqa: SLF001
+    store = hass.auth._store  # noqa: SLF001
+    raw_store_data = store._data_to_save()  # noqa: SLF001
+    store_data = raw_store_data.get("data", raw_store_data)
+    managed_group_ids = sorted(
+        group.id for group in groups if group.id.startswith(MANAGED_GROUP_PREFIX)
+    )
+    return {
+        "ha_version_actual": HA_VERSION,
+        "auth_store_counts": {
+            "users": len(store_data.get("users", [])),
+            "groups": len(store_data.get("groups", [])),
+            "credentials": len(store_data.get("credentials", [])),
+            "refresh_tokens": len(store_data.get("refresh_tokens", [])),
+        },
+        "group_summaries": sorted(
+            [
+                {
+                    "id": group.id,
+                    "name": group.name,
+                    "system_generated": group.system_generated,
+                    "has_policy": bool(group.policy),
+                    "policy_json": _stable_json(group.policy) if group.policy else None,
+                }
+                for group in groups
+            ],
+            key=lambda item: item["id"],
+        ),
+        "user_summaries": sorted(
+            [
+                {
+                    "name": user.name,
+                    "groups": sorted(group.id for group in user.groups),
+                    "is_active": user.is_active,
+                    "is_admin": user.is_admin,
+                    "is_owner": user.is_owner,
+                    "system_generated": user.system_generated,
+                    "credentials_count": len(user.credentials),
+                    "refresh_token_classes": sorted(
+                        {token.token_type for token in user.refresh_tokens.values()}
+                    ),
+                    "refresh_token_count": len(user.refresh_tokens),
+                }
+                for user in users
+            ],
+            key=lambda item: str(item["name"]),
+        ),
+        "managed_groups": sorted(
+            [
+                {
+                    "id": group.id,
+                    "name": group.name,
+                    "has_policy": bool(group.policy),
+                    "policy_json": _stable_json(group.policy) if group.policy else None,
+                }
+                for group in groups
+                if group.id in managed_group_ids
+            ],
+            key=lambda item: item["id"],
+        ),
+        "managed_users": sorted(
+            [
+                {
+                    "name": user.name,
+                    "groups": sorted(group.id for group in user.groups),
+                    "is_active": user.is_active,
+                    "is_admin": user.is_admin,
+                    "is_owner": user.is_owner,
+                }
+                for user in users
+                if user.name and user.name.startswith(MANAGED_USER_PREFIX)
+            ],
+            key=lambda item: str(item["name"]),
+        ),
+        "owner_admin_users": sorted(
+            [
+                {
+                    "name": user.name,
+                    "is_active": user.is_active,
+                    "is_admin": user.is_admin,
+                    "is_owner": user.is_owner,
+                    "groups": sorted(group.id for group in user.groups),
+                }
+                for user in users
+                if user.is_owner or user.is_admin
+            ],
+            key=lambda item: str(item["name"]),
+        ),
+    }
+
+
+async def _owner_admin_lockout_probe(hass: HomeAssistant) -> dict[str, Any]:
+    """Verify at least one active owner/admin remains available."""
+    users = await hass.auth.async_get_users()
+    token_probe: dict[str, Any] = {"attempted": False}
+    active_owner_or_admin = sorted(
+        [
+            {
+                "name": user.name,
+                "is_owner": user.is_owner,
+                "is_admin": user.is_admin,
+                "is_active": user.is_active,
+                "groups": sorted(group.id for group in user.groups),
+            }
+            for user in users
+            if user.is_active and (user.is_owner or user.is_admin)
+        ],
+        key=lambda item: str(item["name"]),
+    )
+    admin_user = next(
+        (user for user in users if user.is_active and (user.is_owner or user.is_admin)),
+        None,
+    )
+    if admin_user is not None:
+        access_token, refresh_token = await _make_access_token(
+            hass, admin_user, "tessera-spike-lockout-probe"
+        )
+        response = await _http_json(hass, "GET", "/api/config", access_token)
+        hass.auth.async_remove_refresh_token(refresh_token)
+        await _persist_auth(hass)
+        token_probe = {
+            "attempted": True,
+            "status": response["status"],
+            "authenticated": response["status"] == 200,
+            "token_values_redacted": True,
+        }
+    return {
+        "checked": True,
+        "no_admin_lockout": bool(active_owner_or_admin)
+        and token_probe.get("authenticated") is True,
+        "active_owner_or_admin_users": active_owner_or_admin,
+        "authenticated_admin_request": token_probe,
+    }
+
+
+async def _remove_managed_group_if_absent_before(
+    hass: HomeAssistant, group_id: str, before_fingerprint: dict[str, Any]
+) -> None:
+    """Remove a temporary managed group when the pre-snapshot did not contain it."""
+    before_group_ids = {
+        group["id"] for group in before_fingerprint.get("managed_groups", [])
+    }
+    if group_id in before_group_ids:
+        return
+    store = hass.auth._store  # noqa: SLF001
+    await store.async_get_groups()
+    store._groups.pop(group_id, None)  # noqa: SLF001
+    await _persist_auth(hass)
+
+
+async def _request_lifecycle_transition(
+    hass: HomeAssistant,
+    *,
+    mode: str,
+    user: models.User,
+    original_groups: list[str],
+    group_id: str,
+    entity_id: str,
+    simulated_ha_version: str | None = None,
+) -> dict[str, Any]:
+    """Execute the spike lifecycle transition path used by D11 and D15."""
+    before = await _auth_fingerprint(hass)
+    actual_version = simulated_ha_version or HA_VERSION
+    preview = {
+        "group_id": group_id,
+        "entity_id": entity_id,
+        "read": True,
+        "control": True,
+    }
+    if mode == "off":
+        after = await _auth_fingerprint(hass)
+        return {
+            "requested_mode": mode,
+            "effective_mode": "off",
+            "ha_version_actual": actual_version,
+            "ha_version_supported": HA_VERSION,
+            "native_write_attempted": False,
+            "native_write_blocked": False,
+            "auth_fingerprint_before": before,
+            "auth_fingerprint_after": after,
+            "native_write_observed": _stable_json(before) != _stable_json(after),
+        }
+    if mode == "monitor":
+        after = await _auth_fingerprint(hass)
+        return {
+            "requested_mode": mode,
+            "effective_mode": "monitor",
+            "ha_version_actual": actual_version,
+            "ha_version_supported": HA_VERSION,
+            "preview": preview,
+            "native_write_attempted": False,
+            "native_write_blocked": False,
+            "auth_fingerprint_before": before,
+            "auth_fingerprint_after": after,
+            "native_write_observed": _stable_json(before) != _stable_json(after),
+        }
+    if mode == "enforce" and actual_version != HA_VERSION:
+        issue_id = "unsupported_version_enforce_refused"
+        ir.async_create_issue(
+            hass,
+            DOMAIN,
+            issue_id,
+            is_fixable=False,
+            is_persistent=False,
+            severity=ir.IssueSeverity.ERROR,
+            translation_key=issue_id,
+            translation_placeholders={
+                "actual": actual_version,
+                "supported": HA_VERSION,
+            },
+        )
+        after = await _auth_fingerprint(hass)
+        return {
+            "requested_mode": mode,
+            "effective_mode": "monitor",
+            "enforce_requested": True,
+            "ha_version_actual": actual_version,
+            "ha_version_supported": HA_VERSION,
+            "version_mismatch_detected": True,
+            "native_write_attempted": False,
+            "native_write_blocked": True,
+            "native_write_call_count": 0,
+            "native_write_refused_before_call": True,
+            "repair_issue_created": True,
+            "repair_issue_id": issue_id,
+            "auth_fingerprint_before": before,
+            "auth_fingerprint_after": after,
+            "auth_fingerprint_unchanged": _stable_json(before) == _stable_json(after),
+        }
+    if mode == "enforce":
+        await _ensure_group(
+            hass,
+            group_id,
+            "Tessera Lifecycle",
+            _policy(entity_id, read=True, control=True),
+        )
+        full_superset = sorted({*original_groups, group_id})
+        await hass.auth.async_update_user(user, group_ids=full_superset)
+        user.invalidate_cache()
+        await _persist_auth(hass)
+        after = await _auth_fingerprint(hass)
+        user_groups_after = sorted(group.id for group in user.groups)
+        return {
+            "requested_mode": mode,
+            "effective_mode": "enforce",
+            "ha_version_actual": actual_version,
+            "ha_version_supported": HA_VERSION,
+            "native_write_attempted": True,
+            "native_write_blocked": False,
+            "full_group_superset": full_superset,
+            "original_groups": original_groups,
+            "user_groups_after_enforce": user_groups_after,
+            "full_superset_written": user_groups_after == full_superset,
+            "permission_probe": {
+                "forbidden_read": user.permissions.check_entity(entity_id, POLICY_READ),
+                "forbidden_control": user.permissions.check_entity(
+                    entity_id, POLICY_CONTROL
+                ),
+            },
+            "auth_fingerprint_before": before,
+            "auth_fingerprint_after": after,
+        }
+    return {
+        "requested_mode": mode,
+        "effective_mode": "off",
+        "native_write_attempted": False,
+        "native_write_blocked": True,
+        "error": "unknown_mode",
+    }
+
+
+async def _probe_d11_version_gate(hass: HomeAssistant) -> dict[str, Any]:
+    """Simulate unsupported HA version and prove enforce is refused before writes."""
+    user = await _find_user(hass, TEST_USER_NAME)
+    if user is None:
+        return {
+            "tested": True,
+            "status": "FAIL",
+            "reason": "managed test user missing; cannot measure version gate",
+        }
+    simulated_unsupported_version = "9999.0.0"
+    original_groups = sorted(group.id for group in user.groups)
+    transition = await _request_lifecycle_transition(
+        hass,
+        mode="enforce",
+        user=user,
+        original_groups=original_groups,
+        group_id=GROUP_ID_LIFECYCLE,
+        entity_id=FORBIDDEN_ENTITY,
+        simulated_ha_version=simulated_unsupported_version,
+    )
+    unchanged = transition.get("auth_fingerprint_unchanged") is True
+    passed = (
+        transition.get("version_mismatch_detected") is True
+        and transition.get("enforce_requested") is True
+        and transition.get("native_write_attempted") is False
+        and transition.get("native_write_blocked") is True
+        and transition.get("native_write_call_count") == 0
+        and transition.get("native_write_refused_before_call") is True
+        and transition.get("effective_mode") in {"monitor", "off"}
+        and transition.get("repair_issue_created") is True
+        and unchanged
+    )
+    lockout = await _owner_admin_lockout_probe(hass)
+    return {
+        "tested": True,
+        "status": "PASS" if passed and lockout["no_admin_lockout"] else "PARTIAL",
+        "reason": "unsupported-version enforce request is routed through lifecycle gate and refused before native auth write",
+        "ha_version_actual": HA_VERSION,
+        "ha_version_supported": HA_VERSION,
+        "ha_version_simulated": simulated_unsupported_version,
+        "simulation_method": "in-process lifecycle enforce request with simulated unsupported version",
+        "requested_mode": transition.get("requested_mode"),
+        "effective_mode": transition.get("effective_mode"),
+        "enforce_requested": transition.get("enforce_requested"),
+        "native_write_attempted": transition.get("native_write_attempted"),
+        "native_write_blocked": transition.get("native_write_blocked"),
+        "native_write_call_count": transition.get("native_write_call_count"),
+        "native_write_refused_before_call": transition.get(
+            "native_write_refused_before_call"
+        ),
+        "repair_issue_created": transition.get("repair_issue_created"),
+        "repair_issue_id": transition.get("repair_issue_id"),
+        "auth_fingerprint_before": transition.get("auth_fingerprint_before"),
+        "auth_fingerprint_after": transition.get("auth_fingerprint_after"),
+        "auth_fingerprint_unchanged": unchanged,
+        "owner_admin_lockout_probe": lockout,
+        "transition": transition,
+        "file_line": "spike/tools/tessera_spike/harness/custom_components/tessera_spike/__init__.py:_probe_d11_version_gate",
+    }
+
+
+async def _probe_d13_hacs_rollback(hass: HomeAssistant) -> dict[str, Any]:
+    """Simulate managed-policy update and rollback without leaving native drift."""
+    before = await _auth_fingerprint(hass)
+    user = await _find_user(hass, TEST_USER_NAME)
+    if user is None:
+        return {
+            "tested": True,
+            "status": "FAIL",
+            "reason": "managed test user missing; cannot measure rollback",
+        }
+    original_groups = sorted(group.id for group in user.groups)
+    await _ensure_group(
+        hass,
+        GROUP_ID_HACS_ROLLBACK,
+        "Tessera HACS Rollback",
+        _policy(FORBIDDEN_ENTITY, read=True, control=True),
+    )
+    update_groups = sorted({*original_groups, GROUP_ID_HACS_ROLLBACK})
+    await hass.auth.async_update_user(user, group_ids=update_groups)
+    user.invalidate_cache()
+    await _persist_auth(hass)
+    after_update = await _auth_fingerprint(hass)
+
+    await hass.auth.async_update_user(user, group_ids=original_groups)
+    user.invalidate_cache()
+    await _remove_managed_group_if_absent_before(hass, GROUP_ID_HACS_ROLLBACK, before)
+    await _persist_auth(hass)
+    after_rollback = await _auth_fingerprint(hass)
+    updated = _stable_json(before) != _stable_json(after_update)
+    restored = _stable_json(before) == _stable_json(after_rollback)
+    lockout = await _owner_admin_lockout_probe(hass)
+    return {
+        "tested": True,
+        "status": (
+            "PASS"
+            if updated and restored and lockout["no_admin_lockout"]
+            else "PARTIAL"
+        ),
+        "reason": "simulated component update writes managed policy, rollback restores exact auth fingerprint",
+        "simulation_method": "in-process HACS update/downgrade simulation; no real HACS package install",
+        "component_version_before": "welle-e-sim-1",
+        "component_version_update": "welle-e-sim-2",
+        "component_version_after_rollback": "welle-e-sim-1",
+        "native_write_attempted": True,
+        "native_write_blocked": False,
+        "auth_fingerprint_before": before,
+        "auth_fingerprint_after_update": after_update,
+        "auth_fingerprint_changed_by_update": updated,
+        "auth_fingerprint_after": after_rollback,
+        "rollback_restored_exact_fingerprint": restored,
+        "managed_groups_before": before.get("managed_groups", []),
+        "managed_groups_after": after_rollback.get("managed_groups", []),
+        "managed_users_before": before.get("managed_users", []),
+        "managed_users_after": after_rollback.get("managed_users", []),
+        "owner_admin_lockout_probe": lockout,
+        "restore_probe": {
+            "user_name": TEST_USER_NAME,
+            "original_groups": original_groups,
+            "update_groups": update_groups,
+            "restored_groups": sorted(group.id for group in user.groups),
+        },
+        "file_line": "spike/tools/tessera_spike/harness/custom_components/tessera_spike/__init__.py:_probe_d13_hacs_rollback",
+    }
+
+
+async def _probe_d15_lifecycle(hass: HomeAssistant) -> dict[str, Any]:
+    """Measure off -> monitor -> enforce -> restore with full-superset writes."""
+    before = await _auth_fingerprint(hass)
+    user = await _find_user(hass, TEST_USER_NAME)
+    if user is None:
+        return {
+            "tested": True,
+            "status": "FAIL",
+            "reason": "managed test user missing; cannot measure lifecycle",
+        }
+    original_groups = sorted(group.id for group in user.groups)
+    off_transition = await _request_lifecycle_transition(
+        hass,
+        mode="off",
+        user=user,
+        original_groups=original_groups,
+        group_id=GROUP_ID_LIFECYCLE,
+        entity_id=FORBIDDEN_ENTITY,
+    )
+    monitor_transition = await _request_lifecycle_transition(
+        hass,
+        mode="monitor",
+        user=user,
+        original_groups=original_groups,
+        group_id=GROUP_ID_LIFECYCLE,
+        entity_id=FORBIDDEN_ENTITY,
+    )
+    enforce_transition = await _request_lifecycle_transition(
+        hass,
+        mode="enforce",
+        user=user,
+        original_groups=original_groups,
+        group_id=GROUP_ID_LIFECYCLE,
+        entity_id=FORBIDDEN_ENTITY,
+    )
+
+    await hass.auth.async_update_user(user, group_ids=original_groups)
+    user.invalidate_cache()
+    await _remove_managed_group_if_absent_before(hass, GROUP_ID_LIFECYCLE, before)
+    await _persist_auth(hass)
+    restore_after = await _auth_fingerprint(hass)
+    off_wrote = off_transition.get("native_write_observed") is True
+    monitor_wrote = monitor_transition.get("native_write_observed") is True
+    restored = _stable_json(before) == _stable_json(restore_after)
+    lockout = await _owner_admin_lockout_probe(hass)
+    enforce_permission_probe = enforce_transition.get("permission_probe", {})
+    passed = (
+        not off_wrote
+        and not monitor_wrote
+        and enforce_transition.get("native_write_attempted") is True
+        and enforce_transition.get("native_write_blocked") is False
+        and enforce_transition.get("full_superset_written") is True
+        and enforce_permission_probe.get("forbidden_read") is True
+        and enforce_permission_probe.get("forbidden_control") is True
+        and restored
+        and lockout["no_admin_lockout"]
+    )
+    return {
+        "tested": True,
+        "status": "PASS" if passed else "PARTIAL",
+        "reason": "measured off and monitor no-write, enforce full-superset native write, restore exact fingerprint",
+        "simulation_method": "in-process native auth policy lifecycle",
+        "transitions": ["off", "monitor", "enforce", "restore"],
+        "off": {
+            "transition": off_transition,
+            "native_write_observed": off_wrote,
+            "effective_mode": "off",
+        },
+        "monitor": {
+            "transition": monitor_transition,
+            "native_write_observed": monitor_wrote,
+            "effective_mode": "monitor",
+            "preview": monitor_transition.get("preview"),
+        },
+        "enforce": {
+            "transition": enforce_transition,
+            "native_write_attempted": enforce_transition.get("native_write_attempted"),
+            "native_write_blocked": enforce_transition.get("native_write_blocked"),
+            "effective_mode": "enforce",
+            "full_group_superset": enforce_transition.get("full_group_superset"),
+            "original_groups": original_groups,
+            "user_groups_after_enforce": enforce_transition.get(
+                "user_groups_after_enforce"
+            ),
+            "full_superset_written": enforce_transition.get("full_superset_written"),
+            "permission_probe": enforce_permission_probe,
+        },
+        "restore": {
+            "native_write_attempted": True,
+            "effective_mode": "restore",
+            "restored_exact_fingerprint": restored,
+            "restored_groups": sorted(group.id for group in user.groups),
+        },
+        "auth_fingerprint_before": before,
+        "auth_fingerprint_after_off": off_transition.get("auth_fingerprint_after"),
+        "auth_fingerprint_after_monitor": monitor_transition.get(
+            "auth_fingerprint_after"
+        ),
+        "auth_fingerprint_after_enforce": enforce_transition.get(
+            "auth_fingerprint_after"
+        ),
+        "auth_fingerprint_after": restore_after,
+        "owner_admin_lockout_probe": lockout,
+        "file_line": "spike/tools/tessera_spike/harness/custom_components/tessera_spike/__init__.py:_probe_d15_lifecycle",
+    }
+
+
 def _registered_service_names(hass: HomeAssistant, domain: str) -> list[str]:
     """Return registered service names for a domain."""
     domain_services = hass.services.async_services().get(domain, {})
@@ -1283,9 +1801,7 @@ async def _classify_custom_components(hass: HomeAssistant) -> dict[str, Any]:
         ),
         "d9_gate_pass_fail_closed": (
             len(components) == len(RELEVANT_CUSTOM_COMPONENT_INPUTS)
-            and all(
-                item["verdict"] == "UNKNOWN_BLOCK_ENFORCE" for item in components
-            )
+            and all(item["verdict"] == "UNKNOWN_BLOCK_ENFORCE" for item in components)
             and all(item["verdict"] != "ALLOW" for item in dev_runtime_components)
         ),
         "enforce_blocked_by_unknown": any(
@@ -1551,7 +2067,9 @@ async def _phase_post_restart(hass: HomeAssistant) -> dict[str, Any]:
         llat_states_before_revoke = await _http_json(
             hass, "GET", "/api/states", llat_access_token
         )
-        llat_state_entities = _entity_ids_from_body(llat_states_before_revoke.get("body"))
+        llat_state_entities = _entity_ids_from_body(
+            llat_states_before_revoke.get("body")
+        )
         llat_allowed_service = await _http_json(
             hass,
             "POST",
@@ -1602,20 +2120,24 @@ async def _phase_post_restart(hass: HomeAssistant) -> dict[str, Any]:
             "entity_service_forbidden_status": forbidden_service["status"],
             "entity_id_all_status": all_service["status"],
             "entity_id_all_before": {
-                ALLOWED_ENTITY: before_all_allowed.state
-                if before_all_allowed is not None
-                else None,
-                FORBIDDEN_ENTITY: before_all_forbidden.state
-                if before_all_forbidden is not None
-                else None,
+                ALLOWED_ENTITY: (
+                    before_all_allowed.state if before_all_allowed is not None else None
+                ),
+                FORBIDDEN_ENTITY: (
+                    before_all_forbidden.state
+                    if before_all_forbidden is not None
+                    else None
+                ),
             },
             "entity_id_all_after": {
-                ALLOWED_ENTITY: after_all_allowed.state
-                if after_all_allowed is not None
-                else None,
-                FORBIDDEN_ENTITY: after_all_forbidden.state
-                if after_all_forbidden is not None
-                else None,
+                ALLOWED_ENTITY: (
+                    after_all_allowed.state if after_all_allowed is not None else None
+                ),
+                FORBIDDEN_ENTITY: (
+                    after_all_forbidden.state
+                    if after_all_forbidden is not None
+                    else None
+                ),
             },
             "return_response_changed_states_tested": True,
             "return_response_status": response_service["status"],
@@ -1625,9 +2147,11 @@ async def _phase_post_restart(hass: HomeAssistant) -> dict[str, Any]:
                 "service": "tessera_spike.snapshot",
                 "status": non_entity_service["status"],
                 "body": _body_summary(non_entity_service.get("body")),
-                "verdict": "ENFORCE_BYPASS"
-                if non_entity_service["status"] == 200
-                else "BLOCKED",
+                "verdict": (
+                    "ENFORCE_BYPASS"
+                    if non_entity_service["status"] == 200
+                    else "BLOCKED"
+                ),
             },
             "ws_service_response_tested": True,
             "ws_service_allowed_success": d3_ws.get("service_allowed_success"),
@@ -1640,12 +2164,12 @@ async def _phase_post_restart(hass: HomeAssistant) -> dict[str, Any]:
                 and d3_ws.get("service_forbidden_success") is False
             ),
             "documented_enforce_gaps": [
-                "system_context_user_id_none"
-                if d6_system_context.get("verdict") == "ENFORCE_BYPASS"
-                else None,
-                "non_entity_service"
-                if non_entity_service["status"] == 200
-                else None,
+                (
+                    "system_context_user_id_none"
+                    if d6_system_context.get("verdict") == "ENFORCE_BYPASS"
+                    else None
+                ),
+                "non_entity_service" if non_entity_service["status"] == 200 else None,
             ],
         }
         d6_services["documented_enforce_gaps"] = [
@@ -1658,8 +2182,7 @@ async def _phase_post_restart(hass: HomeAssistant) -> dict[str, Any]:
                 cell["vector"] == "/api/logbook" for cell in d7_rest_matrix
             ),
             "registry_ws_tested": any(
-                str(cell["vector"]).startswith("config/")
-                for cell in d7_ws_matrix
+                str(cell["vector"]).startswith("config/") for cell in d7_ws_matrix
             ),
             "history_tested": any(
                 "history" in str(cell["vector"])
@@ -1741,6 +2264,9 @@ async def _phase_post_restart(hass: HomeAssistant) -> dict[str, Any]:
         "d7_leak_matrix": d7_leaks,
         "d8_headless_token": d8_llat,
         "d9_custom_component_runtime": await _classify_custom_components_safely(hass),
+        "d11_version_gate": await _probe_d11_version_gate(hass),
+        "d13_hacs_rollback": await _probe_d13_hacs_rollback(hass),
+        "d15_lifecycle": await _probe_d15_lifecycle(hass),
     }
     data["post_restart"] = result
     await _write_json(hass, RESULT_PATH, data)
