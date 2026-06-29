@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import pytest
-from custom_components.tessera.compiler import compile_policies
+from custom_components.tessera.compiler import (
+    BY_GROUP_PROJECTION_MODE,
+    compile_policies,
+)
 from custom_components.tessera.schema import (
     TesseraSchemaError,
     default_config_data,
@@ -206,6 +209,21 @@ def test_compile_is_deterministic() -> None:
     assert compile_policies(config, policy, resolver) == compile_policies(
         config, policy, resolver
     )
+
+
+def test_by_group_membership_is_v1_inert_for_policy_compilation() -> None:
+    """ADR 0005: external group membership does not project in v1."""
+    config = default_config_data()
+    config["roles"] = {"viewer": {"name": "Viewer"}}
+    policy = default_policy_data()
+    policy["area_grants"] = {"living": {"viewer": {"read": True}}}
+    resolver = FakeResolver({"living": ("light.sofa",)})
+    baseline = compile_policies(config, policy, resolver)
+
+    config["membership"]["by_group"] = {"authentik:tessera-viewers": ["viewer"]}
+
+    assert BY_GROUP_PROJECTION_MODE == "v1-inert"
+    assert compile_policies(config, policy, resolver) == baseline
 
 
 def test_output_never_contains_bare_true_shortcuts() -> None:

@@ -424,12 +424,12 @@ Jede Area-Regel wird zur **vollständigen entity_ids-Liste** expandiert (419 dir
 
 ### 7.2 Der `groups`-Claim-Seitenkanal (Kernproblem)
 
-`auth_oidc` v1.1.1 reicht `groups` **nur binär admin/user** durch. Der rohe `groups`-Claim muss **parallel** gelesen werden. **Spike-Voraussetzung:** verifizieren, dass der Seitenkanal den rohen Claim **zuverlässig at/after login** lesen kann; sonst Authentik-API-Poll/Webhook (v2, D4). **Bis dahin sind ALLE `by_group`-Bindungen inert.**
+`auth_oidc` v1.1.1 reicht `groups` **nur binär admin/user** durch. Der rohe `groups`-Claim muss **parallel** gelesen werden. **ADR 0005 / v1:** `membership.by_group` bleibt geparst, validiert und persistiert, ist aber **v1-inert** und wird vom Compiler nicht in native Policies oder User-Bindings projiziert. Aktivierung erst post-v1 mit At-Login-Hook, D12-Live-Beweis und Re-Gate. **Bis dahin tragen ausschließlich `by_user`-Bindungen v1-Enforce.**
 
 ### 7.3 Mapping-Kette (n:m, konfigurierbar)
 
 ```
-Authentik-Gruppe ──(bindings.by_group)──▶ Tessera-Rolle(n) ──▶ Grants ──▶ native Policy
+Authentik-Gruppe ──(bindings.by_group, v1-inert)──▶ Tessera-Rolle(n) ──▶ Grants ──▶ native Policy
 "authentik Admins" ─────────────────────▶ role_admin (is_admin) → system-admin
 ```
 - **n:m** (D9): eine Gruppe → mehrere Rollen, eine Rolle ← mehrere Gruppen. Nested Gruppen = v2.
