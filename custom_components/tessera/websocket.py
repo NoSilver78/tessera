@@ -13,7 +13,13 @@ from homeassistant.helpers import area_registry as ar
 
 from .config_flow import add_area_grant, remove_area_grant
 from .const import DOMAIN
-from .monitor import MonitorPreview, compile_current, log_monitor_preview
+from .linter import LintReport
+from .monitor import (
+    MonitorPreview,
+    compile_current,
+    lint_current_preview,
+    log_monitor_preview,
+)
 from .resolver import AreaEntityResolver
 from .schema import (
     PermissionLeaf,
@@ -58,6 +64,7 @@ class MatrixResponse(TypedDict):
     roles: list[MatrixRole]
     grants: dict[str, dict[str, MatrixGrant]]
     preview: MonitorPreview
+    lint: LintReport
 
 
 def async_register(hass: HomeAssistant) -> None:
@@ -176,8 +183,12 @@ async def _refresh_preview(
     """Compile and store the read-only monitor preview for the matrix panel."""
     resolver = AreaEntityResolver.from_hass(hass)
     compiled = await compile_current(store, resolver, config=config, policy=policy)
-    preview = log_monitor_preview(compiled, mode=config["mode"])
+    lint_report = lint_current_preview(config, policy, resolver, compiled)
+    preview = log_monitor_preview(
+        compiled, mode=config["mode"], lint_report=lint_report
+    )
     entry_data["compiled"] = compiled
+    entry_data["lint"] = lint_report
     entry_data["preview"] = preview
     entry_data["store"] = store
     cast(dict[str, Any], hass.data.setdefault(DOMAIN, {}))[entry_id] = entry_data
@@ -198,6 +209,7 @@ def _matrix_response(
         "roles": roles,
         "grants": _grants(policy, areas, roles),
         "preview": preview,
+        "lint": preview["lint"],
     }
 
 

@@ -17,7 +17,7 @@ from homeassistant.components.panel_custom import async_register_panel
 
 from . import websocket as tessera_websocket
 from .const import DOMAIN, MODE_ENFORCE, MODE_MONITOR, MODE_OFF
-from .monitor import compile_current, log_monitor_preview
+from .monitor import compile_current, lint_current_preview, log_monitor_preview
 from .resolver import AreaEntityResolver
 from .store import TesseraStore
 
@@ -169,9 +169,14 @@ async def _compile_for_mode(
 
     if config["mode"] in {MODE_MONITOR, MODE_ENFORCE}:
         resolver = AreaEntityResolver.from_hass(hass)
-        compiled = await compile_current(store, resolver, config=config)
+        policy = await store.async_load_policy()
+        compiled = await compile_current(store, resolver, config=config, policy=policy)
+        lint_report = lint_current_preview(config, policy, resolver, compiled)
         entry_data["compiled"] = compiled
-        entry_data["preview"] = log_monitor_preview(compiled, mode=config["mode"])
+        entry_data["lint"] = lint_report
+        entry_data["preview"] = log_monitor_preview(
+            compiled, mode=config["mode"], lint_report=lint_report
+        )
 
 
 def _domain_data(hass: HomeAssistant) -> dict[str, Any]:

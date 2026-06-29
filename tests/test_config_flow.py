@@ -259,6 +259,8 @@ async def test_compile_preview_updates_hass_data_without_native_write(
         }
     }
     assert hass.data[DOMAIN]["entry-1"]["preview"]["control_total"] == 1
+    assert hass.data[DOMAIN]["entry-1"]["preview"]["lint"]["conflicts_total"] == 0
+    assert hass.data[DOMAIN]["entry-1"]["lint"]["conflicts_total"] == 0
 
 
 @pytest.mark.asyncio

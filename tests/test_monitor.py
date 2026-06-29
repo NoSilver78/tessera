@@ -9,6 +9,7 @@ from typing import Any
 import custom_components.tessera as tessera_init
 import pytest
 from custom_components.tessera import DOMAIN, SERVICE_RECOMPILE
+from custom_components.tessera.linter import empty_lint_report
 from custom_components.tessera.monitor import compile_current, monitor_preview
 from custom_components.tessera.schema import default_config_data, default_policy_data
 
@@ -134,6 +135,7 @@ def test_monitor_preview_summarizes_counts_without_entity_dump() -> None:
         "entities_total": 2,
         "read_total": 2,
         "control_total": 1,
+        "lint": empty_lint_report(),
     }
 
 
@@ -186,6 +188,7 @@ async def test_setup_entry_mode_monitor_compiles_preview_and_never_touches_auth(
         }
     }
     assert entry_data["preview"]["entities_total"] == 1
+    assert entry_data["preview"]["lint"]["conflicts_total"] == 0
     assert "Tessera monitor preview" in caplog.text
     assert "light.sofa" not in caplog.text
 
@@ -215,6 +218,7 @@ async def test_setup_entry_mode_enforce_warns_and_runs_monitor_preview_only(
         }
     }
     assert entry_data["preview"]["control_total"] == 1
+    assert entry_data["preview"]["lint"]["conflicts_total"] == 0
     assert "enforce is not implemented yet" in caplog.text
     assert "Tessera enforce preview" in caplog.text
     assert "light.sofa" not in caplog.text
@@ -246,4 +250,5 @@ async def test_recompile_service_refreshes_compiled_preview(
         "entities_total": 2,
         "read_total": 2,
         "control_total": 1,
+        "lint": empty_lint_report(),
     }
