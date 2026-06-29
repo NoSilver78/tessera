@@ -33,3 +33,24 @@ Event-getrieben (Monitor `bknqcotob` auf PRs + Workflow-Completions) + Heartbeat
 - **Holistisches Foundation-Security-Audit (`wjzmmvl3s`) durch → SOLIDE-MIT-AUFLAGEN.** 6 Eigenschaften adversarial+Fuzz geprüft: ALLOW-ONLY (6000+ Inputs), operate/control-Grenze (200k Fuzz), Fail-Safe/Lockout, Determinismus — **alle halten**; Dormanz über 5 Eintrittspunkte bestätigt. **EIN echtes, heute erreichbares Loch (Finding #3, medium):** `{read:False,control:True}`-Widerspruchs-Leaf → Schema akzeptiert / Compiler exponiert / Linter blendet → stiller SoD-Bypass am E3-Apply-Gate. **Das die per-PR-Panels NICHT sahen** (3-Modul-Divergenz) — Bestätigung, dass das holistische Audit nötig war.
 - **Fix-Task raus** (`enforce/fix-contradictory-leaf`, MUSS vor E3): Schema-`read≤control`-Reject + Regressionstest. Non-scharf, security → Panel-Gate.
 - **E3-Bridge-Auflagen** (5 SHOULD-Items + 2 Test-Masken) in `spec-e3-enforce.md` §8 festgehalten — fürs Adapter-Wiring in E3, nicht heute.
+
+- **Finding #3 PASS+gemerged** (`#18`, 89 passed) — SoD-Bypass via Widerspruchs-Leaf geschlossen (Schema-`read≤control`-Reject, vollständig + ohne Legit-Bruch, HA-frei reproduziert). Kein Stray-Chip (Hinweis wirkte).
+
+---
+
+## 🌅 MORGEN-ZUSAMMENFASSUNG (entscheidungsfertig)
+**Über Nacht:** E2-Linter (rollenscharf) ✅ · E1-Boundary-Test gehärtet ✅ · **holistisches Foundation-Security-Audit** (Core+E1+E2) → SOLIDE (allow-only/operate-control/fail-safe/Determinismus halten unter 6000+/200k-Fuzz) · **1 echtes Loch gefunden+gefixt+gemerged** (Finding #3 — das die per-PR-Panels nicht sahen) · E3-Spec + Selbstkritik + Audit-Auflagen festgehalten.
+
+**Stand:** Core + Matrix-Panel + Spike D0–D15 + Enforce-Foundation **E1/E2 + Finding-#3-Fix** — alles panel-validiert + **holistisch sicherheits-auditiert. Foundation ist E3-ready.**
+
+**Was die Morgen-Runde braucht (Dinge, die ich autonom NICHT entscheide):**
+1. **D10** (CM5-`.storage/auth`-Benchmark) — dein Paket, letzte Rubrik-Voraussetzung für Enforce-Go.
+2. **E3-Design** (`spec-e3-enforce.md` §6): System-Kontext-Trust-Boundary · Linter-Ack-UX · Snapshot-Persistenz.
+3. **2 Plan-Lücken** (§7): D9-Produkt-Gate (Schritt E2.5) · Gruppen-Lifecycle-Konzept.
+4. **E3-Bridge-Auflagen** (§8): beim Adapter-Wiring (allow-only-Assertion · no-drop-Caller-Vertrag · `tessera:`-Namespace-Reservierung · Promotion-Guard).
+
+**Dann:** E3 in kleinen, je Panel-gegateten Schritten → E4 → E5 → Soak → HACS-Release.
+
+**Bilanz:** 18 PRs gemerged · 8 Adversarial-Panels + 1 holistisches Audit · **6 Defekte gefangen** (D5/D12/D11/E1/E2/Finding#3) · **0 unehrliches Grün durchgerutscht.**
+
+**Ab hier:** ehrliches Idle (lange Heartbeats) — kein Busywork. Ich wache auf bei Codex-PRs (Monitor), D10, oder deiner Morgen-Nachricht.
