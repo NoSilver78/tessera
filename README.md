@@ -14,7 +14,7 @@ Tessera wird von **Claude** (Architektur / Gate / Audit — siehe [`CLAUDE.md`](
 | `decisions/` | ADRs (Architecture Decision Records) |
 
 ## Status (2026-06-29)
-**Phase-0-Spike: PASS MIT AUFLAGEN.** Der private Auth-Store-Schreibpfad funktioniert + überlebt HA-Restart (D1/D2/D4 PASS) → **Neubau bestätigt**. Round-2-Härtung läuft (Welle A: Instrument-Fix + Seed-Fixture). **Kein Enforce-Go**, bis Round-2 grün.
+**Phase-0-Spike: PASS MIT AUFLAGEN.** D1/D2/D4 signalisieren **positiv** — Auth-Store-Schreibpfad persistiert + überlebt Restart, Cache-Invalidierung (explizit) + Union/Restore funktionieren. **Recovery (D5) + Breite (M2/M4/M5/M6) noch offen** → **Schreibpfad-*Machbarkeit* signalisiert, Neubau plausibler Default; finale Architektur-/Enforce-Entscheidung erst nach kompletter Round-2-Rubrik.** Kein Enforce-Go.
 
 ## Secrets
 Keine Secrets im Repo (`.gitignore`). Credentials ausschließlich via 1Password. **Auth-Tests nur gegen die Dev-Instanz `ha-tessera-dev`, niemals die Live-Instanz.**
