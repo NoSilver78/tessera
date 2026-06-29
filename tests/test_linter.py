@@ -105,6 +105,60 @@ def test_read_only_role_conflicts_with_control_role_on_same_entity() -> None:
     assert report["users"]["user-1"]["conflicts"][0]["restricting_roles"] == ["viewer"]
 
 
+def test_distinct_read_carve_is_kept_next_to_control_conflict() -> None:
+    """Read conflicts survive when a different role causes the control conflict."""
+    config = _config("control_hidden", "read_hidden", "operator")
+    policy = default_policy_data()
+    policy["area_grants"] = {
+        "living": {
+            "control_hidden": {"read": True},
+            "operator": {"read": True, "control": True},
+        }
+    }
+    policy["entity_overrides"] = {"light.x": {"read_hidden": {"read": False}}}
+
+    report = lint_cross_role(
+        config,
+        policy,
+        FakeResolver({"living": ("light.x",)}),
+    )
+
+    assert report["users"]["user-1"]["conflicts"] == [
+        {
+            "user_id": "user-1",
+            "entity_id": "light.x",
+            "exposing_roles": ["operator"],
+            "restricting_roles": ["control_hidden"],
+            "level": "control",
+            "severity": "error",
+        },
+        {
+            "user_id": "user-1",
+            "entity_id": "light.x",
+            "exposing_roles": ["control_hidden", "operator"],
+            "restricting_roles": ["read_hidden"],
+            "level": "read",
+            "severity": "error",
+        },
+    ]
+
+
+def test_same_role_exposure_and_restriction_is_not_a_cross_role_conflict() -> None:
+    """A role must not be counted as exposing its own restriction."""
+    config = _config("mixed")
+    policy = default_policy_data()
+    policy["area_grants"] = {"living": {"mixed": {"read": True}}}
+    policy["entity_overrides"] = {"light.x": {"mixed": {"read": False}}}
+
+    report = lint_cross_role(
+        config,
+        policy,
+        FakeResolver({"living": ("light.x",)}),
+    )
+
+    assert report["conflicts_total"] == 0
+
+
 def test_by_group_membership_is_ignored_for_v1_linting() -> None:
     """ADR 0005: external group membership does not create lint subjects."""
     config = _config("restricted", "operator")
@@ -149,3 +203,38 @@ def test_linter_output_is_deterministic() -> None:
     assert lint_cross_role(config, policy, resolver) == lint_cross_role(
         config, policy, resolver
     )
+
+
+def test_linter_sorts_roles_users_entities_and_conflicts() -> None:
+    """Report ordering does not follow input insertion order."""
+    config = _config("z_reader", "a_operator", "m_hidden")
+    config["membership"]["by_user"] = {
+        "user-z": ["z_reader", "a_operator", "m_hidden"],
+        "user-a": ["m_hidden", "a_operator", "z_reader"],
+    }
+    policy = default_policy_data()
+    policy["area_grants"] = {
+        "living": {
+            "z_reader": {"read": True},
+            "a_operator": {"control": True},
+        }
+    }
+    policy["entity_overrides"] = {
+        "light.b": {"m_hidden": {"read": False}},
+        "light.a": {"m_hidden": {"read": False}},
+    }
+
+    report = lint_cross_role(
+        config,
+        policy,
+        FakeResolver({"living": ("light.b", "light.a")}),
+    )
+
+    assert list(report["users"]) == ["user-a", "user-z"]
+    assert report["users"]["user-a"]["roles"] == ["a_operator", "m_hidden", "z_reader"]
+    assert [
+        conflict["entity_id"] for conflict in report["users"]["user-a"]["conflicts"]
+    ] == ["light.a", "light.a", "light.b", "light.b"]
+    assert [
+        conflict["level"] for conflict in report["users"]["user-a"]["conflicts"]
+    ] == ["control", "read", "control", "read"]

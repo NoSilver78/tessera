@@ -56,10 +56,11 @@ def lint_cross_role(
     """Find per-user cross-role restrictions nullified by another role allow.
 
     Home Assistant merges native group policies most-permissively: any role that
-    grants ``read`` or ``control`` exposes that permission. Tessera therefore
-    flags only meaningful separation-of-duty conflicts: a role explicitly
-    restricts an entity/level that another assigned role exposes. Unrelated
-    area splits are not conflicts.
+    grants ``read`` or ``control`` exposes that permission. Tessera reports each
+    distinct separation-of-duty conflict where a role intentionally restricts an
+    entity/level that a different assigned role exposes. Read conflicts are
+    hidden only when the same restricting roles are already covered by a control
+    conflict on that entity. Unrelated area splits are not conflicts.
     """
     config_data = validate_config_data(config)
     policy_data = validate_policy_data(policy)
@@ -122,7 +123,7 @@ def _conflicts_for_user(
         }
     )
     for entity_id in entity_ids:
-        control_conflict = False
+        control_restricting_roles: set[str] = set()
         for level in ("control", "read"):
             exposing_roles = [
                 role_id
@@ -141,7 +142,10 @@ def _conflicts_for_user(
                 and restricting_set
                 and exposing_set - restricting_set
                 and restricting_set - exposing_set
-                and not (level == "read" and control_conflict)
+                and not (
+                    level == "read"
+                    and restricting_set.issubset(control_restricting_roles)
+                )
             ):
                 conflicts.append(
                     {
@@ -154,7 +158,7 @@ def _conflicts_for_user(
                     }
                 )
                 if level == "control":
-                    control_conflict = True
+                    control_restricting_roles = restricting_set
     return conflicts
 
 
