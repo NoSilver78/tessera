@@ -7,6 +7,7 @@ readme = "README.md"
 license = { text = "MIT" }
 
 [tool.ruff]
+extend-exclude = ["spike"]
 target-version = "py313"
 line-length = 88
 src = ["custom_components"]
@@ -18,6 +19,7 @@ select = ["E", "F", "I", "UP", "B", "ASYNC", "RUF", "D"]
 convention = "google"
 
 [tool.black]
+extend-exclude = "spike"
 target-version = ["py313"]
 line-length = 88
 
@@ -34,3 +36,8 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+pythonpath = ["."]
+
+[[tool.mypy.overrides]]
+module = "voluptuous"
+ignore_missing_imports = true
