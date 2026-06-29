@@ -53,6 +53,15 @@
     "matches": []
   },
   "exit_code": 0,
+  "failure_redaction_check": {
+    "auth_code_value_not_stored": true,
+    "bearer_like_values": 0,
+    "checked": true,
+    "clean": true,
+    "jwt_like_values": 0,
+    "token_body_values_not_stored": true,
+    "token_exchange_values_redacted": true
+  },
   "fresh_baseline": {
     "errors": [],
     "ok": true
@@ -71,8 +80,17 @@
       "status": "PASS"
     },
     {
-      "detail": "HTTP evidence stores body type/keys only; values redacted",
+      "detail": "measured HTTP/token evidence redaction, not hardcoded",
       "gate": "failure_redaction",
+      "measurement": {
+        "auth_code_value_not_stored": true,
+        "bearer_like_values": 0,
+        "checked": true,
+        "clean": true,
+        "jwt_like_values": 0,
+        "token_body_values_not_stored": true,
+        "token_exchange_values_redacted": true
+      },
       "status": "PASS"
     },
     {
@@ -218,7 +236,7 @@
       "binds": [
         "ha-tessera-dev-config:/config"
       ],
-      "id_short": "6daf94b0b511",
+      "id_short": "a59a9c8dede0",
       "image": "ghcr.io/home-assistant/home-assistant:2026.6.4",
       "mounts": [
         {
@@ -248,6 +266,8 @@
   },
   "pre_restart_service": {
     "keys": [
+      "a2_native_write_replace_contract",
+      "a3_rescue_namespace_guard",
       "after",
       "b3_system_users_gate_pre_restart",
       "before",
@@ -269,7 +289,7 @@
       "binds": [
         "ha-tessera-dev-config:/config"
       ],
-      "id_short": "a59a9c8dede0",
+      "id_short": "e78940d4aceb",
       "image": "ghcr.io/home-assistant/home-assistant:2026.6.4",
       "mounts": [
         {
@@ -313,13 +333,13 @@
     "device": {
       "area_id": "tessera_living",
       "config_entry_id_present": true,
-      "device_id": "1732a6a6b4edcbb12a3f06eed5027245"
+      "device_id": "90c197f4fd7c9a9ae31cafd37a8dee49"
     },
     "entities": [
       {
         "area_id": null,
         "class": "device_area_allowed_light",
-        "device_id": "1732a6a6b4edcbb12a3f06eed5027245",
+        "device_id": "90c197f4fd7c9a9ae31cafd37a8dee49",
         "disabled_by": null,
         "domain": "light",
         "entity_id": "light.tessera_seed_allowed_light",
@@ -337,7 +357,7 @@
       {
         "area_id": null,
         "class": "device_area_allowed_cover",
-        "device_id": "1732a6a6b4edcbb12a3f06eed5027245",
+        "device_id": "90c197f4fd7c9a9ae31cafd37a8dee49",
         "disabled_by": null,
         "domain": "cover",
         "entity_id": "cover.tessera_seed_allowed_cover",
@@ -380,7 +400,7 @@
       }
     ]
   },
-  "started_at": "2026-06-29T11:58:38",
+  "started_at": "2026-06-29T12:50:25",
   "status": "GREEN",
   "target": {
     "container": "ha-tessera-dev",

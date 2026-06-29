@@ -30,6 +30,7 @@ RESCUE_SNAPSHOT_PATH = Path("/config/tessera_spike_rescue_snapshot.json")
 RESCUE_TRIGGER_PATH = Path("/config/tessera_spike_rescue_trigger.json")
 RESCUE_RESULT_PATH = Path("/config/tessera_spike_rescue_result.json")
 CORRUPT_TESSERA_CONFIG_PATH = Path("/config/.storage/tessera.config")
+AUTH_STORE_PATH = Path("/config/.storage/auth")
 
 ALLOWED_ENTITY = "input_boolean.tessera_allowed_light"
 FORBIDDEN_ENTITY = "input_boolean.tessera_forbidden_light"
@@ -40,12 +41,14 @@ GROUP_ID_D2 = "tessera:d2"
 TEST_USER_NAME = "tessera-test-user"
 TEST_D2_USER_NAME = "tessera-d2-user"
 TEST_RESCUE_USER_NAME = "tessera-rescue-user"
+TEST_REPLACE_USER_NAME = "tessera-replace-user"
 TEST_ADMIN_NAME = "tessera-test-admin"
 TEST_RO_NAME = "tessera-test-ro"
 ENFORCE_MANAGED_USER_NAMES = {
     TEST_USER_NAME,
     TEST_D2_USER_NAME,
     TEST_RESCUE_USER_NAME,
+    TEST_REPLACE_USER_NAME,
 }
 MANAGED_USER_PREFIX = "tessera-"
 MANAGED_GROUP_PREFIX = "tessera:"
@@ -231,6 +234,13 @@ async def _run_boot_rescue_if_requested(hass: HomeAssistant) -> dict[str, Any]:
         if not isinstance(name, str) or not isinstance(group_ids, list):
             result["errors"].append("invalid_snapshot_item")
             continue
+        try:
+            validated_group_ids = [
+                _validate_managed_group_id(group_id) for group_id in group_ids
+            ]
+        except vol.Invalid:
+            result["errors"].append(f"invalid_group_namespace:{name}")
+            continue
         user = await _find_user(hass, name)
         if user is None:
             result["errors"].append(f"user_not_found:{name}")
@@ -238,15 +248,15 @@ async def _run_boot_rescue_if_requested(hass: HomeAssistant) -> dict[str, Any]:
         if violation := _validate_managed_user(user):
             result["errors"].append(violation["error"])
             continue
-        await hass.auth.async_update_user(user, group_ids=list(group_ids))
+        await hass.auth.async_update_user(user, group_ids=list(validated_group_ids))
         actual_groups = [group.id for group in user.groups]
-        exact_match = set(actual_groups) == set(group_ids)
+        exact_match = set(actual_groups) == set(validated_group_ids)
         if not exact_match:
             result["errors"].append(f"group_mismatch:{name}")
         result["restored_users"].append(
             {
                 "name": name,
-                "expected_group_ids": sorted(group_ids),
+                "expected_group_ids": sorted(validated_group_ids),
                 "actual_group_ids": sorted(actual_groups),
                 "exact_match": exact_match,
             }
@@ -254,6 +264,14 @@ async def _run_boot_rescue_if_requested(hass: HomeAssistant) -> dict[str, Any]:
 
     await _persist_auth(hass)
     result["ok"] = corrupt_store_parse_failed and not result["errors"]
+    result["rescue_restore_namespace_guarded"] = True
+    result["auth_store_corrupted"] = False
+    result["boot_rescue_corruption_tested"] = False
+    result["no_admin_lockout"] = None
+    result["d5_truthfulness"] = (
+        "PARTIAL: startup restore was exercised against Tessera sidecar corruption, "
+        "not real /config/.storage/auth corruption"
+    )
     await _write_json(hass, RESCUE_RESULT_PATH, result)
     await _unlink_path(hass, RESCUE_TRIGGER_PATH)
     return result
@@ -496,8 +514,70 @@ async def _probe_d2_three_way(hass: HomeAssistant) -> dict[str, Any]:
     }
 
 
+async def _probe_native_write_replace_contract(hass: HomeAssistant) -> dict[str, Any]:
+    """Prove HA async_update_user(group_ids=...) replaces groups, not unions them."""
+    await _ensure_group(
+        hass,
+        GROUP_ID,
+        "Tessera Test",
+        _policy(ALLOWED_ENTITY, read=True, control=True),
+    )
+    await _ensure_group(
+        hass,
+        GROUP_ID_EXTRA,
+        "Tessera Extra",
+        _policy(FORBIDDEN_ENTITY, read=True, control=False),
+    )
+    user = await _ensure_test_user(
+        hass, TEST_REPLACE_USER_NAME, [GROUP_ID, GROUP_ID_EXTRA]
+    )
+    before_groups = [group.id for group in user.groups]
+
+    await hass.auth.async_update_user(user, group_ids=[GROUP_ID])
+    after_subset_write = [group.id for group in user.groups]
+
+    full_superset = sorted({GROUP_ID, GROUP_ID_EXTRA})
+    await hass.auth.async_update_user(user, group_ids=full_superset)
+    after_superset_write = [group.id for group in user.groups]
+    await _persist_auth(hass)
+
+    return {
+        "native_write_is_replace": GROUP_ID_EXTRA not in after_subset_write,
+        "caller_passes_full_superset": set(after_superset_write) == set(full_superset),
+        "api": "hass.auth.async_update_user(group_ids=...)",
+        "claim_correction": (
+            "group_ids is REPLACE; no-lockout depends on caller supplying the "
+            "complete intended group set"
+        ),
+        "before_groups": before_groups,
+        "subset_write": [GROUP_ID],
+        "after_subset_write": after_subset_write,
+        "safe_full_superset": full_superset,
+        "after_superset_write": after_superset_write,
+    }
+
+
+async def _probe_rescue_namespace_guard(hass: HomeAssistant) -> dict[str, Any]:
+    """Exercise the rescue snapshot group-id validator without writing auth state."""
+    malicious_snapshot = {
+        "users": [{"name": TEST_RESCUE_USER_NAME, "group_ids": [GROUP_ID_USER]}]
+    }
+    invalid_groups: list[str] = []
+    for item in malicious_snapshot["users"]:
+        for group_id in item["group_ids"]:
+            try:
+                _validate_managed_group_id(group_id)
+            except vol.Invalid:
+                invalid_groups.append(group_id)
+    return {
+        "rescue_restore_namespace_guarded": bool(invalid_groups),
+        "malicious_group_ids_rejected": invalid_groups,
+        "would_restore_system_users": False,
+    }
+
+
 async def _prepare_boot_rescue(hass: HomeAssistant) -> dict[str, Any]:
-    """Prepare a real startup rescue by corrupting Tessera store state."""
+    """Prepare startup restore against sidecar corruption; not real auth-store rescue."""
     await _ensure_group(
         hass,
         GROUP_ID,
@@ -536,7 +616,15 @@ async def _prepare_boot_rescue(hass: HomeAssistant) -> dict[str, Any]:
         "snapshot_path": str(RESCUE_SNAPSHOT_PATH),
         "trigger_path": str(RESCUE_TRIGGER_PATH),
         "corrupt_tessera_store_path": str(CORRUPT_TESSERA_CONFIG_PATH),
+        "auth_store_path": str(AUTH_STORE_PATH),
         "auth_store_corrupted": False,
+        "boot_rescue_corruption_tested": False,
+        "no_admin_lockout": None,
+        "verdict": "PARTIAL",
+        "partial_reason": (
+            "real /config/.storage/auth corruption is not attempted in this run; "
+            "D5 must not be reported as PASS"
+        ),
     }
 
 
@@ -672,8 +760,14 @@ async def _phase_pre_restart(hass: HomeAssistant) -> dict[str, Any]:
         "d5_restore_primitive": {
             "public_async_update_user_restore_available": True,
             "boot_rescue_corruption_tested": False,
+            "native_write_is_replace": True,
+            "safe_restore_requires_full_group_set": True,
         },
         "d2_three_way": await _probe_d2_three_way(hass),
+        "a2_native_write_replace_contract": await _probe_native_write_replace_contract(
+            hass
+        ),
+        "a3_rescue_namespace_guard": await _probe_rescue_namespace_guard(hass),
         "d5_boot_rescue_prepare": await _prepare_boot_rescue(hass),
         "b3_system_users_gate_pre_restart": await _probe_system_users_gate(hass),
     }

@@ -1,4 +1,10 @@
 # Gate Review — Tessera Phase-0 / D0 (Bootstrap + Preflight)
+
+> **OBSOLETE / ersetzt:** Dieses frühe D0-Gate wurde durch
+> `reports/welle-b-gate-2026-06-29.md` und den anschließenden Welle-B-Fix
+> überholt. Der aktuelle Stand ist: D5 bleibt PARTIAL, native `group_ids`
+> schreibt REPLACE, D12 bleibt BLOCKED.
+
 Stand 2026-06-29 · Modus: **Gate-/Auditmodus** · Geprüft: `tessera-d0-evidence-2026-06-29.{md,json}` gegen **D0-Exit-Gate v1 (12 Punkte)** + Spec `tessera-phase0-SPEC-2026-06-29.md`
 
 ## Entscheidung

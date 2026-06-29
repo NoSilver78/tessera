@@ -1,6 +1,6 @@
 # Tessera D0 Evidence
 
-Stand: 2026-06-29T11:58:57
+Stand: 2026-06-29T12:50:45
 Modus: ha-tessera-dev only; no /Volumes/config scan in the standard run; no token/password/auth-code values emitted.
 
 Overall D0: **PASS**
@@ -30,8 +30,17 @@ Overall D0: **PASS**
     "status": "PASS"
   },
   {
-    "detail": "HTTP evidence stores body type/keys only; values redacted",
+    "detail": "measured HTTP/token evidence redaction, not hardcoded",
     "gate": "failure_redaction",
+    "measurement": {
+      "auth_code_value_not_stored": true,
+      "bearer_like_values": 0,
+      "checked": true,
+      "clean": true,
+      "jwt_like_values": 0,
+      "token_body_values_not_stored": true,
+      "token_exchange_values_redacted": true
+    },
     "status": "PASS"
   },
   {

@@ -1,6 +1,6 @@
 # Tessera Phase-0 Spike Report
 
-Stand: 2026-06-29T11:58:57
+Stand: 2026-06-29T12:50:45
 
 Modus: Dev-only gegen `ha-tessera-dev`; keine Secrets/Token/Auth-Codes ausgegeben. Live-/`/Volumes/config`-Scans sind im Standardlauf bewusst deaktiviert und brauchen ein eigenes Gate.
 
@@ -8,7 +8,7 @@ Modus: Dev-only gegen `ha-tessera-dev`; keine Secrets/Token/Auth-Codes ausgegebe
 
 **PARTIAL / kein Enforce-Go.**
 
-D0 ist gruen genug, um den dev-only Messlauf zu starten. D1, D2, D4 und B3 liefern starke positive Signale fuer den Auth-Store-Schreibpfad. D5 ist nur bei echtem corrupt-store Parse-Fehler plus exaktem Boot-Restore PASS. D3/D6/D7/D8/D9 bleiben bewusst **PARTIAL**, weil WS, echte LLAT-Rotation, vollstaendige Leak-Matrix, Custom-Component-Runtime und Live/CM5-Gates in diesem Lauf nicht vollstaendig abgedeckt sind.
+D0 ist gruen genug, um den dev-only Messlauf zu starten. D1, D2, D4, A2, A3 und B3 liefern positive Signale fuer den Auth-Store-Schreibpfad. D5 bleibt bewusst **PARTIAL**, weil kein echter `/config/.storage/auth`-Korruptions-/No-Admin-Lockout-Rescue bewiesen ist. D12 bleibt **BLOCKED**. D3/D6/D7/D8/D9 bleiben bewusst **PARTIAL**, weil WS, echte LLAT-Rotation, vollstaendige Leak-Matrix, Custom-Component-Runtime und Live/CM5-Gates in diesem Lauf nicht vollstaendig abgedeckt sind.
 
 ## DoD Matrix
 
@@ -18,13 +18,17 @@ D0 ist gruen genug, um den dev-only Messlauf zu starten. D1, D2, D4 und B3 liefe
 | D1 | PASS | tessera group/policy/user restart survival |
 | D2 | PASS | policy mutation checked before invalidate, after invalidate, and after restart |
 | D3 | PARTIAL | internal + REST + service tested; WS not tested in this run |
-| D4 | PASS | full union and restore via public update_user |
-| D5 | PASS | boot rescue requires corrupt-store parse failure plus exact managed user group restore |
+| D4 | PASS | caller restores by supplying the full group set; HA group_ids writes are replace semantics |
+| D5 | PARTIAL | real /config/.storage/auth corruption rescue is not proven in this run; no false PASS |
 | D6 | PARTIAL | entity service allowed/forbidden and entity_id:all probed; response/non-entity matrix incomplete |
 | D7 | PARTIAL | render_template probed; logbook/registry/history/WS leak matrix incomplete |
 | D8 | PARTIAL | headless normal token probe and revocation; real LLAT rotation not performed |
 | D9 | PARTIAL | live /Volumes/config scan skipped in standard dev run; runtime classification not complete |
 | B3 | PASS | managed Tessera users are not members of HA system-users allow-all group |
+| A2 | PASS | native async_update_user(group_ids) is REPLACE; caller full-superset contract proven |
+| A3 | PASS | rescue restore rejects non-tessera group ids such as system-users |
+| A4 | BLOCKED | D12 remains blocked/partial until op login and a real product claim hook exist |
+| A5 | PASS | failure-redaction gate is measured; stale report marked obsolete |
 
 ## D0
 
@@ -50,8 +54,17 @@ Gate-Results:
     "status": "PASS"
   },
   {
-    "detail": "HTTP evidence stores body type/keys only; values redacted",
+    "detail": "measured HTTP/token evidence redaction, not hardcoded",
     "gate": "failure_redaction",
+    "measurement": {
+      "auth_code_value_not_stored": true,
+      "bearer_like_values": 0,
+      "checked": true,
+      "clean": true,
+      "jwt_like_values": 0,
+      "token_body_values_not_stored": true,
+      "token_exchange_values_redacted": true
+    },
     "status": "PASS"
   },
   {
@@ -104,13 +117,13 @@ Gate-Results:
   "device": {
     "area_id": "tessera_living",
     "config_entry_id_present": true,
-    "device_id": "1732a6a6b4edcbb12a3f06eed5027245"
+    "device_id": "90c197f4fd7c9a9ae31cafd37a8dee49"
   },
   "entities": [
     {
       "area_id": null,
       "class": "device_area_allowed_light",
-      "device_id": "1732a6a6b4edcbb12a3f06eed5027245",
+      "device_id": "90c197f4fd7c9a9ae31cafd37a8dee49",
       "disabled_by": null,
       "domain": "light",
       "entity_id": "light.tessera_seed_allowed_light",
@@ -128,7 +141,7 @@ Gate-Results:
     {
       "area_id": null,
       "class": "device_area_allowed_cover",
-      "device_id": "1732a6a6b4edcbb12a3f06eed5027245",
+      "device_id": "90c197f4fd7c9a9ae31cafd37a8dee49",
       "disabled_by": null,
       "domain": "cover",
       "entity_id": "cover.tessera_seed_allowed_cover",
@@ -177,6 +190,37 @@ Gate-Results:
 
 ```json
 {
+  "a2_native_write_replace_contract": {
+    "after_subset_write": [
+      "tessera:test"
+    ],
+    "after_superset_write": [
+      "tessera:extra",
+      "tessera:test"
+    ],
+    "api": "hass.auth.async_update_user(group_ids=...)",
+    "before_groups": [
+      "tessera:test",
+      "tessera:extra"
+    ],
+    "caller_passes_full_superset": true,
+    "claim_correction": "group_ids is REPLACE; no-lockout depends on caller supplying the complete intended group set",
+    "native_write_is_replace": true,
+    "safe_full_superset": [
+      "tessera:extra",
+      "tessera:test"
+    ],
+    "subset_write": [
+      "tessera:test"
+    ]
+  },
+  "a3_rescue_namespace_guard": {
+    "malicious_group_ids_rejected": [
+      "system-users"
+    ],
+    "rescue_restore_namespace_guarded": true,
+    "would_restore_system_users": false
+  },
   "b3_system_users_gate_pre_restart": {
     "enforce_managed_users": [
       {
@@ -188,6 +232,20 @@ Gate-Results:
         "is_admin": false,
         "is_owner": false,
         "name": "tessera-d2-user",
+        "refresh_token_classes": [],
+        "refresh_token_count": 0,
+        "system_generated": false
+      },
+      {
+        "credentials_count": 0,
+        "groups": [
+          "tessera:extra",
+          "tessera:test"
+        ],
+        "is_active": true,
+        "is_admin": false,
+        "is_owner": false,
+        "name": "tessera-replace-user",
         "refresh_token_classes": [],
         "refresh_token_count": 0,
         "system_generated": false
@@ -225,6 +283,7 @@ Gate-Results:
     ],
     "expected_managed_users": [
       "tessera-d2-user",
+      "tessera-replace-user",
       "tessera-rescue-user",
       "tessera-test-user"
     ],
@@ -300,6 +359,8 @@ Gate-Results:
   },
   "d5_boot_rescue_prepare": {
     "auth_store_corrupted": false,
+    "auth_store_path": "/config/.storage/auth",
+    "boot_rescue_corruption_tested": false,
     "corrupt_tessera_store_path": "/config/.storage/tessera.config",
     "drifted_groups_before_restart": [
       "tessera:extra"
@@ -307,14 +368,19 @@ Gate-Results:
     "expected_groups": [
       "tessera:test"
     ],
+    "no_admin_lockout": null,
+    "partial_reason": "real /config/.storage/auth corruption is not attempted in this run; D5 must not be reported as PASS",
     "prepared": true,
     "snapshot_path": "/config/tessera_spike_rescue_snapshot.json",
     "trigger_path": "/config/tessera_spike_rescue_trigger.json",
-    "user_name": "tessera-rescue-user"
+    "user_name": "tessera-rescue-user",
+    "verdict": "PARTIAL"
   },
   "d5_restore_primitive": {
     "boot_rescue_corruption_tested": false,
-    "public_async_update_user_restore_available": true
+    "native_write_is_replace": true,
+    "public_async_update_user_restore_available": true,
+    "safe_restore_requires_full_group_set": true
   }
 }
 ```
@@ -334,6 +400,20 @@ Restart-Survival:
         "is_admin": false,
         "is_owner": false,
         "name": "tessera-d2-user",
+        "refresh_token_classes": [],
+        "refresh_token_count": 0,
+        "system_generated": false
+      },
+      {
+        "credentials_count": 0,
+        "groups": [
+          "tessera:extra",
+          "tessera:test"
+        ],
+        "is_active": true,
+        "is_admin": false,
+        "is_owner": false,
+        "name": "tessera-replace-user",
         "refresh_token_classes": [],
         "refresh_token_count": 0,
         "system_generated": false
@@ -371,6 +451,7 @@ Restart-Survival:
     ],
     "expected_managed_users": [
       "tessera-d2-user",
+      "tessera-replace-user",
       "tessera-rescue-user",
       "tessera-test-user"
     ],
@@ -406,12 +487,17 @@ Restart-Survival:
     }
   },
   "d5_boot_rescue_after_restart": {
+    "auth_store_corrupted": false,
+    "boot_rescue_corruption_tested": false,
     "corrupt_tessera_store_error": "JSONDecodeError",
     "corrupt_tessera_store_parse_failed": true,
     "corrupt_tessera_store_path": "/config/.storage/tessera.config",
+    "d5_truthfulness": "PARTIAL: startup restore was exercised against Tessera sidecar corruption, not real /config/.storage/auth corruption",
     "errors": [],
+    "no_admin_lockout": null,
     "ok": true,
     "requested": true,
+    "rescue_restore_namespace_guarded": true,
     "restored_users": [
       {
         "actual_group_ids": [

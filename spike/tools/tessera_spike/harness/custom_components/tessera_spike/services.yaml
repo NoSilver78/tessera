@@ -50,7 +50,7 @@ set_group_policy:
 
 set_user_groups:
   name: Set user groups
-  description: Set a dev-only user's full group union.
+  description: Replace a dev-only user's groups with the complete intended group set.
   fields:
     user_name:
       required: true
@@ -96,7 +96,7 @@ boot_rescue_status:
 
 restore:
   name: Restore user groups
-  description: Restore one dev-only user's full group union; this is not a full auth snapshot restore.
+  description: Replace one dev-only user's groups with the complete intended group set; this is not a full auth snapshot restore.
   fields:
     user_name:
       required: true

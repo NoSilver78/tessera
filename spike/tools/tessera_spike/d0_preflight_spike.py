@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import re
 import secrets
 import shutil
 import subprocess
@@ -125,6 +126,36 @@ def redact_text(text: str) -> str:
         if marker in redacted:
             redacted = redacted.split(marker, 1)[0] + marker + "<redacted>"
     return redacted
+
+
+def measure_failure_redaction(evidence: dict[str, Any]) -> dict[str, Any]:
+    """Measure whether collected evidence contains obvious secret values."""
+    text = json.dumps(evidence, sort_keys=True)
+    jwt_like = re.findall(r"eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}", text)
+    bearer_like = re.findall(r"Bearer\s+[A-Za-z0-9._-]{20,}", text)
+    token_exchange = evidence.get("token_exchange", {})
+    onboarding_user = evidence.get("onboarding_user", {})
+    checks = {
+        "token_exchange_values_redacted": token_exchange.get("token_values_redacted")
+        is True,
+        "token_body_values_not_stored": "body" not in token_exchange,
+        "auth_code_value_not_stored": "body" not in onboarding_user,
+        "jwt_like_values": len(jwt_like),
+        "bearer_like_values": len(bearer_like),
+    }
+    return {
+        "checked": True,
+        "clean": all(
+            [
+                checks["token_exchange_values_redacted"],
+                checks["token_body_values_not_stored"],
+                checks["auth_code_value_not_stored"],
+                checks["jwt_like_values"] == 0,
+                checks["bearer_like_values"] == 0,
+            ]
+        ),
+        **checks,
+    }
 
 
 def docker_json(args: list[str]) -> Any:
@@ -557,6 +588,7 @@ def gate_results(evidence: dict[str, Any]) -> list[dict[str, Any]]:
     seed = evidence.get("seed_inventory", {})
     harness = evidence.get("harness", {})
     blocking = evidence.get("blocking_io_log_check", {})
+    redaction = evidence.get("failure_redaction_check", {})
     return [
         {
             "gate": "target_isolation",
@@ -575,8 +607,9 @@ def gate_results(evidence: dict[str, Any]) -> list[dict[str, Any]]:
         },
         {
             "gate": "failure_redaction",
-            "status": "PASS",
-            "detail": "HTTP evidence stores body type/keys only; values redacted",
+            "status": "PASS" if redaction.get("clean") else "FAIL",
+            "detail": "measured HTTP/token evidence redaction, not hardcoded",
+            "measurement": redaction,
         },
         {
             "gate": "a1_8_services",
@@ -636,6 +669,8 @@ def verdicts_from_result(
     d8 = post.get("d8_headless_token", {})
     d9 = result.get("d9_static_scan", {})
     d5_rescue = post.get("d5_boot_rescue_after_restart", {})
+    a2_replace = pre.get("a2_native_write_replace_contract", {})
+    a3_guard = pre.get("a3_rescue_namespace_guard", {})
     b3_pre = pre.get("b3_system_users_gate_pre_restart", {})
     b3_post = post.get("b3_system_users_gate_post_restart", {})
 
@@ -690,22 +725,17 @@ def verdicts_from_result(
                 and len(d4.get("union_groups", [])) > len(d4.get("original_groups", []))
                 else "FAIL"
             ),
-            "summary": "full union and restore via public update_user",
+            "summary": "caller restores by supplying the full group set; HA group_ids writes are replace semantics",
         },
         "D5": {
             "verdict": (
                 "PASS"
-                if d5_rescue.get("requested")
-                and d5_rescue.get("ok")
-                and d5_rescue.get("corrupt_tessera_store_parse_failed")
-                and d5_rescue.get("restored_users")
-                and all(
-                    user.get("exact_match")
-                    for user in d5_rescue.get("restored_users", [])
-                )
-                else "FAIL"
+                if d5_rescue.get("auth_store_corrupted")
+                and d5_rescue.get("boot_rescue_corruption_tested")
+                and d5_rescue.get("no_admin_lockout")
+                else "PARTIAL"
             ),
-            "summary": "boot rescue requires corrupt-store parse failure plus exact managed user group restore",
+            "summary": "real /config/.storage/auth corruption rescue is not proven in this run; no false PASS",
         },
         "D6": {
             "verdict": "PARTIAL" if d6.get("tested") else "FAIL",
@@ -720,7 +750,9 @@ def verdicts_from_result(
             "summary": "headless normal token probe and revocation; real LLAT rotation not performed",
         },
         "D9": {
-            "verdict": "PARTIAL" if d9.get("skipped") or d9.get("available") else "FAIL",
+            "verdict": (
+                "PARTIAL" if d9.get("skipped") or d9.get("available") else "FAIL"
+            ),
             "summary": (
                 "live /Volumes/config scan skipped in standard dev run; runtime "
                 "classification not complete"
@@ -729,6 +761,29 @@ def verdicts_from_result(
         "B3": {
             "verdict": "PASS" if b3_pre.get("ok") and b3_post.get("ok") else "FAIL",
             "summary": "managed Tessera users are not members of HA system-users allow-all group",
+        },
+        "A2": {
+            "verdict": (
+                "PASS"
+                if a2_replace.get("native_write_is_replace")
+                and a2_replace.get("caller_passes_full_superset")
+                else "FAIL"
+            ),
+            "summary": "native async_update_user(group_ids) is REPLACE; caller full-superset contract proven",
+        },
+        "A3": {
+            "verdict": (
+                "PASS" if a3_guard.get("rescue_restore_namespace_guarded") else "FAIL"
+            ),
+            "summary": "rescue restore rejects non-tessera group ids such as system-users",
+        },
+        "A4": {
+            "verdict": "BLOCKED",
+            "summary": "D12 remains blocked/partial until op login and a real product claim hook exist",
+        },
+        "A5": {
+            "verdict": "PASS",
+            "summary": "failure-redaction gate is measured; stale report marked obsolete",
         },
     }
 
@@ -789,7 +844,7 @@ Modus: Dev-only gegen `ha-tessera-dev`; keine Secrets/Token/Auth-Codes ausgegebe
 
 **PARTIAL / kein Enforce-Go.**
 
-D0 ist gruen genug, um den dev-only Messlauf zu starten. D1, D2, D4 und B3 liefern starke positive Signale fuer den Auth-Store-Schreibpfad. D5 ist nur bei echtem corrupt-store Parse-Fehler plus exaktem Boot-Restore PASS. D3/D6/D7/D8/D9 bleiben bewusst **PARTIAL**, weil WS, echte LLAT-Rotation, vollstaendige Leak-Matrix, Custom-Component-Runtime und Live/CM5-Gates in diesem Lauf nicht vollstaendig abgedeckt sind.
+D0 ist gruen genug, um den dev-only Messlauf zu starten. D1, D2, D4, A2, A3 und B3 liefern positive Signale fuer den Auth-Store-Schreibpfad. D5 bleibt bewusst **PARTIAL**, weil kein echter `/config/.storage/auth`-Korruptions-/No-Admin-Lockout-Rescue bewiesen ist. D12 bleibt **BLOCKED**. D3/D6/D7/D8/D9 bleiben bewusst **PARTIAL**, weil WS, echte LLAT-Rotation, vollstaendige Leak-Matrix, Custom-Component-Runtime und Live/CM5-Gates in diesem Lauf nicht vollstaendig abgedeckt sind.
 
 ## DoD Matrix
 
@@ -823,7 +878,7 @@ Gate-Results:
 ## D1-D5 Auth-Store / Recovery Kern
 
 ```json
-{json.dumps({k: spike.get('pre_restart', {}).get(k) for k in ['d1_pre_restart', 'd2_policy_change_no_restart', 'd2_three_way', 'd3_internal_check_entity', 'd4_union_restore', 'd5_restore_primitive', 'd5_boot_rescue_prepare', 'b3_system_users_gate_pre_restart']}, indent=2, sort_keys=True)}
+{json.dumps({k: spike.get('pre_restart', {}).get(k) for k in ['d1_pre_restart', 'd2_policy_change_no_restart', 'd2_three_way', 'd3_internal_check_entity', 'd4_union_restore', 'a2_native_write_replace_contract', 'a3_rescue_namespace_guard', 'd5_restore_primitive', 'd5_boot_rescue_prepare', 'b3_system_users_gate_pre_restart']}, indent=2, sort_keys=True)}
 ```
 
 Restart-Survival:
@@ -960,6 +1015,7 @@ def main() -> int:
         spike = read_container_json("/config/tessera_spike_result.json")
         spike["d9_static_scan"] = static_d9_scan()
         evidence["blocking_io_log_check"] = blocking_io_log_check()
+        evidence["failure_redaction_check"] = measure_failure_redaction(evidence)
         d0_green = True
         evidence["status"] = "GREEN"
         evidence["exit_code"] = 0
@@ -975,6 +1031,7 @@ def main() -> int:
         evidence["exit_code"] = 2
         evidence["abort_reason"] = str(exc)
         evidence["blocking_io_log_check"] = blocking_io_log_check()
+        evidence["failure_redaction_check"] = measure_failure_redaction(evidence)
         evidence["gate_results"] = gate_results(evidence)
         failure = EVIDENCE / f"tessera-d0-evidence-{TODAY}.json"
         failure.write_text(json.dumps(evidence, indent=2, sort_keys=True))
