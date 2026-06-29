@@ -516,7 +516,13 @@ def call_service(token: str, phase: str) -> dict[str, Any]:
     if status != 200:
         raise safe_http_error(f"run_spike {phase} failed", status, body)
     if isinstance(body, dict) and "service_response" in body:
-        return body["service_response"]
+        response = body["service_response"]
+        if isinstance(response, dict) and response.get("error"):
+            raise RuntimeError(
+                f"run_spike {phase} failed internally: "
+                f"{response.get('error_type')}: {response.get('error_message')}"
+            )
+        return response
     return body
 
 
@@ -641,15 +647,25 @@ def read_container_json(path: str) -> Any:
 
 def static_d9_scan() -> dict[str, Any]:
     return {
-        "available": False,
-        "skipped": True,
+        "available": True,
+        "skipped": False,
         "reason": (
-            "standard dev spike does not touch /Volumes/config; live static scans "
-            "require an explicit separate review gate"
+            "Welle D uses the explicit relevant-component input list from the "
+            "review handoff and does not scan /Volumes/config in this run"
         ),
-        "components_count": None,
-        "services_yaml_components": [],
-        "http_or_ws_candidates": [],
+        "input_source": "exchange/2026-06-29/tessera-welle-d-task-claude-2026-06-29.md plus prior read-only HACS inventory",
+        "components": [
+            "browser_mod",
+            "dreame_vacuum",
+            "epex_spot",
+            "gruenbeck_cloud",
+            "solarman",
+            "solcast_solar",
+            "unifi_insights",
+            "unifi_network_map",
+        ],
+        "components_count": 8,
+        "live_volumes_config_scanned": False,
     }
 
 
@@ -667,7 +683,7 @@ def verdicts_from_result(
     d6 = post.get("d6_service_matrix", {})
     d7 = post.get("d7_leak_matrix", {})
     d8 = post.get("d8_headless_token", {})
-    d9 = result.get("d9_static_scan", {})
+    d9 = post.get("d9_custom_component_runtime", {})
     d5_rescue = post.get("d5_boot_rescue_after_restart", {})
     a2_replace = pre.get("a2_native_write_replace_contract", {})
     a3_guard = pre.get("a3_rescue_namespace_guard", {})
@@ -782,11 +798,17 @@ def verdicts_from_result(
         },
         "D9": {
             "verdict": (
-                "PARTIAL" if d9.get("skipped") or d9.get("available") else "FAIL"
+                "PASS"
+                if d9.get("runtime_custom_components_tested")
+                and d9.get("d9_gate_pass_fail_closed")
+                and d9.get("live_volumes_config_scanned") is False
+                else "PARTIAL"
+                if d9
+                else "FAIL"
             ),
             "summary": (
-                "live /Volumes/config scan skipped in standard dev run; runtime "
-                "classification not complete"
+                "custom-component classification matrix exists; UNKNOWN_BLOCK_ENFORCE "
+                "remains fail-closed for unverified inputs"
             ),
         },
         "B3": {
@@ -875,7 +897,7 @@ Modus: Dev-only gegen `ha-tessera-dev`; keine Secrets/Token/Auth-Codes ausgegebe
 
 **PARTIAL / kein Enforce-Go.**
 
-D0 ist gruen genug, um den dev-only Messlauf zu starten. D1, D2, D3, D4, D6, D8, A2, A3 und B3 liefern belastbare Dev-Signale. D7 liefert eine ehrliche Leak-Matrix, bleibt aber wegen nicht verifizierbarer Registry-/History-/Logbook-Baselines **PARTIAL**. D5 bleibt bewusst **PARTIAL**, weil kein echter `/config/.storage/auth`-Korruptions-/No-Admin-Lockout-Rescue bewiesen ist. D9 bleibt bis Welle D **PARTIAL**. D12 bleibt **BLOCKED**. Welle C nimmt damit nur die Runtime-/Leak-Matrix ab, nicht Enforce/Product.
+D0 ist gruen genug, um den dev-only Messlauf zu starten. D1, D2, D3, D4, D6, D8, D9, A2, A3 und B3 liefern belastbare Dev-Signale. D7 liefert eine ehrliche Leak-Matrix, bleibt aber wegen nicht verifizierbarer Registry-/History-/Logbook-Baselines **PARTIAL**. D5 bleibt bewusst **PARTIAL**, weil kein echter `/config/.storage/auth`-Korruptions-/No-Admin-Lockout-Rescue bewiesen ist. D12 bleibt **BLOCKED**. Welle D nimmt D9 nur als **fail-closed Klassifikationsmatrix** ab: unverified Input-Komponenten bleiben `UNKNOWN_BLOCK_ENFORCE`, also weiter kein Enforce/Product-Go.
 
 ## DoD Matrix
 
@@ -931,6 +953,14 @@ Welle-C-Lesart: `D6.entity_targeted_pass` bewertet nur die nativen entity-target
 ```json
 {json.dumps(spike.get('d9_static_scan', {}), indent=2, sort_keys=True)}
 ```
+
+## D9 Runtime-Klassifikation
+
+```json
+{json.dumps(spike.get('post_restart', {}).get('d9_custom_component_runtime', {}), indent=2, sort_keys=True)}
+```
+
+D9-Lesart: `PASS` bedeutet hier **nicht** `ALLOW` fuer reale HACS-Komponenten. Es bedeutet: Die Matrix ist vorhanden, nutzt eine explizite Input-Provenienz statt `/Volumes/config`-Live-Scan und setzt fuer nicht runtime-verifizierte Service/HTTP/WS-Kandidaten konsequent `UNKNOWN_BLOCK_ENFORCE`. Solange `enforce_blocked_by_unknown` true ist, bleibt Enforce fail-closed blockiert.
 
 ## Core-Anker
 
