@@ -12,9 +12,7 @@ from .const import DOMAIN
 STEP_USER_DATA_SCHEMA = vol.Schema({})
 
 
-class TesseraConfigFlow(
-    config_entries.ConfigFlow, domain=DOMAIN  # type: ignore[misc, call-arg]
-):
+class TesseraConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Minimal config flow for Tessera phase-1 setup."""
 
     VERSION = 1
