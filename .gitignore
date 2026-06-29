@@ -34,3 +34,16 @@ venv/
 .vscode/
 .idea/
 *.swp
+
+# === Legacy / operative Rohartefakte (Codex Migration-Re-Gate) ===
+outputs/
+*.log
+*.har
+*.trace
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+backup*/
+raw*/
+dump*/
