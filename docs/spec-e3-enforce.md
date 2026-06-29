@@ -38,3 +38,15 @@ E3 als **mehrere kleine Codex-Schritte** (Mode-Manager-Skelett → Write-Sequenz
 ## 7. ⚠️ Lücken in diesem Plan (Claude-Selbstkritik 2026-06-29 nacht — VOR E3 zu lösen)
 - **D9-Produkt-Gate fehlt.** Die D9-Klassifikation (`ALLOW/DENY/TIER-2/UNKNOWN_BLOCK_ENFORCE`) existiert nur im **Spike** (Welle D). Schritt 3 der Schreib-Sequenz braucht einen **produktseitigen** Mechanismus, der installierte Custom-Components prüft + bei `UNKNOWN_BLOCK_ENFORCE` enforce blockt (fail-closed). → eigener Vorarbeits-Schritt **E2.5** (Produkt-D9-Gate) vor E3-Scharf.
 - **User→Native-Gruppen-Mapping + Gruppen-Lifecycle unter-spezifiziert.** E3 muss pro Tessera-Rolle eine **native HA-Gruppe** mit kompilierter Policy erzeugen/aktualisieren/löschen (`AuthPolicyStoreAdapter`) und User an ihre Rollen-Gruppen binden (`UserBindingAdapter`, volles Superset = alle Rollen-Gruppen + zu erhaltende System-Gruppen). Offen: **Gruppen-Naming + Lifecycle** (Rolle umbenannt/gelöscht → was passiert mit der nativen Gruppe + den Bindungen?). Braucht ein sauberes Konzept VOR der Implementierung — sonst verwaiste native Gruppen / Lockout-Risiko.
+
+## 8. Vor-E3-Auflagen aus dem Foundation-Security-Audit (2026-06-29 nacht)
+Gesamt-Urteil des holistischen Audits: **SOLIDE-MIT-AUFLAGEN** (allow-only/operate-control/fail-safe/Determinismus halten unter 6000+/200k-Fuzz; Dormanz bestätigt).
+- **BLOCKING (vor Scharf):** Finding #3 — Widerspruchs-Leaf-SoD-Bypass → eigener Task `enforce/fix-contradictory-leaf` (Schema-`read≤control`-Reject). Gate läuft.
+- **SHOULD (vor Write-Bridge-Merge, beim Adapter-Wiring):**
+  1. **Allow-only-Assertion am Choke-Point** `AuthPolicyStoreAdapter.async_set_group_policy` (schreibt sonst `{entities:True}` verbatim).
+  2. **„kein Drop" reparieren:** `_validate_full_group_superset` prüft nur `expected⊆full`, nie gegen die AKTUELLEN tessera-Gruppen des Users → No-Drop hängt voll am E3-Caller. Docstring-Overclaim korrigieren + Caller MUSS `expected` vollständig berechnen.
+  3. **Promotion-Guard:** assert, dass Non-Admin-Rollen nie `system-admin` im Superset ergeben (nur Demotion ist heute guarded).
+  4. **`tessera:`-Prefix reservieren** für Role-IDs (admin-role-id `tessera:foo` kollidiert mit Managed-Namespace).
+  5. **Determinismus:** Per-ID-Diff beibehalten (sicher); falls Hash-über-serialisierte-Payload → `_groups` via `sorted(compiled)` deterministisch.
+- **Test-Masken (vor E3 in die Suite ziehen):** Dormant-Setup-Test auch über `enforce` parametrisieren; Test-Double `_data_to_save` darf NICHT sortieren (maskiert das `_groups`-Determinismus-Loch — echtes HA serialisiert Insertion-Order).
+- **Bereits akzeptiert (kein neuer Bedarf):** Admin-Bypass · system-users allow-all (namentlich geblockt) · E1-Dormanz/Caller-asserted · SoD-by-assignment.
