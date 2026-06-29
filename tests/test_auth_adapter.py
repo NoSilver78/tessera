@@ -94,16 +94,18 @@ class FakeHass:
 
 
 class AuthTrapHass:
-    """HA test double that fails on native auth access."""
+    """HA test double that records and fails on native auth access."""
 
     def __init__(self) -> None:
         """Initialize trap state."""
         self.data: dict[str, Any] = {}
         self.services = FakeServices()
+        self.auth_access_count = 0
 
     @property
     def auth(self) -> object:
-        """Fail if setup touches native auth."""
+        """Record and fail if setup touches native auth."""
+        self.auth_access_count += 1
         raise AssertionError("hass.auth must not be touched while adapters are dormant")
 
 
@@ -197,6 +199,10 @@ class ModeStore:
             "roles": {},
             "membership": {"by_user": {}, "by_group": {}},
         }
+
+    async def async_load_policy(self) -> dict[str, Any]:
+        """Return an empty policy for monitor-preview tests."""
+        return {}
 
 
 def fake_group_factory(group_id: str, name: str, policy: dict[str, Any]) -> FakeGroup:
@@ -474,11 +480,38 @@ async def test_setup_entry_modes_do_not_touch_native_auth(
         tessera_init.AreaEntityResolver, "from_hass", lambda _hass: object()
     )
     monkeypatch.setattr(tessera_init, "compile_current", fake_compile_current)
+    monkeypatch.setattr(tessera_init, "lint_current_preview", lambda *_args: None)
     monkeypatch.setattr(
         tessera_init,
         "log_monitor_preview",
-        lambda compiled, *, mode: {"compiled": compiled, "mode": mode},
+        lambda compiled, *, mode, lint_report: {
+            "compiled": compiled,
+            "mode": mode,
+            "lint_report": lint_report,
+        },
     )
 
     assert await tessera_init.async_setup_entry(hass, FakeEntry("entry-1")) is True
+    assert hass.auth_access_count == 0
     assert DOMAIN in hass.data
+
+
+@pytest.mark.asyncio
+async def test_auth_trap_records_swallowed_auth_access(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Prove the dormant boundary guard catches swallowed hass.auth access."""
+    hass = AuthTrapHass()
+
+    monkeypatch.setattr(
+        tessera_init.AreaEntityResolver,
+        "from_hass",
+        lambda leaking_hass: leaking_hass.auth,
+    )
+
+    entry_data: dict[str, Any] = {"store": ModeStore("monitor")}
+    await tessera_init._compile_for_mode_safely(hass, "entry-1", entry_data)
+
+    assert hass.auth_access_count == 1
+    assert "compiled" not in entry_data
+    assert "preview" not in entry_data
