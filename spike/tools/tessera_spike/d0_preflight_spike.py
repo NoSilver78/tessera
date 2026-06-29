@@ -40,6 +40,11 @@ IMAGE = "ghcr.io/home-assistant/home-assistant:2026.6.4"
 PORT = "8124"
 BASE = f"http://127.0.0.1:{PORT}"
 TODAY = dt.date.today().isoformat()
+ALLOWED_INPUT_BOOLEAN = "tessera_allowed_light"
+FORBIDDEN_INPUT_BOOLEAN = "tessera_forbidden_light"
+ALLOWED_ENTITY = f"input_boolean.{ALLOWED_INPUT_BOOLEAN}"
+FORBIDDEN_ENTITY = f"input_boolean.{FORBIDDEN_INPUT_BOOLEAN}"
+STATE_ONLY_ENTITY = "sensor.tessera_state_only"
 HARNESS_REQUIRED_SERVICES = {
     "boot_rescue_status",
     "ensure_group",
@@ -66,7 +71,7 @@ SENSITIVE_KEYS = {
 SECRET_VALUE_MARKERS = ("Bearer ", "eyJ")
 
 
-CONFIGURATION = r"""
+CONFIGURATION = f"""
 default_config:
 
 logger:
@@ -75,9 +80,9 @@ logger:
 tessera_spike:
 
 input_boolean:
-  tessera_allowed_light:
+  {ALLOWED_INPUT_BOOLEAN}:
     name: Tessera Allowed Light
-  tessera_forbidden_light:
+  {FORBIDDEN_INPUT_BOOLEAN}:
     name: Tessera Forbidden Light
 """
 
@@ -559,19 +564,19 @@ def fallback_incomplete_seed_inventory() -> dict[str, Any]:
         "fixture_version": 1,
         "entities": [
             {
-                "entity_id": "input_boolean.tessera_allowed_light",
+                "entity_id": ALLOWED_ENTITY,
                 "domain": "input_boolean",
                 "class": "allowed_control_entity",
                 "provided_by": "configuration.yaml",
             },
             {
-                "entity_id": "input_boolean.tessera_forbidden_light",
+                "entity_id": FORBIDDEN_ENTITY,
                 "domain": "input_boolean",
                 "class": "forbidden_entity",
                 "provided_by": "configuration.yaml",
             },
             {
-                "entity_id": "sensor.tessera_state_only",
+                "entity_id": STATE_ONLY_ENTITY,
                 "domain": "sensor",
                 "class": "state_only_without_registry",
                 "provided_by": "hass.states.async_set",
@@ -764,6 +769,9 @@ def verdicts_from_result(
     d7 = post.get("d7_leak_matrix", {})
     d8 = post.get("d8_headless_token", {})
     d9 = post.get("d9_custom_component_runtime", {})
+    d11 = post.get("d11_version_gate", {})
+    d13 = post.get("d13_hacs_rollback", {})
+    d15 = post.get("d15_lifecycle", {})
     d5_rescue = post.get("d5_boot_rescue_after_restart", {})
     a2_replace = pre.get("a2_native_write_replace_contract", {})
     a3_guard = pre.get("a3_rescue_namespace_guard", {})
@@ -773,7 +781,6 @@ def verdicts_from_result(
         "requested",
         "snapshot_present",
         "run_id_matches",
-        "auth_store_corrupted",
         "managed_group_replace_drift_injected",
         "boot_rescue_corruption_tested",
         "no_admin_lockout",
@@ -896,6 +903,61 @@ def verdicts_from_result(
                 "remains fail-closed for unverified inputs"
             ),
         },
+        "D11": {
+            "verdict": (
+                "PASS"
+                if d11.get("status") == "PASS"
+                and d11.get("transition", {}).get("version_mismatch_detected")
+                and d11.get("enforce_requested")
+                and d11.get("native_write_attempted") is False
+                and d11.get("native_write_blocked")
+                and d11.get("native_write_call_count") == 0
+                and d11.get("native_write_refused_before_call")
+                and d11.get("native_write_measurement_source")
+                == "spy:hass.auth.async_update_user"
+                and d11.get("native_write_spy", {}).get("installed") is True
+                and d11.get("native_write_spy", {}).get("restored") is True
+                and d11.get("effective_mode") in {"monitor", "off"}
+                and d11.get("auth_fingerprint_unchanged")
+                and d11.get("repair_issue_created")
+                else "PARTIAL" if d11.get("tested") else "FAIL"
+            ),
+            "summary": "unsupported HA version simulation refuses enforce before native auth write",
+        },
+        "D13": {
+            "verdict": (
+                "PASS"
+                if d13.get("status") == "PASS"
+                and d13.get("native_write_attempted")
+                and d13.get("auth_fingerprint_before")
+                != d13.get("auth_fingerprint_after_update")
+                and d13.get("rollback_restored_exact_fingerprint")
+                and d13.get("owner_admin_lockout_probe", {}).get("no_admin_lockout")
+                else "PARTIAL" if d13.get("tested") else "FAIL"
+            ),
+            "summary": "simulated HACS update/downgrade rollback restores exact native auth fingerprint",
+        },
+        "D15": {
+            "verdict": (
+                "PASS"
+                if d15.get("status") == "PASS"
+                and not d15.get("off", {}).get("native_write_observed")
+                and not d15.get("monitor", {}).get("native_write_observed")
+                and d15.get("enforce", {}).get("native_write_attempted")
+                and d15.get("enforce", {}).get("native_write_blocked") is False
+                and d15.get("enforce", {}).get("full_superset_written")
+                and d15.get("enforce", {})
+                .get("permission_probe", {})
+                .get("forbidden_read")
+                and d15.get("enforce", {})
+                .get("permission_probe", {})
+                .get("forbidden_control")
+                and d15.get("restore", {}).get("restored_exact_fingerprint")
+                and d15.get("owner_admin_lockout_probe", {}).get("no_admin_lockout")
+                else "PARTIAL" if d15.get("tested") else "FAIL"
+            ),
+            "summary": "off/monitor no-write, enforce full-superset native write, restore exact fingerprint",
+        },
         "B3": {
             "verdict": "PASS" if b3_pre.get("ok") and b3_post.get("ok") else "FAIL",
             "summary": "managed Tessera users are not members of HA system-users allow-all group",
@@ -926,6 +988,84 @@ def verdicts_from_result(
     }
 
 
+def lifecycle_report_summary(spike: dict[str, Any]) -> dict[str, Any]:
+    """Return compact lifecycle evidence; full fingerprints stay in JSON evidence."""
+    post = spike.get("post_restart", {})
+    d11 = post.get("d11_version_gate", {})
+    d13 = post.get("d13_hacs_rollback", {})
+    d15 = post.get("d15_lifecycle", {})
+    return {
+        "d11_version_gate": {
+            "status": d11.get("status"),
+            "requested_mode": d11.get("requested_mode"),
+            "effective_mode": d11.get("effective_mode"),
+            "enforce_requested": d11.get("enforce_requested"),
+            "native_write_attempted": d11.get("native_write_attempted"),
+            "native_write_blocked": d11.get("native_write_blocked"),
+            "native_write_call_count": d11.get("native_write_call_count"),
+            "native_write_refused_before_call": d11.get(
+                "native_write_refused_before_call"
+            ),
+            "native_write_measurement_source": d11.get(
+                "native_write_measurement_source"
+            ),
+            "native_write_spy_installed": d11.get("native_write_spy", {}).get(
+                "installed"
+            ),
+            "native_write_spy_restored": d11.get("native_write_spy", {}).get(
+                "restored"
+            ),
+            "repair_issue_created": d11.get("repair_issue_created"),
+            "auth_fingerprint_unchanged": d11.get("auth_fingerprint_unchanged"),
+            "version_mismatch_detected": d11.get("transition", {}).get(
+                "version_mismatch_detected"
+            ),
+            "owner_admin_no_lockout": d11.get("owner_admin_lockout_probe", {}).get(
+                "no_admin_lockout"
+            ),
+        },
+        "d13_hacs_rollback": {
+            "status": d13.get("status"),
+            "simulation_method": d13.get("simulation_method"),
+            "native_write_attempted": d13.get("native_write_attempted"),
+            "auth_fingerprint_changed_by_update": d13.get(
+                "auth_fingerprint_changed_by_update"
+            ),
+            "rollback_restored_exact_fingerprint": d13.get(
+                "rollback_restored_exact_fingerprint"
+            ),
+            "owner_admin_no_lockout": d13.get("owner_admin_lockout_probe", {}).get(
+                "no_admin_lockout"
+            ),
+        },
+        "d15_lifecycle": {
+            "status": d15.get("status"),
+            "off_native_write_observed": d15.get("off", {}).get(
+                "native_write_observed"
+            ),
+            "monitor_native_write_observed": d15.get("monitor", {}).get(
+                "native_write_observed"
+            ),
+            "enforce_native_write_attempted": d15.get("enforce", {}).get(
+                "native_write_attempted"
+            ),
+            "enforce_native_write_blocked": d15.get("enforce", {}).get(
+                "native_write_blocked"
+            ),
+            "enforce_full_superset_written": d15.get("enforce", {}).get(
+                "full_superset_written"
+            ),
+            "enforce_permission_probe": d15.get("enforce", {}).get("permission_probe"),
+            "restore_exact_fingerprint": d15.get("restore", {}).get(
+                "restored_exact_fingerprint"
+            ),
+            "owner_admin_no_lockout": d15.get("owner_admin_lockout_probe", {}).get(
+                "no_admin_lockout"
+            ),
+        },
+    }
+
+
 def write_markdown(
     evidence: dict[str, Any], spike: dict[str, Any], verdicts: dict[str, dict[str, Any]]
 ) -> Path:
@@ -934,6 +1074,7 @@ def write_markdown(
     d0_json = EVIDENCE / f"tessera-d0-evidence-{TODAY}.json"
     spike_json = EVIDENCE / f"tessera-spike-result-{TODAY}.json"
     spike["verdicts"] = verdicts
+    lifecycle_summary = lifecycle_report_summary(spike)
 
     d0_json.write_text(json.dumps(evidence, indent=2, sort_keys=True))
     spike_json.write_text(json.dumps(spike, indent=2, sort_keys=True))
@@ -983,7 +1124,7 @@ Modus: Dev-only gegen `ha-tessera-dev`; keine Secrets/Token/Auth-Codes ausgegebe
 
 **PARTIAL / kein Enforce-Go.**
 
-D0 ist gruen genug, um den dev-only Messlauf zu starten. D1, D2, D3, D4, D6, D8, D9, A2, A3 und B3 liefern belastbare Dev-Signale. D5 bewertet jetzt das gemessene S1/S1b-Recovery-Gate gegen managed REPLACE-Demotion, Setup-Exception-Unabhaengigkeit, Re-Read und Owner/Admin-Operate-Probe; S2 `/config/.storage/auth`-Korruption bleibt bewusst **observational only** und kein PASS-Hebel. D7 liefert eine ehrliche Leak-Matrix, bleibt aber wegen nicht verifizierbarer Registry-/History-/Logbook-Baselines **PARTIAL**. D12 bleibt **BLOCKED**. Welle D nimmt D9 nur als **fail-closed Klassifikationsmatrix** ab: unverified Input-Komponenten bleiben `UNKNOWN_BLOCK_ENFORCE`, also weiter kein Enforce/Product-Go.
+D0 ist gruen genug, um den dev-only Messlauf zu starten. D1, D2, D3, D4, D6, D8, D9, D11, D13, D15, A2, A3 und B3 liefern belastbare Dev-Signale. D5 bewertet das gemessene S1/S1b-Recovery-Gate gegen managed REPLACE-Demotion, Setup-Exception-Unabhaengigkeit, Re-Read und Owner/Admin-Operate-Probe; S2 `/config/.storage/auth`-Korruption bleibt bewusst **observational only** und kein PASS-Hebel. D7 liefert eine ehrliche Leak-Matrix, bleibt aber wegen nicht verifizierbarer Registry-/History-/Logbook-Baselines **PARTIAL**. D12 bleibt **BLOCKED**. Welle D nimmt D9 nur als **fail-closed Klassifikationsmatrix** ab; Welle E nimmt Lifecycle-Gates nur fuer `ha-tessera-dev` ab. Weiter kein Enforce/Product-Go.
 
 ## DoD Matrix
 
@@ -1054,6 +1195,14 @@ Welle-C-Lesart: `D6.entity_targeted_pass` bewertet nur die nativen entity-target
 
 D9-Lesart: `PASS` bedeutet hier **nicht** `ALLOW` fuer reale HACS-Komponenten. Es bedeutet: Die Matrix ist vorhanden, nutzt eine explizite Input-Provenienz statt `/Volumes/config`-Live-Scan und setzt fuer nicht runtime-verifizierte Service/HTTP/WS-Kandidaten konsequent `UNKNOWN_BLOCK_ENFORCE`. Solange `enforce_blocked_by_unknown` true ist, bleibt Enforce fail-closed blockiert.
 
+## D11/D13/D15 Lifecycle-Gates
+
+```json
+{json.dumps(lifecycle_summary, indent=2, sort_keys=True)}
+```
+
+Lifecycle-Lesart: `D11` belegt im Dev-Spike den fail-closed Version-Gate-Pfad per unsupported-version Lifecycle-Transition, Repairs-Issue, unveraendertem Auth-Fingerprint und echtem Spy/Counter um `hass.auth.async_update_user`; PASS verlangt `call_count == 0` aus dieser Messung. `D13` ist eine HACS-Update/Downgrade-Simulation, kein echter HACS-Paketwechsel; PASS verlangt einen beobachteten Zwischen-Write und exakten Rollback. `D15` misst `off -> monitor -> enforce -> restore` in-process mit vollem Gruppen-Superset, Permission-Probe und exaktem Restore-Fingerprint. Alle drei bleiben Dev-Spike-Belege, kein Produkt-Enforce-Go.
+
 ## Core-Anker
 
 - HA `auth_store.py`: private `_groups`, `_data_to_save()`, `_store.async_save()` sind der gemessene Schreibpfad.
@@ -1065,7 +1214,7 @@ D9-Lesart: `PASS` bedeutet hier **nicht** `ALLOW` fuer reale HACS-Komponenten. E
 
 - **Go fuer weitere Phase-0-Haertung:** ja.
 - **Go fuer Tessera-Enforce/Product:** nein.
-- **Naechste Pflicht:** D10/CM5-Benchmark, D12/OIDC und echte Produkt-/Release-Gates gesondert; kein Enforce/Product-Go aus diesem Spike.
+- **Naechste Pflicht:** echte HACS-/Upgrade-Probe ausserhalb der Simulation, D10/CM5-Benchmark, D12/OIDC und Produkt-/Release-Gates gesondert; kein Enforce/Product-Go aus diesem Spike.
 
 ## Artefakte
 

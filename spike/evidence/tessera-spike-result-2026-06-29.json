@@ -282,6 +282,5215 @@
       "system_generated_users_ignored": 1,
       "system_users_group_id": "system-users"
     },
+    "d11_version_gate": {
+      "auth_fingerprint_after": {
+        "auth_store_counts": {
+          "credentials": 1,
+          "groups": 6,
+          "refresh_tokens": 2,
+          "users": 8
+        },
+        "group_summaries": [
+          {
+            "has_policy": true,
+            "id": "system-admin",
+            "name": "Administrators",
+            "policy_json": "{\"entities\":true}",
+            "system_generated": true
+          },
+          {
+            "has_policy": true,
+            "id": "system-read-only",
+            "name": "Read Only",
+            "policy_json": "{\"entities\":{\"all\":{\"read\":true}}}",
+            "system_generated": true
+          },
+          {
+            "has_policy": true,
+            "id": "system-users",
+            "name": "Users",
+            "policy_json": "{\"entities\":true}",
+            "system_generated": true
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:d2",
+            "name": "Tessera D2",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}",
+            "system_generated": false
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:extra",
+            "name": "Tessera Extra",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}",
+            "system_generated": false
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:test",
+            "name": "Tessera Test",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}",
+            "system_generated": false
+          }
+        ],
+        "ha_version_actual": "2026.6.4",
+        "managed_groups": [
+          {
+            "has_policy": true,
+            "id": "tessera:d2",
+            "name": "Tessera D2",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}"
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:extra",
+            "name": "Tessera Extra",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}"
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:test",
+            "name": "Tessera Test",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}"
+          }
+        ],
+        "managed_users": [
+          {
+            "groups": [
+              "tessera:d2"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-d2-user"
+          },
+          {
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-replace-user"
+          },
+          {
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-rescue-user"
+          },
+          {
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": false,
+            "name": "tessera-test-admin"
+          },
+          {
+            "groups": [
+              "system-read-only"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-ro"
+          },
+          {
+            "groups": [
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-user"
+          }
+        ],
+        "owner_admin_users": [
+          {
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": false,
+            "name": "tessera-test-admin"
+          },
+          {
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": true,
+            "name": "test-owner"
+          }
+        ],
+        "user_summaries": [
+          {
+            "credentials_count": 0,
+            "groups": [
+              "system-read-only"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "Home Assistant Content",
+            "refresh_token_classes": [
+              "system"
+            ],
+            "refresh_token_count": 1,
+            "system_generated": true
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:d2"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-d2-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-replace-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-rescue-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": false,
+            "name": "tessera-test-admin",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "system-read-only"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-ro",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 1,
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": true,
+            "name": "test-owner",
+            "refresh_token_classes": [
+              "normal"
+            ],
+            "refresh_token_count": 1,
+            "system_generated": false
+          }
+        ]
+      },
+      "auth_fingerprint_before": {
+        "auth_store_counts": {
+          "credentials": 1,
+          "groups": 6,
+          "refresh_tokens": 2,
+          "users": 8
+        },
+        "group_summaries": [
+          {
+            "has_policy": true,
+            "id": "system-admin",
+            "name": "Administrators",
+            "policy_json": "{\"entities\":true}",
+            "system_generated": true
+          },
+          {
+            "has_policy": true,
+            "id": "system-read-only",
+            "name": "Read Only",
+            "policy_json": "{\"entities\":{\"all\":{\"read\":true}}}",
+            "system_generated": true
+          },
+          {
+            "has_policy": true,
+            "id": "system-users",
+            "name": "Users",
+            "policy_json": "{\"entities\":true}",
+            "system_generated": true
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:d2",
+            "name": "Tessera D2",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}",
+            "system_generated": false
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:extra",
+            "name": "Tessera Extra",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}",
+            "system_generated": false
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:test",
+            "name": "Tessera Test",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}",
+            "system_generated": false
+          }
+        ],
+        "ha_version_actual": "2026.6.4",
+        "managed_groups": [
+          {
+            "has_policy": true,
+            "id": "tessera:d2",
+            "name": "Tessera D2",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}"
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:extra",
+            "name": "Tessera Extra",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}"
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:test",
+            "name": "Tessera Test",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}"
+          }
+        ],
+        "managed_users": [
+          {
+            "groups": [
+              "tessera:d2"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-d2-user"
+          },
+          {
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-replace-user"
+          },
+          {
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-rescue-user"
+          },
+          {
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": false,
+            "name": "tessera-test-admin"
+          },
+          {
+            "groups": [
+              "system-read-only"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-ro"
+          },
+          {
+            "groups": [
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-user"
+          }
+        ],
+        "owner_admin_users": [
+          {
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": false,
+            "name": "tessera-test-admin"
+          },
+          {
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": true,
+            "name": "test-owner"
+          }
+        ],
+        "user_summaries": [
+          {
+            "credentials_count": 0,
+            "groups": [
+              "system-read-only"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "Home Assistant Content",
+            "refresh_token_classes": [
+              "system"
+            ],
+            "refresh_token_count": 1,
+            "system_generated": true
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:d2"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-d2-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-replace-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-rescue-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": false,
+            "name": "tessera-test-admin",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "system-read-only"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-ro",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 1,
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": true,
+            "name": "test-owner",
+            "refresh_token_classes": [
+              "normal"
+            ],
+            "refresh_token_count": 1,
+            "system_generated": false
+          }
+        ]
+      },
+      "auth_fingerprint_unchanged": true,
+      "effective_mode": "monitor",
+      "enforce_requested": true,
+      "file_line": "spike/tools/tessera_spike/harness/custom_components/tessera_spike/__init__.py:_probe_d11_version_gate",
+      "ha_version_actual": "2026.6.4",
+      "ha_version_simulated": "9999.0.0",
+      "ha_version_supported": "2026.6.4",
+      "native_write_attempted": false,
+      "native_write_blocked": true,
+      "native_write_call_count": 0,
+      "native_write_measurement_source": "spy:hass.auth.async_update_user",
+      "native_write_refused_before_call": true,
+      "native_write_spy": {
+        "call_count": 0,
+        "calls": [],
+        "installed": true,
+        "restored": true,
+        "secret_redaction": "PASS: no token, password, auth code, or group-id values recorded",
+        "target": "hass.auth.async_update_user"
+      },
+      "owner_admin_lockout_probe": {
+        "active_owner_or_admin_users": [
+          {
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": false,
+            "name": "tessera-test-admin"
+          },
+          {
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": true,
+            "name": "test-owner"
+          }
+        ],
+        "authenticated_admin_request": {
+          "attempted": true,
+          "authenticated": true,
+          "status": 200,
+          "token_values_redacted": true
+        },
+        "checked": true,
+        "no_admin_lockout": true
+      },
+      "reason": "unsupported-version enforce request is routed through lifecycle gate and refused before native auth write",
+      "repair_issue_created": true,
+      "repair_issue_id": "unsupported_version_enforce_refused",
+      "requested_mode": "enforce",
+      "simulation_method": "in-process lifecycle enforce request with simulated unsupported version",
+      "status": "PASS",
+      "tested": true,
+      "transition": {
+        "auth_fingerprint_after": {
+          "auth_store_counts": {
+            "credentials": 1,
+            "groups": 6,
+            "refresh_tokens": 2,
+            "users": 8
+          },
+          "group_summaries": [
+            {
+              "has_policy": true,
+              "id": "system-admin",
+              "name": "Administrators",
+              "policy_json": "{\"entities\":true}",
+              "system_generated": true
+            },
+            {
+              "has_policy": true,
+              "id": "system-read-only",
+              "name": "Read Only",
+              "policy_json": "{\"entities\":{\"all\":{\"read\":true}}}",
+              "system_generated": true
+            },
+            {
+              "has_policy": true,
+              "id": "system-users",
+              "name": "Users",
+              "policy_json": "{\"entities\":true}",
+              "system_generated": true
+            },
+            {
+              "has_policy": true,
+              "id": "tessera:d2",
+              "name": "Tessera D2",
+              "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}",
+              "system_generated": false
+            },
+            {
+              "has_policy": true,
+              "id": "tessera:extra",
+              "name": "Tessera Extra",
+              "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}",
+              "system_generated": false
+            },
+            {
+              "has_policy": true,
+              "id": "tessera:test",
+              "name": "Tessera Test",
+              "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}",
+              "system_generated": false
+            }
+          ],
+          "ha_version_actual": "2026.6.4",
+          "managed_groups": [
+            {
+              "has_policy": true,
+              "id": "tessera:d2",
+              "name": "Tessera D2",
+              "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}"
+            },
+            {
+              "has_policy": true,
+              "id": "tessera:extra",
+              "name": "Tessera Extra",
+              "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}"
+            },
+            {
+              "has_policy": true,
+              "id": "tessera:test",
+              "name": "Tessera Test",
+              "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}"
+            }
+          ],
+          "managed_users": [
+            {
+              "groups": [
+                "tessera:d2"
+              ],
+              "is_active": true,
+              "is_admin": false,
+              "is_owner": false,
+              "name": "tessera-d2-user"
+            },
+            {
+              "groups": [
+                "tessera:extra",
+                "tessera:test"
+              ],
+              "is_active": true,
+              "is_admin": false,
+              "is_owner": false,
+              "name": "tessera-replace-user"
+            },
+            {
+              "groups": [
+                "tessera:extra",
+                "tessera:test"
+              ],
+              "is_active": true,
+              "is_admin": false,
+              "is_owner": false,
+              "name": "tessera-rescue-user"
+            },
+            {
+              "groups": [
+                "system-admin"
+              ],
+              "is_active": true,
+              "is_admin": true,
+              "is_owner": false,
+              "name": "tessera-test-admin"
+            },
+            {
+              "groups": [
+                "system-read-only"
+              ],
+              "is_active": true,
+              "is_admin": false,
+              "is_owner": false,
+              "name": "tessera-test-ro"
+            },
+            {
+              "groups": [
+                "tessera:test"
+              ],
+              "is_active": true,
+              "is_admin": false,
+              "is_owner": false,
+              "name": "tessera-test-user"
+            }
+          ],
+          "owner_admin_users": [
+            {
+              "groups": [
+                "system-admin"
+              ],
+              "is_active": true,
+              "is_admin": true,
+              "is_owner": false,
+              "name": "tessera-test-admin"
+            },
+            {
+              "groups": [
+                "system-admin"
+              ],
+              "is_active": true,
+              "is_admin": true,
+              "is_owner": true,
+              "name": "test-owner"
+            }
+          ],
+          "user_summaries": [
+            {
+              "credentials_count": 0,
+              "groups": [
+                "system-read-only"
+              ],
+              "is_active": true,
+              "is_admin": false,
+              "is_owner": false,
+              "name": "Home Assistant Content",
+              "refresh_token_classes": [
+                "system"
+              ],
+              "refresh_token_count": 1,
+              "system_generated": true
+            },
+            {
+              "credentials_count": 0,
+              "groups": [
+                "tessera:d2"
+              ],
+              "is_active": true,
+              "is_admin": false,
+              "is_owner": false,
+              "name": "tessera-d2-user",
+              "refresh_token_classes": [],
+              "refresh_token_count": 0,
+              "system_generated": false
+            },
+            {
+              "credentials_count": 0,
+              "groups": [
+                "tessera:extra",
+                "tessera:test"
+              ],
+              "is_active": true,
+              "is_admin": false,
+              "is_owner": false,
+              "name": "tessera-replace-user",
+              "refresh_token_classes": [],
+              "refresh_token_count": 0,
+              "system_generated": false
+            },
+            {
+              "credentials_count": 0,
+              "groups": [
+                "tessera:extra",
+                "tessera:test"
+              ],
+              "is_active": true,
+              "is_admin": false,
+              "is_owner": false,
+              "name": "tessera-rescue-user",
+              "refresh_token_classes": [],
+              "refresh_token_count": 0,
+              "system_generated": false
+            },
+            {
+              "credentials_count": 0,
+              "groups": [
+                "system-admin"
+              ],
+              "is_active": true,
+              "is_admin": true,
+              "is_owner": false,
+              "name": "tessera-test-admin",
+              "refresh_token_classes": [],
+              "refresh_token_count": 0,
+              "system_generated": false
+            },
+            {
+              "credentials_count": 0,
+              "groups": [
+                "system-read-only"
+              ],
+              "is_active": true,
+              "is_admin": false,
+              "is_owner": false,
+              "name": "tessera-test-ro",
+              "refresh_token_classes": [],
+              "refresh_token_count": 0,
+              "system_generated": false
+            },
+            {
+              "credentials_count": 0,
+              "groups": [
+                "tessera:test"
+              ],
+              "is_active": true,
+              "is_admin": false,
+              "is_owner": false,
+              "name": "tessera-test-user",
+              "refresh_token_classes": [],
+              "refresh_token_count": 0,
+              "system_generated": false
+            },
+            {
+              "credentials_count": 1,
+              "groups": [
+                "system-admin"
+              ],
+              "is_active": true,
+              "is_admin": true,
+              "is_owner": true,
+              "name": "test-owner",
+              "refresh_token_classes": [
+                "normal"
+              ],
+              "refresh_token_count": 1,
+              "system_generated": false
+            }
+          ]
+        },
+        "auth_fingerprint_before": {
+          "auth_store_counts": {
+            "credentials": 1,
+            "groups": 6,
+            "refresh_tokens": 2,
+            "users": 8
+          },
+          "group_summaries": [
+            {
+              "has_policy": true,
+              "id": "system-admin",
+              "name": "Administrators",
+              "policy_json": "{\"entities\":true}",
+              "system_generated": true
+            },
+            {
+              "has_policy": true,
+              "id": "system-read-only",
+              "name": "Read Only",
+              "policy_json": "{\"entities\":{\"all\":{\"read\":true}}}",
+              "system_generated": true
+            },
+            {
+              "has_policy": true,
+              "id": "system-users",
+              "name": "Users",
+              "policy_json": "{\"entities\":true}",
+              "system_generated": true
+            },
+            {
+              "has_policy": true,
+              "id": "tessera:d2",
+              "name": "Tessera D2",
+              "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}",
+              "system_generated": false
+            },
+            {
+              "has_policy": true,
+              "id": "tessera:extra",
+              "name": "Tessera Extra",
+              "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}",
+              "system_generated": false
+            },
+            {
+              "has_policy": true,
+              "id": "tessera:test",
+              "name": "Tessera Test",
+              "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}",
+              "system_generated": false
+            }
+          ],
+          "ha_version_actual": "2026.6.4",
+          "managed_groups": [
+            {
+              "has_policy": true,
+              "id": "tessera:d2",
+              "name": "Tessera D2",
+              "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}"
+            },
+            {
+              "has_policy": true,
+              "id": "tessera:extra",
+              "name": "Tessera Extra",
+              "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}"
+            },
+            {
+              "has_policy": true,
+              "id": "tessera:test",
+              "name": "Tessera Test",
+              "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}"
+            }
+          ],
+          "managed_users": [
+            {
+              "groups": [
+                "tessera:d2"
+              ],
+              "is_active": true,
+              "is_admin": false,
+              "is_owner": false,
+              "name": "tessera-d2-user"
+            },
+            {
+              "groups": [
+                "tessera:extra",
+                "tessera:test"
+              ],
+              "is_active": true,
+              "is_admin": false,
+              "is_owner": false,
+              "name": "tessera-replace-user"
+            },
+            {
+              "groups": [
+                "tessera:extra",
+                "tessera:test"
+              ],
+              "is_active": true,
+              "is_admin": false,
+              "is_owner": false,
+              "name": "tessera-rescue-user"
+            },
+            {
+              "groups": [
+                "system-admin"
+              ],
+              "is_active": true,
+              "is_admin": true,
+              "is_owner": false,
+              "name": "tessera-test-admin"
+            },
+            {
+              "groups": [
+                "system-read-only"
+              ],
+              "is_active": true,
+              "is_admin": false,
+              "is_owner": false,
+              "name": "tessera-test-ro"
+            },
+            {
+              "groups": [
+                "tessera:test"
+              ],
+              "is_active": true,
+              "is_admin": false,
+              "is_owner": false,
+              "name": "tessera-test-user"
+            }
+          ],
+          "owner_admin_users": [
+            {
+              "groups": [
+                "system-admin"
+              ],
+              "is_active": true,
+              "is_admin": true,
+              "is_owner": false,
+              "name": "tessera-test-admin"
+            },
+            {
+              "groups": [
+                "system-admin"
+              ],
+              "is_active": true,
+              "is_admin": true,
+              "is_owner": true,
+              "name": "test-owner"
+            }
+          ],
+          "user_summaries": [
+            {
+              "credentials_count": 0,
+              "groups": [
+                "system-read-only"
+              ],
+              "is_active": true,
+              "is_admin": false,
+              "is_owner": false,
+              "name": "Home Assistant Content",
+              "refresh_token_classes": [
+                "system"
+              ],
+              "refresh_token_count": 1,
+              "system_generated": true
+            },
+            {
+              "credentials_count": 0,
+              "groups": [
+                "tessera:d2"
+              ],
+              "is_active": true,
+              "is_admin": false,
+              "is_owner": false,
+              "name": "tessera-d2-user",
+              "refresh_token_classes": [],
+              "refresh_token_count": 0,
+              "system_generated": false
+            },
+            {
+              "credentials_count": 0,
+              "groups": [
+                "tessera:extra",
+                "tessera:test"
+              ],
+              "is_active": true,
+              "is_admin": false,
+              "is_owner": false,
+              "name": "tessera-replace-user",
+              "refresh_token_classes": [],
+              "refresh_token_count": 0,
+              "system_generated": false
+            },
+            {
+              "credentials_count": 0,
+              "groups": [
+                "tessera:extra",
+                "tessera:test"
+              ],
+              "is_active": true,
+              "is_admin": false,
+              "is_owner": false,
+              "name": "tessera-rescue-user",
+              "refresh_token_classes": [],
+              "refresh_token_count": 0,
+              "system_generated": false
+            },
+            {
+              "credentials_count": 0,
+              "groups": [
+                "system-admin"
+              ],
+              "is_active": true,
+              "is_admin": true,
+              "is_owner": false,
+              "name": "tessera-test-admin",
+              "refresh_token_classes": [],
+              "refresh_token_count": 0,
+              "system_generated": false
+            },
+            {
+              "credentials_count": 0,
+              "groups": [
+                "system-read-only"
+              ],
+              "is_active": true,
+              "is_admin": false,
+              "is_owner": false,
+              "name": "tessera-test-ro",
+              "refresh_token_classes": [],
+              "refresh_token_count": 0,
+              "system_generated": false
+            },
+            {
+              "credentials_count": 0,
+              "groups": [
+                "tessera:test"
+              ],
+              "is_active": true,
+              "is_admin": false,
+              "is_owner": false,
+              "name": "tessera-test-user",
+              "refresh_token_classes": [],
+              "refresh_token_count": 0,
+              "system_generated": false
+            },
+            {
+              "credentials_count": 1,
+              "groups": [
+                "system-admin"
+              ],
+              "is_active": true,
+              "is_admin": true,
+              "is_owner": true,
+              "name": "test-owner",
+              "refresh_token_classes": [
+                "normal"
+              ],
+              "refresh_token_count": 1,
+              "system_generated": false
+            }
+          ]
+        },
+        "auth_fingerprint_unchanged": true,
+        "effective_mode": "monitor",
+        "enforce_requested": true,
+        "ha_version_actual": "9999.0.0",
+        "ha_version_supported": "2026.6.4",
+        "native_write_attempted": false,
+        "native_write_blocked": true,
+        "native_write_call_count": 0,
+        "native_write_measurement_source": "spy:hass.auth.async_update_user",
+        "native_write_refused_before_call": true,
+        "native_write_spy": {
+          "call_count": 0,
+          "calls": [],
+          "installed": true,
+          "restored": true,
+          "secret_redaction": "PASS: no token, password, auth code, or group-id values recorded",
+          "target": "hass.auth.async_update_user"
+        },
+        "repair_issue_created": true,
+        "repair_issue_id": "unsupported_version_enforce_refused",
+        "requested_mode": "enforce",
+        "version_mismatch_detected": true
+      }
+    },
+    "d13_hacs_rollback": {
+      "auth_fingerprint_after": {
+        "auth_store_counts": {
+          "credentials": 1,
+          "groups": 6,
+          "refresh_tokens": 2,
+          "users": 8
+        },
+        "group_summaries": [
+          {
+            "has_policy": true,
+            "id": "system-admin",
+            "name": "Administrators",
+            "policy_json": "{\"entities\":true}",
+            "system_generated": true
+          },
+          {
+            "has_policy": true,
+            "id": "system-read-only",
+            "name": "Read Only",
+            "policy_json": "{\"entities\":{\"all\":{\"read\":true}}}",
+            "system_generated": true
+          },
+          {
+            "has_policy": true,
+            "id": "system-users",
+            "name": "Users",
+            "policy_json": "{\"entities\":true}",
+            "system_generated": true
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:d2",
+            "name": "Tessera D2",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}",
+            "system_generated": false
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:extra",
+            "name": "Tessera Extra",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}",
+            "system_generated": false
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:test",
+            "name": "Tessera Test",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}",
+            "system_generated": false
+          }
+        ],
+        "ha_version_actual": "2026.6.4",
+        "managed_groups": [
+          {
+            "has_policy": true,
+            "id": "tessera:d2",
+            "name": "Tessera D2",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}"
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:extra",
+            "name": "Tessera Extra",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}"
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:test",
+            "name": "Tessera Test",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}"
+          }
+        ],
+        "managed_users": [
+          {
+            "groups": [
+              "tessera:d2"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-d2-user"
+          },
+          {
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-replace-user"
+          },
+          {
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-rescue-user"
+          },
+          {
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": false,
+            "name": "tessera-test-admin"
+          },
+          {
+            "groups": [
+              "system-read-only"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-ro"
+          },
+          {
+            "groups": [
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-user"
+          }
+        ],
+        "owner_admin_users": [
+          {
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": false,
+            "name": "tessera-test-admin"
+          },
+          {
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": true,
+            "name": "test-owner"
+          }
+        ],
+        "user_summaries": [
+          {
+            "credentials_count": 0,
+            "groups": [
+              "system-read-only"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "Home Assistant Content",
+            "refresh_token_classes": [
+              "system"
+            ],
+            "refresh_token_count": 1,
+            "system_generated": true
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:d2"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-d2-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-replace-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-rescue-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": false,
+            "name": "tessera-test-admin",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "system-read-only"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-ro",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 1,
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": true,
+            "name": "test-owner",
+            "refresh_token_classes": [
+              "normal"
+            ],
+            "refresh_token_count": 1,
+            "system_generated": false
+          }
+        ]
+      },
+      "auth_fingerprint_after_update": {
+        "auth_store_counts": {
+          "credentials": 1,
+          "groups": 7,
+          "refresh_tokens": 2,
+          "users": 8
+        },
+        "group_summaries": [
+          {
+            "has_policy": true,
+            "id": "system-admin",
+            "name": "Administrators",
+            "policy_json": "{\"entities\":true}",
+            "system_generated": true
+          },
+          {
+            "has_policy": true,
+            "id": "system-read-only",
+            "name": "Read Only",
+            "policy_json": "{\"entities\":{\"all\":{\"read\":true}}}",
+            "system_generated": true
+          },
+          {
+            "has_policy": true,
+            "id": "system-users",
+            "name": "Users",
+            "policy_json": "{\"entities\":true}",
+            "system_generated": true
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:d2",
+            "name": "Tessera D2",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}",
+            "system_generated": false
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:extra",
+            "name": "Tessera Extra",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}",
+            "system_generated": false
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:hacs_rollback",
+            "name": "Tessera HACS Rollback",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}",
+            "system_generated": false
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:test",
+            "name": "Tessera Test",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}",
+            "system_generated": false
+          }
+        ],
+        "ha_version_actual": "2026.6.4",
+        "managed_groups": [
+          {
+            "has_policy": true,
+            "id": "tessera:d2",
+            "name": "Tessera D2",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}"
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:extra",
+            "name": "Tessera Extra",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}"
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:hacs_rollback",
+            "name": "Tessera HACS Rollback",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}"
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:test",
+            "name": "Tessera Test",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}"
+          }
+        ],
+        "managed_users": [
+          {
+            "groups": [
+              "tessera:d2"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-d2-user"
+          },
+          {
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-replace-user"
+          },
+          {
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-rescue-user"
+          },
+          {
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": false,
+            "name": "tessera-test-admin"
+          },
+          {
+            "groups": [
+              "system-read-only"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-ro"
+          },
+          {
+            "groups": [
+              "tessera:hacs_rollback",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-user"
+          }
+        ],
+        "owner_admin_users": [
+          {
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": false,
+            "name": "tessera-test-admin"
+          },
+          {
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": true,
+            "name": "test-owner"
+          }
+        ],
+        "user_summaries": [
+          {
+            "credentials_count": 0,
+            "groups": [
+              "system-read-only"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "Home Assistant Content",
+            "refresh_token_classes": [
+              "system"
+            ],
+            "refresh_token_count": 1,
+            "system_generated": true
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:d2"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-d2-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-replace-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-rescue-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": false,
+            "name": "tessera-test-admin",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "system-read-only"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-ro",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:hacs_rollback",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 1,
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": true,
+            "name": "test-owner",
+            "refresh_token_classes": [
+              "normal"
+            ],
+            "refresh_token_count": 1,
+            "system_generated": false
+          }
+        ]
+      },
+      "auth_fingerprint_before": {
+        "auth_store_counts": {
+          "credentials": 1,
+          "groups": 6,
+          "refresh_tokens": 2,
+          "users": 8
+        },
+        "group_summaries": [
+          {
+            "has_policy": true,
+            "id": "system-admin",
+            "name": "Administrators",
+            "policy_json": "{\"entities\":true}",
+            "system_generated": true
+          },
+          {
+            "has_policy": true,
+            "id": "system-read-only",
+            "name": "Read Only",
+            "policy_json": "{\"entities\":{\"all\":{\"read\":true}}}",
+            "system_generated": true
+          },
+          {
+            "has_policy": true,
+            "id": "system-users",
+            "name": "Users",
+            "policy_json": "{\"entities\":true}",
+            "system_generated": true
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:d2",
+            "name": "Tessera D2",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}",
+            "system_generated": false
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:extra",
+            "name": "Tessera Extra",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}",
+            "system_generated": false
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:test",
+            "name": "Tessera Test",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}",
+            "system_generated": false
+          }
+        ],
+        "ha_version_actual": "2026.6.4",
+        "managed_groups": [
+          {
+            "has_policy": true,
+            "id": "tessera:d2",
+            "name": "Tessera D2",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}"
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:extra",
+            "name": "Tessera Extra",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}"
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:test",
+            "name": "Tessera Test",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}"
+          }
+        ],
+        "managed_users": [
+          {
+            "groups": [
+              "tessera:d2"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-d2-user"
+          },
+          {
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-replace-user"
+          },
+          {
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-rescue-user"
+          },
+          {
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": false,
+            "name": "tessera-test-admin"
+          },
+          {
+            "groups": [
+              "system-read-only"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-ro"
+          },
+          {
+            "groups": [
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-user"
+          }
+        ],
+        "owner_admin_users": [
+          {
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": false,
+            "name": "tessera-test-admin"
+          },
+          {
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": true,
+            "name": "test-owner"
+          }
+        ],
+        "user_summaries": [
+          {
+            "credentials_count": 0,
+            "groups": [
+              "system-read-only"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "Home Assistant Content",
+            "refresh_token_classes": [
+              "system"
+            ],
+            "refresh_token_count": 1,
+            "system_generated": true
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:d2"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-d2-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-replace-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-rescue-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": false,
+            "name": "tessera-test-admin",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "system-read-only"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-ro",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 1,
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": true,
+            "name": "test-owner",
+            "refresh_token_classes": [
+              "normal"
+            ],
+            "refresh_token_count": 1,
+            "system_generated": false
+          }
+        ]
+      },
+      "auth_fingerprint_changed_by_update": true,
+      "component_version_after_rollback": "welle-e-sim-1",
+      "component_version_before": "welle-e-sim-1",
+      "component_version_update": "welle-e-sim-2",
+      "file_line": "spike/tools/tessera_spike/harness/custom_components/tessera_spike/__init__.py:_probe_d13_hacs_rollback",
+      "managed_groups_after": [
+        {
+          "has_policy": true,
+          "id": "tessera:d2",
+          "name": "Tessera D2",
+          "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}"
+        },
+        {
+          "has_policy": true,
+          "id": "tessera:extra",
+          "name": "Tessera Extra",
+          "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}"
+        },
+        {
+          "has_policy": true,
+          "id": "tessera:test",
+          "name": "Tessera Test",
+          "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}"
+        }
+      ],
+      "managed_groups_before": [
+        {
+          "has_policy": true,
+          "id": "tessera:d2",
+          "name": "Tessera D2",
+          "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}"
+        },
+        {
+          "has_policy": true,
+          "id": "tessera:extra",
+          "name": "Tessera Extra",
+          "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}"
+        },
+        {
+          "has_policy": true,
+          "id": "tessera:test",
+          "name": "Tessera Test",
+          "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}"
+        }
+      ],
+      "managed_users_after": [
+        {
+          "groups": [
+            "tessera:d2"
+          ],
+          "is_active": true,
+          "is_admin": false,
+          "is_owner": false,
+          "name": "tessera-d2-user"
+        },
+        {
+          "groups": [
+            "tessera:extra",
+            "tessera:test"
+          ],
+          "is_active": true,
+          "is_admin": false,
+          "is_owner": false,
+          "name": "tessera-replace-user"
+        },
+        {
+          "groups": [
+            "tessera:extra",
+            "tessera:test"
+          ],
+          "is_active": true,
+          "is_admin": false,
+          "is_owner": false,
+          "name": "tessera-rescue-user"
+        },
+        {
+          "groups": [
+            "system-admin"
+          ],
+          "is_active": true,
+          "is_admin": true,
+          "is_owner": false,
+          "name": "tessera-test-admin"
+        },
+        {
+          "groups": [
+            "system-read-only"
+          ],
+          "is_active": true,
+          "is_admin": false,
+          "is_owner": false,
+          "name": "tessera-test-ro"
+        },
+        {
+          "groups": [
+            "tessera:test"
+          ],
+          "is_active": true,
+          "is_admin": false,
+          "is_owner": false,
+          "name": "tessera-test-user"
+        }
+      ],
+      "managed_users_before": [
+        {
+          "groups": [
+            "tessera:d2"
+          ],
+          "is_active": true,
+          "is_admin": false,
+          "is_owner": false,
+          "name": "tessera-d2-user"
+        },
+        {
+          "groups": [
+            "tessera:extra",
+            "tessera:test"
+          ],
+          "is_active": true,
+          "is_admin": false,
+          "is_owner": false,
+          "name": "tessera-replace-user"
+        },
+        {
+          "groups": [
+            "tessera:extra",
+            "tessera:test"
+          ],
+          "is_active": true,
+          "is_admin": false,
+          "is_owner": false,
+          "name": "tessera-rescue-user"
+        },
+        {
+          "groups": [
+            "system-admin"
+          ],
+          "is_active": true,
+          "is_admin": true,
+          "is_owner": false,
+          "name": "tessera-test-admin"
+        },
+        {
+          "groups": [
+            "system-read-only"
+          ],
+          "is_active": true,
+          "is_admin": false,
+          "is_owner": false,
+          "name": "tessera-test-ro"
+        },
+        {
+          "groups": [
+            "tessera:test"
+          ],
+          "is_active": true,
+          "is_admin": false,
+          "is_owner": false,
+          "name": "tessera-test-user"
+        }
+      ],
+      "native_write_attempted": true,
+      "native_write_blocked": false,
+      "owner_admin_lockout_probe": {
+        "active_owner_or_admin_users": [
+          {
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": false,
+            "name": "tessera-test-admin"
+          },
+          {
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": true,
+            "name": "test-owner"
+          }
+        ],
+        "authenticated_admin_request": {
+          "attempted": true,
+          "authenticated": true,
+          "status": 200,
+          "token_values_redacted": true
+        },
+        "checked": true,
+        "no_admin_lockout": true
+      },
+      "reason": "simulated component update writes managed policy, rollback restores exact auth fingerprint",
+      "restore_probe": {
+        "original_groups": [
+          "tessera:test"
+        ],
+        "restored_groups": [
+          "tessera:test"
+        ],
+        "update_groups": [
+          "tessera:hacs_rollback",
+          "tessera:test"
+        ],
+        "user_name": "tessera-test-user"
+      },
+      "rollback_restored_exact_fingerprint": true,
+      "simulation_method": "in-process HACS update/downgrade simulation; no real HACS package install",
+      "status": "PASS",
+      "tested": true
+    },
+    "d15_lifecycle": {
+      "auth_fingerprint_after": {
+        "auth_store_counts": {
+          "credentials": 1,
+          "groups": 6,
+          "refresh_tokens": 2,
+          "users": 8
+        },
+        "group_summaries": [
+          {
+            "has_policy": true,
+            "id": "system-admin",
+            "name": "Administrators",
+            "policy_json": "{\"entities\":true}",
+            "system_generated": true
+          },
+          {
+            "has_policy": true,
+            "id": "system-read-only",
+            "name": "Read Only",
+            "policy_json": "{\"entities\":{\"all\":{\"read\":true}}}",
+            "system_generated": true
+          },
+          {
+            "has_policy": true,
+            "id": "system-users",
+            "name": "Users",
+            "policy_json": "{\"entities\":true}",
+            "system_generated": true
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:d2",
+            "name": "Tessera D2",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}",
+            "system_generated": false
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:extra",
+            "name": "Tessera Extra",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}",
+            "system_generated": false
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:test",
+            "name": "Tessera Test",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}",
+            "system_generated": false
+          }
+        ],
+        "ha_version_actual": "2026.6.4",
+        "managed_groups": [
+          {
+            "has_policy": true,
+            "id": "tessera:d2",
+            "name": "Tessera D2",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}"
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:extra",
+            "name": "Tessera Extra",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}"
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:test",
+            "name": "Tessera Test",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}"
+          }
+        ],
+        "managed_users": [
+          {
+            "groups": [
+              "tessera:d2"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-d2-user"
+          },
+          {
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-replace-user"
+          },
+          {
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-rescue-user"
+          },
+          {
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": false,
+            "name": "tessera-test-admin"
+          },
+          {
+            "groups": [
+              "system-read-only"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-ro"
+          },
+          {
+            "groups": [
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-user"
+          }
+        ],
+        "owner_admin_users": [
+          {
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": false,
+            "name": "tessera-test-admin"
+          },
+          {
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": true,
+            "name": "test-owner"
+          }
+        ],
+        "user_summaries": [
+          {
+            "credentials_count": 0,
+            "groups": [
+              "system-read-only"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "Home Assistant Content",
+            "refresh_token_classes": [
+              "system"
+            ],
+            "refresh_token_count": 1,
+            "system_generated": true
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:d2"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-d2-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-replace-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-rescue-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": false,
+            "name": "tessera-test-admin",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "system-read-only"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-ro",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 1,
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": true,
+            "name": "test-owner",
+            "refresh_token_classes": [
+              "normal"
+            ],
+            "refresh_token_count": 1,
+            "system_generated": false
+          }
+        ]
+      },
+      "auth_fingerprint_after_enforce": {
+        "auth_store_counts": {
+          "credentials": 1,
+          "groups": 7,
+          "refresh_tokens": 2,
+          "users": 8
+        },
+        "group_summaries": [
+          {
+            "has_policy": true,
+            "id": "system-admin",
+            "name": "Administrators",
+            "policy_json": "{\"entities\":true}",
+            "system_generated": true
+          },
+          {
+            "has_policy": true,
+            "id": "system-read-only",
+            "name": "Read Only",
+            "policy_json": "{\"entities\":{\"all\":{\"read\":true}}}",
+            "system_generated": true
+          },
+          {
+            "has_policy": true,
+            "id": "system-users",
+            "name": "Users",
+            "policy_json": "{\"entities\":true}",
+            "system_generated": true
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:d2",
+            "name": "Tessera D2",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}",
+            "system_generated": false
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:extra",
+            "name": "Tessera Extra",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}",
+            "system_generated": false
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:lifecycle",
+            "name": "Tessera Lifecycle",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}",
+            "system_generated": false
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:test",
+            "name": "Tessera Test",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}",
+            "system_generated": false
+          }
+        ],
+        "ha_version_actual": "2026.6.4",
+        "managed_groups": [
+          {
+            "has_policy": true,
+            "id": "tessera:d2",
+            "name": "Tessera D2",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}"
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:extra",
+            "name": "Tessera Extra",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}"
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:lifecycle",
+            "name": "Tessera Lifecycle",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}"
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:test",
+            "name": "Tessera Test",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}"
+          }
+        ],
+        "managed_users": [
+          {
+            "groups": [
+              "tessera:d2"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-d2-user"
+          },
+          {
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-replace-user"
+          },
+          {
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-rescue-user"
+          },
+          {
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": false,
+            "name": "tessera-test-admin"
+          },
+          {
+            "groups": [
+              "system-read-only"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-ro"
+          },
+          {
+            "groups": [
+              "tessera:lifecycle",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-user"
+          }
+        ],
+        "owner_admin_users": [
+          {
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": false,
+            "name": "tessera-test-admin"
+          },
+          {
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": true,
+            "name": "test-owner"
+          }
+        ],
+        "user_summaries": [
+          {
+            "credentials_count": 0,
+            "groups": [
+              "system-read-only"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "Home Assistant Content",
+            "refresh_token_classes": [
+              "system"
+            ],
+            "refresh_token_count": 1,
+            "system_generated": true
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:d2"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-d2-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-replace-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-rescue-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": false,
+            "name": "tessera-test-admin",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "system-read-only"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-ro",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:lifecycle",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 1,
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": true,
+            "name": "test-owner",
+            "refresh_token_classes": [
+              "normal"
+            ],
+            "refresh_token_count": 1,
+            "system_generated": false
+          }
+        ]
+      },
+      "auth_fingerprint_after_monitor": {
+        "auth_store_counts": {
+          "credentials": 1,
+          "groups": 6,
+          "refresh_tokens": 2,
+          "users": 8
+        },
+        "group_summaries": [
+          {
+            "has_policy": true,
+            "id": "system-admin",
+            "name": "Administrators",
+            "policy_json": "{\"entities\":true}",
+            "system_generated": true
+          },
+          {
+            "has_policy": true,
+            "id": "system-read-only",
+            "name": "Read Only",
+            "policy_json": "{\"entities\":{\"all\":{\"read\":true}}}",
+            "system_generated": true
+          },
+          {
+            "has_policy": true,
+            "id": "system-users",
+            "name": "Users",
+            "policy_json": "{\"entities\":true}",
+            "system_generated": true
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:d2",
+            "name": "Tessera D2",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}",
+            "system_generated": false
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:extra",
+            "name": "Tessera Extra",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}",
+            "system_generated": false
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:test",
+            "name": "Tessera Test",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}",
+            "system_generated": false
+          }
+        ],
+        "ha_version_actual": "2026.6.4",
+        "managed_groups": [
+          {
+            "has_policy": true,
+            "id": "tessera:d2",
+            "name": "Tessera D2",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}"
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:extra",
+            "name": "Tessera Extra",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}"
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:test",
+            "name": "Tessera Test",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}"
+          }
+        ],
+        "managed_users": [
+          {
+            "groups": [
+              "tessera:d2"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-d2-user"
+          },
+          {
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-replace-user"
+          },
+          {
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-rescue-user"
+          },
+          {
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": false,
+            "name": "tessera-test-admin"
+          },
+          {
+            "groups": [
+              "system-read-only"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-ro"
+          },
+          {
+            "groups": [
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-user"
+          }
+        ],
+        "owner_admin_users": [
+          {
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": false,
+            "name": "tessera-test-admin"
+          },
+          {
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": true,
+            "name": "test-owner"
+          }
+        ],
+        "user_summaries": [
+          {
+            "credentials_count": 0,
+            "groups": [
+              "system-read-only"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "Home Assistant Content",
+            "refresh_token_classes": [
+              "system"
+            ],
+            "refresh_token_count": 1,
+            "system_generated": true
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:d2"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-d2-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-replace-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-rescue-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": false,
+            "name": "tessera-test-admin",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "system-read-only"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-ro",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 1,
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": true,
+            "name": "test-owner",
+            "refresh_token_classes": [
+              "normal"
+            ],
+            "refresh_token_count": 1,
+            "system_generated": false
+          }
+        ]
+      },
+      "auth_fingerprint_after_off": {
+        "auth_store_counts": {
+          "credentials": 1,
+          "groups": 6,
+          "refresh_tokens": 2,
+          "users": 8
+        },
+        "group_summaries": [
+          {
+            "has_policy": true,
+            "id": "system-admin",
+            "name": "Administrators",
+            "policy_json": "{\"entities\":true}",
+            "system_generated": true
+          },
+          {
+            "has_policy": true,
+            "id": "system-read-only",
+            "name": "Read Only",
+            "policy_json": "{\"entities\":{\"all\":{\"read\":true}}}",
+            "system_generated": true
+          },
+          {
+            "has_policy": true,
+            "id": "system-users",
+            "name": "Users",
+            "policy_json": "{\"entities\":true}",
+            "system_generated": true
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:d2",
+            "name": "Tessera D2",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}",
+            "system_generated": false
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:extra",
+            "name": "Tessera Extra",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}",
+            "system_generated": false
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:test",
+            "name": "Tessera Test",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}",
+            "system_generated": false
+          }
+        ],
+        "ha_version_actual": "2026.6.4",
+        "managed_groups": [
+          {
+            "has_policy": true,
+            "id": "tessera:d2",
+            "name": "Tessera D2",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}"
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:extra",
+            "name": "Tessera Extra",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}"
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:test",
+            "name": "Tessera Test",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}"
+          }
+        ],
+        "managed_users": [
+          {
+            "groups": [
+              "tessera:d2"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-d2-user"
+          },
+          {
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-replace-user"
+          },
+          {
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-rescue-user"
+          },
+          {
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": false,
+            "name": "tessera-test-admin"
+          },
+          {
+            "groups": [
+              "system-read-only"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-ro"
+          },
+          {
+            "groups": [
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-user"
+          }
+        ],
+        "owner_admin_users": [
+          {
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": false,
+            "name": "tessera-test-admin"
+          },
+          {
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": true,
+            "name": "test-owner"
+          }
+        ],
+        "user_summaries": [
+          {
+            "credentials_count": 0,
+            "groups": [
+              "system-read-only"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "Home Assistant Content",
+            "refresh_token_classes": [
+              "system"
+            ],
+            "refresh_token_count": 1,
+            "system_generated": true
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:d2"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-d2-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-replace-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-rescue-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": false,
+            "name": "tessera-test-admin",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "system-read-only"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-ro",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 1,
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": true,
+            "name": "test-owner",
+            "refresh_token_classes": [
+              "normal"
+            ],
+            "refresh_token_count": 1,
+            "system_generated": false
+          }
+        ]
+      },
+      "auth_fingerprint_before": {
+        "auth_store_counts": {
+          "credentials": 1,
+          "groups": 6,
+          "refresh_tokens": 2,
+          "users": 8
+        },
+        "group_summaries": [
+          {
+            "has_policy": true,
+            "id": "system-admin",
+            "name": "Administrators",
+            "policy_json": "{\"entities\":true}",
+            "system_generated": true
+          },
+          {
+            "has_policy": true,
+            "id": "system-read-only",
+            "name": "Read Only",
+            "policy_json": "{\"entities\":{\"all\":{\"read\":true}}}",
+            "system_generated": true
+          },
+          {
+            "has_policy": true,
+            "id": "system-users",
+            "name": "Users",
+            "policy_json": "{\"entities\":true}",
+            "system_generated": true
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:d2",
+            "name": "Tessera D2",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}",
+            "system_generated": false
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:extra",
+            "name": "Tessera Extra",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}",
+            "system_generated": false
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:test",
+            "name": "Tessera Test",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}",
+            "system_generated": false
+          }
+        ],
+        "ha_version_actual": "2026.6.4",
+        "managed_groups": [
+          {
+            "has_policy": true,
+            "id": "tessera:d2",
+            "name": "Tessera D2",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}"
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:extra",
+            "name": "Tessera Extra",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}"
+          },
+          {
+            "has_policy": true,
+            "id": "tessera:test",
+            "name": "Tessera Test",
+            "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}"
+          }
+        ],
+        "managed_users": [
+          {
+            "groups": [
+              "tessera:d2"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-d2-user"
+          },
+          {
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-replace-user"
+          },
+          {
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-rescue-user"
+          },
+          {
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": false,
+            "name": "tessera-test-admin"
+          },
+          {
+            "groups": [
+              "system-read-only"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-ro"
+          },
+          {
+            "groups": [
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-user"
+          }
+        ],
+        "owner_admin_users": [
+          {
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": false,
+            "name": "tessera-test-admin"
+          },
+          {
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": true,
+            "name": "test-owner"
+          }
+        ],
+        "user_summaries": [
+          {
+            "credentials_count": 0,
+            "groups": [
+              "system-read-only"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "Home Assistant Content",
+            "refresh_token_classes": [
+              "system"
+            ],
+            "refresh_token_count": 1,
+            "system_generated": true
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:d2"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-d2-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-replace-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:extra",
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-rescue-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": false,
+            "name": "tessera-test-admin",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "system-read-only"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-ro",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 0,
+            "groups": [
+              "tessera:test"
+            ],
+            "is_active": true,
+            "is_admin": false,
+            "is_owner": false,
+            "name": "tessera-test-user",
+            "refresh_token_classes": [],
+            "refresh_token_count": 0,
+            "system_generated": false
+          },
+          {
+            "credentials_count": 1,
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": true,
+            "name": "test-owner",
+            "refresh_token_classes": [
+              "normal"
+            ],
+            "refresh_token_count": 1,
+            "system_generated": false
+          }
+        ]
+      },
+      "enforce": {
+        "effective_mode": "enforce",
+        "full_group_superset": [
+          "tessera:lifecycle",
+          "tessera:test"
+        ],
+        "full_superset_written": true,
+        "native_write_attempted": true,
+        "native_write_blocked": false,
+        "original_groups": [
+          "tessera:test"
+        ],
+        "permission_probe": {
+          "forbidden_control": true,
+          "forbidden_read": true
+        },
+        "transition": {
+          "auth_fingerprint_after": {
+            "auth_store_counts": {
+              "credentials": 1,
+              "groups": 7,
+              "refresh_tokens": 2,
+              "users": 8
+            },
+            "group_summaries": [
+              {
+                "has_policy": true,
+                "id": "system-admin",
+                "name": "Administrators",
+                "policy_json": "{\"entities\":true}",
+                "system_generated": true
+              },
+              {
+                "has_policy": true,
+                "id": "system-read-only",
+                "name": "Read Only",
+                "policy_json": "{\"entities\":{\"all\":{\"read\":true}}}",
+                "system_generated": true
+              },
+              {
+                "has_policy": true,
+                "id": "system-users",
+                "name": "Users",
+                "policy_json": "{\"entities\":true}",
+                "system_generated": true
+              },
+              {
+                "has_policy": true,
+                "id": "tessera:d2",
+                "name": "Tessera D2",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}",
+                "system_generated": false
+              },
+              {
+                "has_policy": true,
+                "id": "tessera:extra",
+                "name": "Tessera Extra",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}",
+                "system_generated": false
+              },
+              {
+                "has_policy": true,
+                "id": "tessera:lifecycle",
+                "name": "Tessera Lifecycle",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}",
+                "system_generated": false
+              },
+              {
+                "has_policy": true,
+                "id": "tessera:test",
+                "name": "Tessera Test",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}",
+                "system_generated": false
+              }
+            ],
+            "ha_version_actual": "2026.6.4",
+            "managed_groups": [
+              {
+                "has_policy": true,
+                "id": "tessera:d2",
+                "name": "Tessera D2",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}"
+              },
+              {
+                "has_policy": true,
+                "id": "tessera:extra",
+                "name": "Tessera Extra",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}"
+              },
+              {
+                "has_policy": true,
+                "id": "tessera:lifecycle",
+                "name": "Tessera Lifecycle",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}"
+              },
+              {
+                "has_policy": true,
+                "id": "tessera:test",
+                "name": "Tessera Test",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}"
+              }
+            ],
+            "managed_users": [
+              {
+                "groups": [
+                  "tessera:d2"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-d2-user"
+              },
+              {
+                "groups": [
+                  "tessera:extra",
+                  "tessera:test"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-replace-user"
+              },
+              {
+                "groups": [
+                  "tessera:extra",
+                  "tessera:test"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-rescue-user"
+              },
+              {
+                "groups": [
+                  "system-admin"
+                ],
+                "is_active": true,
+                "is_admin": true,
+                "is_owner": false,
+                "name": "tessera-test-admin"
+              },
+              {
+                "groups": [
+                  "system-read-only"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-test-ro"
+              },
+              {
+                "groups": [
+                  "tessera:lifecycle",
+                  "tessera:test"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-test-user"
+              }
+            ],
+            "owner_admin_users": [
+              {
+                "groups": [
+                  "system-admin"
+                ],
+                "is_active": true,
+                "is_admin": true,
+                "is_owner": false,
+                "name": "tessera-test-admin"
+              },
+              {
+                "groups": [
+                  "system-admin"
+                ],
+                "is_active": true,
+                "is_admin": true,
+                "is_owner": true,
+                "name": "test-owner"
+              }
+            ],
+            "user_summaries": [
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "system-read-only"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "Home Assistant Content",
+                "refresh_token_classes": [
+                  "system"
+                ],
+                "refresh_token_count": 1,
+                "system_generated": true
+              },
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "tessera:d2"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-d2-user",
+                "refresh_token_classes": [],
+                "refresh_token_count": 0,
+                "system_generated": false
+              },
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "tessera:extra",
+                  "tessera:test"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-replace-user",
+                "refresh_token_classes": [],
+                "refresh_token_count": 0,
+                "system_generated": false
+              },
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "tessera:extra",
+                  "tessera:test"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-rescue-user",
+                "refresh_token_classes": [],
+                "refresh_token_count": 0,
+                "system_generated": false
+              },
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "system-admin"
+                ],
+                "is_active": true,
+                "is_admin": true,
+                "is_owner": false,
+                "name": "tessera-test-admin",
+                "refresh_token_classes": [],
+                "refresh_token_count": 0,
+                "system_generated": false
+              },
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "system-read-only"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-test-ro",
+                "refresh_token_classes": [],
+                "refresh_token_count": 0,
+                "system_generated": false
+              },
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "tessera:lifecycle",
+                  "tessera:test"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-test-user",
+                "refresh_token_classes": [],
+                "refresh_token_count": 0,
+                "system_generated": false
+              },
+              {
+                "credentials_count": 1,
+                "groups": [
+                  "system-admin"
+                ],
+                "is_active": true,
+                "is_admin": true,
+                "is_owner": true,
+                "name": "test-owner",
+                "refresh_token_classes": [
+                  "normal"
+                ],
+                "refresh_token_count": 1,
+                "system_generated": false
+              }
+            ]
+          },
+          "auth_fingerprint_before": {
+            "auth_store_counts": {
+              "credentials": 1,
+              "groups": 6,
+              "refresh_tokens": 2,
+              "users": 8
+            },
+            "group_summaries": [
+              {
+                "has_policy": true,
+                "id": "system-admin",
+                "name": "Administrators",
+                "policy_json": "{\"entities\":true}",
+                "system_generated": true
+              },
+              {
+                "has_policy": true,
+                "id": "system-read-only",
+                "name": "Read Only",
+                "policy_json": "{\"entities\":{\"all\":{\"read\":true}}}",
+                "system_generated": true
+              },
+              {
+                "has_policy": true,
+                "id": "system-users",
+                "name": "Users",
+                "policy_json": "{\"entities\":true}",
+                "system_generated": true
+              },
+              {
+                "has_policy": true,
+                "id": "tessera:d2",
+                "name": "Tessera D2",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}",
+                "system_generated": false
+              },
+              {
+                "has_policy": true,
+                "id": "tessera:extra",
+                "name": "Tessera Extra",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}",
+                "system_generated": false
+              },
+              {
+                "has_policy": true,
+                "id": "tessera:test",
+                "name": "Tessera Test",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}",
+                "system_generated": false
+              }
+            ],
+            "ha_version_actual": "2026.6.4",
+            "managed_groups": [
+              {
+                "has_policy": true,
+                "id": "tessera:d2",
+                "name": "Tessera D2",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}"
+              },
+              {
+                "has_policy": true,
+                "id": "tessera:extra",
+                "name": "Tessera Extra",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}"
+              },
+              {
+                "has_policy": true,
+                "id": "tessera:test",
+                "name": "Tessera Test",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}"
+              }
+            ],
+            "managed_users": [
+              {
+                "groups": [
+                  "tessera:d2"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-d2-user"
+              },
+              {
+                "groups": [
+                  "tessera:extra",
+                  "tessera:test"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-replace-user"
+              },
+              {
+                "groups": [
+                  "tessera:extra",
+                  "tessera:test"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-rescue-user"
+              },
+              {
+                "groups": [
+                  "system-admin"
+                ],
+                "is_active": true,
+                "is_admin": true,
+                "is_owner": false,
+                "name": "tessera-test-admin"
+              },
+              {
+                "groups": [
+                  "system-read-only"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-test-ro"
+              },
+              {
+                "groups": [
+                  "tessera:test"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-test-user"
+              }
+            ],
+            "owner_admin_users": [
+              {
+                "groups": [
+                  "system-admin"
+                ],
+                "is_active": true,
+                "is_admin": true,
+                "is_owner": false,
+                "name": "tessera-test-admin"
+              },
+              {
+                "groups": [
+                  "system-admin"
+                ],
+                "is_active": true,
+                "is_admin": true,
+                "is_owner": true,
+                "name": "test-owner"
+              }
+            ],
+            "user_summaries": [
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "system-read-only"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "Home Assistant Content",
+                "refresh_token_classes": [
+                  "system"
+                ],
+                "refresh_token_count": 1,
+                "system_generated": true
+              },
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "tessera:d2"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-d2-user",
+                "refresh_token_classes": [],
+                "refresh_token_count": 0,
+                "system_generated": false
+              },
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "tessera:extra",
+                  "tessera:test"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-replace-user",
+                "refresh_token_classes": [],
+                "refresh_token_count": 0,
+                "system_generated": false
+              },
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "tessera:extra",
+                  "tessera:test"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-rescue-user",
+                "refresh_token_classes": [],
+                "refresh_token_count": 0,
+                "system_generated": false
+              },
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "system-admin"
+                ],
+                "is_active": true,
+                "is_admin": true,
+                "is_owner": false,
+                "name": "tessera-test-admin",
+                "refresh_token_classes": [],
+                "refresh_token_count": 0,
+                "system_generated": false
+              },
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "system-read-only"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-test-ro",
+                "refresh_token_classes": [],
+                "refresh_token_count": 0,
+                "system_generated": false
+              },
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "tessera:test"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-test-user",
+                "refresh_token_classes": [],
+                "refresh_token_count": 0,
+                "system_generated": false
+              },
+              {
+                "credentials_count": 1,
+                "groups": [
+                  "system-admin"
+                ],
+                "is_active": true,
+                "is_admin": true,
+                "is_owner": true,
+                "name": "test-owner",
+                "refresh_token_classes": [
+                  "normal"
+                ],
+                "refresh_token_count": 1,
+                "system_generated": false
+              }
+            ]
+          },
+          "effective_mode": "enforce",
+          "full_group_superset": [
+            "tessera:lifecycle",
+            "tessera:test"
+          ],
+          "full_superset_written": true,
+          "ha_version_actual": "2026.6.4",
+          "ha_version_supported": "2026.6.4",
+          "native_write_attempted": true,
+          "native_write_blocked": false,
+          "original_groups": [
+            "tessera:test"
+          ],
+          "permission_probe": {
+            "forbidden_control": true,
+            "forbidden_read": true
+          },
+          "requested_mode": "enforce",
+          "user_groups_after_enforce": [
+            "tessera:lifecycle",
+            "tessera:test"
+          ]
+        },
+        "user_groups_after_enforce": [
+          "tessera:lifecycle",
+          "tessera:test"
+        ]
+      },
+      "file_line": "spike/tools/tessera_spike/harness/custom_components/tessera_spike/__init__.py:_probe_d15_lifecycle",
+      "monitor": {
+        "effective_mode": "monitor",
+        "native_write_observed": false,
+        "preview": {
+          "control": true,
+          "entity_id": "input_boolean.tessera_forbidden_light",
+          "group_id": "tessera:lifecycle",
+          "read": true
+        },
+        "transition": {
+          "auth_fingerprint_after": {
+            "auth_store_counts": {
+              "credentials": 1,
+              "groups": 6,
+              "refresh_tokens": 2,
+              "users": 8
+            },
+            "group_summaries": [
+              {
+                "has_policy": true,
+                "id": "system-admin",
+                "name": "Administrators",
+                "policy_json": "{\"entities\":true}",
+                "system_generated": true
+              },
+              {
+                "has_policy": true,
+                "id": "system-read-only",
+                "name": "Read Only",
+                "policy_json": "{\"entities\":{\"all\":{\"read\":true}}}",
+                "system_generated": true
+              },
+              {
+                "has_policy": true,
+                "id": "system-users",
+                "name": "Users",
+                "policy_json": "{\"entities\":true}",
+                "system_generated": true
+              },
+              {
+                "has_policy": true,
+                "id": "tessera:d2",
+                "name": "Tessera D2",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}",
+                "system_generated": false
+              },
+              {
+                "has_policy": true,
+                "id": "tessera:extra",
+                "name": "Tessera Extra",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}",
+                "system_generated": false
+              },
+              {
+                "has_policy": true,
+                "id": "tessera:test",
+                "name": "Tessera Test",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}",
+                "system_generated": false
+              }
+            ],
+            "ha_version_actual": "2026.6.4",
+            "managed_groups": [
+              {
+                "has_policy": true,
+                "id": "tessera:d2",
+                "name": "Tessera D2",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}"
+              },
+              {
+                "has_policy": true,
+                "id": "tessera:extra",
+                "name": "Tessera Extra",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}"
+              },
+              {
+                "has_policy": true,
+                "id": "tessera:test",
+                "name": "Tessera Test",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}"
+              }
+            ],
+            "managed_users": [
+              {
+                "groups": [
+                  "tessera:d2"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-d2-user"
+              },
+              {
+                "groups": [
+                  "tessera:extra",
+                  "tessera:test"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-replace-user"
+              },
+              {
+                "groups": [
+                  "tessera:extra",
+                  "tessera:test"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-rescue-user"
+              },
+              {
+                "groups": [
+                  "system-admin"
+                ],
+                "is_active": true,
+                "is_admin": true,
+                "is_owner": false,
+                "name": "tessera-test-admin"
+              },
+              {
+                "groups": [
+                  "system-read-only"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-test-ro"
+              },
+              {
+                "groups": [
+                  "tessera:test"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-test-user"
+              }
+            ],
+            "owner_admin_users": [
+              {
+                "groups": [
+                  "system-admin"
+                ],
+                "is_active": true,
+                "is_admin": true,
+                "is_owner": false,
+                "name": "tessera-test-admin"
+              },
+              {
+                "groups": [
+                  "system-admin"
+                ],
+                "is_active": true,
+                "is_admin": true,
+                "is_owner": true,
+                "name": "test-owner"
+              }
+            ],
+            "user_summaries": [
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "system-read-only"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "Home Assistant Content",
+                "refresh_token_classes": [
+                  "system"
+                ],
+                "refresh_token_count": 1,
+                "system_generated": true
+              },
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "tessera:d2"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-d2-user",
+                "refresh_token_classes": [],
+                "refresh_token_count": 0,
+                "system_generated": false
+              },
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "tessera:extra",
+                  "tessera:test"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-replace-user",
+                "refresh_token_classes": [],
+                "refresh_token_count": 0,
+                "system_generated": false
+              },
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "tessera:extra",
+                  "tessera:test"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-rescue-user",
+                "refresh_token_classes": [],
+                "refresh_token_count": 0,
+                "system_generated": false
+              },
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "system-admin"
+                ],
+                "is_active": true,
+                "is_admin": true,
+                "is_owner": false,
+                "name": "tessera-test-admin",
+                "refresh_token_classes": [],
+                "refresh_token_count": 0,
+                "system_generated": false
+              },
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "system-read-only"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-test-ro",
+                "refresh_token_classes": [],
+                "refresh_token_count": 0,
+                "system_generated": false
+              },
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "tessera:test"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-test-user",
+                "refresh_token_classes": [],
+                "refresh_token_count": 0,
+                "system_generated": false
+              },
+              {
+                "credentials_count": 1,
+                "groups": [
+                  "system-admin"
+                ],
+                "is_active": true,
+                "is_admin": true,
+                "is_owner": true,
+                "name": "test-owner",
+                "refresh_token_classes": [
+                  "normal"
+                ],
+                "refresh_token_count": 1,
+                "system_generated": false
+              }
+            ]
+          },
+          "auth_fingerprint_before": {
+            "auth_store_counts": {
+              "credentials": 1,
+              "groups": 6,
+              "refresh_tokens": 2,
+              "users": 8
+            },
+            "group_summaries": [
+              {
+                "has_policy": true,
+                "id": "system-admin",
+                "name": "Administrators",
+                "policy_json": "{\"entities\":true}",
+                "system_generated": true
+              },
+              {
+                "has_policy": true,
+                "id": "system-read-only",
+                "name": "Read Only",
+                "policy_json": "{\"entities\":{\"all\":{\"read\":true}}}",
+                "system_generated": true
+              },
+              {
+                "has_policy": true,
+                "id": "system-users",
+                "name": "Users",
+                "policy_json": "{\"entities\":true}",
+                "system_generated": true
+              },
+              {
+                "has_policy": true,
+                "id": "tessera:d2",
+                "name": "Tessera D2",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}",
+                "system_generated": false
+              },
+              {
+                "has_policy": true,
+                "id": "tessera:extra",
+                "name": "Tessera Extra",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}",
+                "system_generated": false
+              },
+              {
+                "has_policy": true,
+                "id": "tessera:test",
+                "name": "Tessera Test",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}",
+                "system_generated": false
+              }
+            ],
+            "ha_version_actual": "2026.6.4",
+            "managed_groups": [
+              {
+                "has_policy": true,
+                "id": "tessera:d2",
+                "name": "Tessera D2",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}"
+              },
+              {
+                "has_policy": true,
+                "id": "tessera:extra",
+                "name": "Tessera Extra",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}"
+              },
+              {
+                "has_policy": true,
+                "id": "tessera:test",
+                "name": "Tessera Test",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}"
+              }
+            ],
+            "managed_users": [
+              {
+                "groups": [
+                  "tessera:d2"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-d2-user"
+              },
+              {
+                "groups": [
+                  "tessera:extra",
+                  "tessera:test"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-replace-user"
+              },
+              {
+                "groups": [
+                  "tessera:extra",
+                  "tessera:test"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-rescue-user"
+              },
+              {
+                "groups": [
+                  "system-admin"
+                ],
+                "is_active": true,
+                "is_admin": true,
+                "is_owner": false,
+                "name": "tessera-test-admin"
+              },
+              {
+                "groups": [
+                  "system-read-only"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-test-ro"
+              },
+              {
+                "groups": [
+                  "tessera:test"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-test-user"
+              }
+            ],
+            "owner_admin_users": [
+              {
+                "groups": [
+                  "system-admin"
+                ],
+                "is_active": true,
+                "is_admin": true,
+                "is_owner": false,
+                "name": "tessera-test-admin"
+              },
+              {
+                "groups": [
+                  "system-admin"
+                ],
+                "is_active": true,
+                "is_admin": true,
+                "is_owner": true,
+                "name": "test-owner"
+              }
+            ],
+            "user_summaries": [
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "system-read-only"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "Home Assistant Content",
+                "refresh_token_classes": [
+                  "system"
+                ],
+                "refresh_token_count": 1,
+                "system_generated": true
+              },
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "tessera:d2"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-d2-user",
+                "refresh_token_classes": [],
+                "refresh_token_count": 0,
+                "system_generated": false
+              },
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "tessera:extra",
+                  "tessera:test"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-replace-user",
+                "refresh_token_classes": [],
+                "refresh_token_count": 0,
+                "system_generated": false
+              },
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "tessera:extra",
+                  "tessera:test"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-rescue-user",
+                "refresh_token_classes": [],
+                "refresh_token_count": 0,
+                "system_generated": false
+              },
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "system-admin"
+                ],
+                "is_active": true,
+                "is_admin": true,
+                "is_owner": false,
+                "name": "tessera-test-admin",
+                "refresh_token_classes": [],
+                "refresh_token_count": 0,
+                "system_generated": false
+              },
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "system-read-only"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-test-ro",
+                "refresh_token_classes": [],
+                "refresh_token_count": 0,
+                "system_generated": false
+              },
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "tessera:test"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-test-user",
+                "refresh_token_classes": [],
+                "refresh_token_count": 0,
+                "system_generated": false
+              },
+              {
+                "credentials_count": 1,
+                "groups": [
+                  "system-admin"
+                ],
+                "is_active": true,
+                "is_admin": true,
+                "is_owner": true,
+                "name": "test-owner",
+                "refresh_token_classes": [
+                  "normal"
+                ],
+                "refresh_token_count": 1,
+                "system_generated": false
+              }
+            ]
+          },
+          "effective_mode": "monitor",
+          "ha_version_actual": "2026.6.4",
+          "ha_version_supported": "2026.6.4",
+          "native_write_attempted": false,
+          "native_write_blocked": false,
+          "native_write_observed": false,
+          "preview": {
+            "control": true,
+            "entity_id": "input_boolean.tessera_forbidden_light",
+            "group_id": "tessera:lifecycle",
+            "read": true
+          },
+          "requested_mode": "monitor"
+        }
+      },
+      "off": {
+        "effective_mode": "off",
+        "native_write_observed": false,
+        "transition": {
+          "auth_fingerprint_after": {
+            "auth_store_counts": {
+              "credentials": 1,
+              "groups": 6,
+              "refresh_tokens": 2,
+              "users": 8
+            },
+            "group_summaries": [
+              {
+                "has_policy": true,
+                "id": "system-admin",
+                "name": "Administrators",
+                "policy_json": "{\"entities\":true}",
+                "system_generated": true
+              },
+              {
+                "has_policy": true,
+                "id": "system-read-only",
+                "name": "Read Only",
+                "policy_json": "{\"entities\":{\"all\":{\"read\":true}}}",
+                "system_generated": true
+              },
+              {
+                "has_policy": true,
+                "id": "system-users",
+                "name": "Users",
+                "policy_json": "{\"entities\":true}",
+                "system_generated": true
+              },
+              {
+                "has_policy": true,
+                "id": "tessera:d2",
+                "name": "Tessera D2",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}",
+                "system_generated": false
+              },
+              {
+                "has_policy": true,
+                "id": "tessera:extra",
+                "name": "Tessera Extra",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}",
+                "system_generated": false
+              },
+              {
+                "has_policy": true,
+                "id": "tessera:test",
+                "name": "Tessera Test",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}",
+                "system_generated": false
+              }
+            ],
+            "ha_version_actual": "2026.6.4",
+            "managed_groups": [
+              {
+                "has_policy": true,
+                "id": "tessera:d2",
+                "name": "Tessera D2",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}"
+              },
+              {
+                "has_policy": true,
+                "id": "tessera:extra",
+                "name": "Tessera Extra",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}"
+              },
+              {
+                "has_policy": true,
+                "id": "tessera:test",
+                "name": "Tessera Test",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}"
+              }
+            ],
+            "managed_users": [
+              {
+                "groups": [
+                  "tessera:d2"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-d2-user"
+              },
+              {
+                "groups": [
+                  "tessera:extra",
+                  "tessera:test"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-replace-user"
+              },
+              {
+                "groups": [
+                  "tessera:extra",
+                  "tessera:test"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-rescue-user"
+              },
+              {
+                "groups": [
+                  "system-admin"
+                ],
+                "is_active": true,
+                "is_admin": true,
+                "is_owner": false,
+                "name": "tessera-test-admin"
+              },
+              {
+                "groups": [
+                  "system-read-only"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-test-ro"
+              },
+              {
+                "groups": [
+                  "tessera:test"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-test-user"
+              }
+            ],
+            "owner_admin_users": [
+              {
+                "groups": [
+                  "system-admin"
+                ],
+                "is_active": true,
+                "is_admin": true,
+                "is_owner": false,
+                "name": "tessera-test-admin"
+              },
+              {
+                "groups": [
+                  "system-admin"
+                ],
+                "is_active": true,
+                "is_admin": true,
+                "is_owner": true,
+                "name": "test-owner"
+              }
+            ],
+            "user_summaries": [
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "system-read-only"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "Home Assistant Content",
+                "refresh_token_classes": [
+                  "system"
+                ],
+                "refresh_token_count": 1,
+                "system_generated": true
+              },
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "tessera:d2"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-d2-user",
+                "refresh_token_classes": [],
+                "refresh_token_count": 0,
+                "system_generated": false
+              },
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "tessera:extra",
+                  "tessera:test"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-replace-user",
+                "refresh_token_classes": [],
+                "refresh_token_count": 0,
+                "system_generated": false
+              },
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "tessera:extra",
+                  "tessera:test"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-rescue-user",
+                "refresh_token_classes": [],
+                "refresh_token_count": 0,
+                "system_generated": false
+              },
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "system-admin"
+                ],
+                "is_active": true,
+                "is_admin": true,
+                "is_owner": false,
+                "name": "tessera-test-admin",
+                "refresh_token_classes": [],
+                "refresh_token_count": 0,
+                "system_generated": false
+              },
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "system-read-only"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-test-ro",
+                "refresh_token_classes": [],
+                "refresh_token_count": 0,
+                "system_generated": false
+              },
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "tessera:test"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-test-user",
+                "refresh_token_classes": [],
+                "refresh_token_count": 0,
+                "system_generated": false
+              },
+              {
+                "credentials_count": 1,
+                "groups": [
+                  "system-admin"
+                ],
+                "is_active": true,
+                "is_admin": true,
+                "is_owner": true,
+                "name": "test-owner",
+                "refresh_token_classes": [
+                  "normal"
+                ],
+                "refresh_token_count": 1,
+                "system_generated": false
+              }
+            ]
+          },
+          "auth_fingerprint_before": {
+            "auth_store_counts": {
+              "credentials": 1,
+              "groups": 6,
+              "refresh_tokens": 2,
+              "users": 8
+            },
+            "group_summaries": [
+              {
+                "has_policy": true,
+                "id": "system-admin",
+                "name": "Administrators",
+                "policy_json": "{\"entities\":true}",
+                "system_generated": true
+              },
+              {
+                "has_policy": true,
+                "id": "system-read-only",
+                "name": "Read Only",
+                "policy_json": "{\"entities\":{\"all\":{\"read\":true}}}",
+                "system_generated": true
+              },
+              {
+                "has_policy": true,
+                "id": "system-users",
+                "name": "Users",
+                "policy_json": "{\"entities\":true}",
+                "system_generated": true
+              },
+              {
+                "has_policy": true,
+                "id": "tessera:d2",
+                "name": "Tessera D2",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}",
+                "system_generated": false
+              },
+              {
+                "has_policy": true,
+                "id": "tessera:extra",
+                "name": "Tessera Extra",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}",
+                "system_generated": false
+              },
+              {
+                "has_policy": true,
+                "id": "tessera:test",
+                "name": "Tessera Test",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}",
+                "system_generated": false
+              }
+            ],
+            "ha_version_actual": "2026.6.4",
+            "managed_groups": [
+              {
+                "has_policy": true,
+                "id": "tessera:d2",
+                "name": "Tessera D2",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"control\":true,\"read\":true}}}}"
+              },
+              {
+                "has_policy": true,
+                "id": "tessera:extra",
+                "name": "Tessera Extra",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_forbidden_light\":{\"read\":true}}}}"
+              },
+              {
+                "has_policy": true,
+                "id": "tessera:test",
+                "name": "Tessera Test",
+                "policy_json": "{\"entities\":{\"entity_ids\":{\"input_boolean.tessera_allowed_light\":{\"control\":true,\"read\":true}}}}"
+              }
+            ],
+            "managed_users": [
+              {
+                "groups": [
+                  "tessera:d2"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-d2-user"
+              },
+              {
+                "groups": [
+                  "tessera:extra",
+                  "tessera:test"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-replace-user"
+              },
+              {
+                "groups": [
+                  "tessera:extra",
+                  "tessera:test"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-rescue-user"
+              },
+              {
+                "groups": [
+                  "system-admin"
+                ],
+                "is_active": true,
+                "is_admin": true,
+                "is_owner": false,
+                "name": "tessera-test-admin"
+              },
+              {
+                "groups": [
+                  "system-read-only"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-test-ro"
+              },
+              {
+                "groups": [
+                  "tessera:test"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-test-user"
+              }
+            ],
+            "owner_admin_users": [
+              {
+                "groups": [
+                  "system-admin"
+                ],
+                "is_active": true,
+                "is_admin": true,
+                "is_owner": false,
+                "name": "tessera-test-admin"
+              },
+              {
+                "groups": [
+                  "system-admin"
+                ],
+                "is_active": true,
+                "is_admin": true,
+                "is_owner": true,
+                "name": "test-owner"
+              }
+            ],
+            "user_summaries": [
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "system-read-only"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "Home Assistant Content",
+                "refresh_token_classes": [
+                  "system"
+                ],
+                "refresh_token_count": 1,
+                "system_generated": true
+              },
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "tessera:d2"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-d2-user",
+                "refresh_token_classes": [],
+                "refresh_token_count": 0,
+                "system_generated": false
+              },
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "tessera:extra",
+                  "tessera:test"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-replace-user",
+                "refresh_token_classes": [],
+                "refresh_token_count": 0,
+                "system_generated": false
+              },
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "tessera:extra",
+                  "tessera:test"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-rescue-user",
+                "refresh_token_classes": [],
+                "refresh_token_count": 0,
+                "system_generated": false
+              },
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "system-admin"
+                ],
+                "is_active": true,
+                "is_admin": true,
+                "is_owner": false,
+                "name": "tessera-test-admin",
+                "refresh_token_classes": [],
+                "refresh_token_count": 0,
+                "system_generated": false
+              },
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "system-read-only"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-test-ro",
+                "refresh_token_classes": [],
+                "refresh_token_count": 0,
+                "system_generated": false
+              },
+              {
+                "credentials_count": 0,
+                "groups": [
+                  "tessera:test"
+                ],
+                "is_active": true,
+                "is_admin": false,
+                "is_owner": false,
+                "name": "tessera-test-user",
+                "refresh_token_classes": [],
+                "refresh_token_count": 0,
+                "system_generated": false
+              },
+              {
+                "credentials_count": 1,
+                "groups": [
+                  "system-admin"
+                ],
+                "is_active": true,
+                "is_admin": true,
+                "is_owner": true,
+                "name": "test-owner",
+                "refresh_token_classes": [
+                  "normal"
+                ],
+                "refresh_token_count": 1,
+                "system_generated": false
+              }
+            ]
+          },
+          "effective_mode": "off",
+          "ha_version_actual": "2026.6.4",
+          "ha_version_supported": "2026.6.4",
+          "native_write_attempted": false,
+          "native_write_blocked": false,
+          "native_write_observed": false,
+          "requested_mode": "off"
+        }
+      },
+      "owner_admin_lockout_probe": {
+        "active_owner_or_admin_users": [
+          {
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": false,
+            "name": "tessera-test-admin"
+          },
+          {
+            "groups": [
+              "system-admin"
+            ],
+            "is_active": true,
+            "is_admin": true,
+            "is_owner": true,
+            "name": "test-owner"
+          }
+        ],
+        "authenticated_admin_request": {
+          "attempted": true,
+          "authenticated": true,
+          "status": 200,
+          "token_values_redacted": true
+        },
+        "checked": true,
+        "no_admin_lockout": true
+      },
+      "reason": "measured off and monitor no-write, enforce full-superset native write, restore exact fingerprint",
+      "restore": {
+        "effective_mode": "restore",
+        "native_write_attempted": true,
+        "restored_exact_fingerprint": true,
+        "restored_groups": [
+          "tessera:test"
+        ]
+      },
+      "simulation_method": "in-process native auth policy lifecycle",
+      "status": "PASS",
+      "tested": true,
+      "transitions": [
+        "off",
+        "monitor",
+        "enforce",
+        "restore"
+      ]
+    },
     "d1_restart_survival": {
       "group_survived_restart": true,
       "policy_survived_restart": true,
@@ -348,7 +5557,6 @@
         "token_values_redacted": true,
         "user_name": "tessera-test-admin"
       },
-      "auth_store_corrupted": true,
       "boot_rescue_corruption_tested": true,
       "corrupt_tessera_store_error": "JSONDecodeError",
       "corrupt_tessera_store_parse_failed": true,
@@ -411,7 +5619,7 @@
           "name": "tessera-rescue-user"
         }
       ],
-      "run_id": "b1a822d787a249038873b03b253b1d31",
+      "run_id": "58eed0517a764564855657e0f2f70f73",
       "run_id_matches": true,
       "setup_exception_error_type": "RuntimeError",
       "setup_exception_requested": true,
@@ -422,7 +5630,7 @@
       "touched_user_names": [
         "tessera-rescue-user"
       ],
-      "trigger_run_id": "b1a822d787a249038873b03b253b1d31",
+      "trigger_run_id": "58eed0517a764564855657e0f2f70f73",
       "used_public_async_update_user": true,
       "verdict": "PASS"
     },
@@ -620,7 +5828,7 @@
         },
         {
           "allowed_entity_seen": false,
-          "baseline_present": false,
+          "baseline_present": true,
           "body": {
             "body_type": "list",
             "items": 0
@@ -631,7 +5839,7 @@
           "status": 200,
           "transport": "rest",
           "vector": "/api/logbook",
-          "verdict": "NOT_VERIFIABLE"
+          "verdict": "ALLOW"
         },
         {
           "allowed_entity_seen": false,
@@ -819,21 +6027,6 @@
         }
       ],
       "not_verifiable": [
-        {
-          "allowed_entity_seen": false,
-          "baseline_present": false,
-          "body": {
-            "body_type": "list",
-            "items": 0
-          },
-          "error": null,
-          "forbidden_entity_seen": false,
-          "leak_hint": false,
-          "status": 200,
-          "transport": "rest",
-          "vector": "/api/logbook",
-          "verdict": "NOT_VERIFIABLE"
-        },
         {
           "allowed_entity_seen": false,
           "baseline_present": false,
@@ -1640,7 +6833,6 @@
       ]
     },
     "d5_boot_rescue_prepare": {
-      "auth_store_corrupted": true,
       "auth_store_path": "/config/.storage/auth",
       "boot_rescue_corruption_tested": null,
       "corrupt_tessera_store_path": "/config/.storage/tessera.config",
@@ -1651,10 +6843,11 @@
         "tessera:extra",
         "tessera:test"
       ],
+      "managed_group_replace_drift_injected": true,
       "no_admin_lockout": null,
       "partial_reason": "D5 requires post-restart rescue, setup-exception independence, reread, and owner/admin operate probes",
       "prepared": true,
-      "run_id": "b1a822d787a249038873b03b253b1d31",
+      "run_id": "58eed0517a764564855657e0f2f70f73",
       "setup_exception_trigger_path": "/config/tessera_spike_force_setup_exception.json",
       "snapshot_path": "/config/tessera_spike_rescue_snapshot.json",
       "trigger_path": "/config/tessera_spike_rescue_trigger.json",
@@ -1683,13 +6876,13 @@
       "device": {
         "area_id": "tessera_living",
         "config_entry_id_present": true,
-        "device_id": "fc6dda75fa8dfea6bf6c6f4603ec0008"
+        "device_id": "a7407165a0f25fab467277369b22c4bc"
       },
       "entities": [
         {
           "area_id": null,
           "class": "device_area_allowed_light",
-          "device_id": "fc6dda75fa8dfea6bf6c6f4603ec0008",
+          "device_id": "a7407165a0f25fab467277369b22c4bc",
           "disabled_by": null,
           "domain": "light",
           "entity_id": "light.tessera_seed_allowed_light",
@@ -1707,7 +6900,7 @@
         {
           "area_id": null,
           "class": "device_area_allowed_cover",
-          "device_id": "fc6dda75fa8dfea6bf6c6f4603ec0008",
+          "device_id": "a7407165a0f25fab467277369b22c4bc",
           "disabled_by": null,
           "domain": "cover",
           "entity_id": "cover.tessera_seed_allowed_cover",
@@ -1778,6 +6971,18 @@
     },
     "D1": {
       "summary": "tessera group/policy/user restart survival",
+      "verdict": "PASS"
+    },
+    "D11": {
+      "summary": "unsupported HA version simulation refuses enforce before native auth write",
+      "verdict": "PASS"
+    },
+    "D13": {
+      "summary": "simulated HACS update/downgrade rollback restores exact native auth fingerprint",
+      "verdict": "PASS"
+    },
+    "D15": {
+      "summary": "off/monitor no-write, enforce full-superset native write, restore exact fingerprint",
       "verdict": "PASS"
     },
     "D2": {

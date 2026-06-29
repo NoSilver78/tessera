@@ -1,6 +1,6 @@
 # Tessera Phase-0 Spike Report
 
-Stand: 2026-06-29T17:43:43
+Stand: 2026-06-29T20:53:44
 
 Modus: Dev-only gegen `ha-tessera-dev`; keine Secrets/Token/Auth-Codes ausgegeben. Live-/`/Volumes/config`-Scans sind im Standardlauf bewusst deaktiviert und brauchen ein eigenes Gate.
 
@@ -8,7 +8,7 @@ Modus: Dev-only gegen `ha-tessera-dev`; keine Secrets/Token/Auth-Codes ausgegebe
 
 **PARTIAL / kein Enforce-Go.**
 
-D0 ist gruen genug, um den dev-only Messlauf zu starten. D1, D2, D3, D4, D6, D8, D9, A2, A3 und B3 liefern belastbare Dev-Signale. D5 bewertet jetzt das gemessene S1/S1b-Recovery-Gate gegen managed REPLACE-Demotion, Setup-Exception-Unabhaengigkeit, Re-Read und Owner/Admin-Operate-Probe; S2 `/config/.storage/auth`-Korruption bleibt bewusst **observational only** und kein PASS-Hebel. D7 liefert eine ehrliche Leak-Matrix, bleibt aber wegen nicht verifizierbarer Registry-/History-/Logbook-Baselines **PARTIAL**. D12 bleibt **BLOCKED**. Welle D nimmt D9 nur als **fail-closed Klassifikationsmatrix** ab: unverified Input-Komponenten bleiben `UNKNOWN_BLOCK_ENFORCE`, also weiter kein Enforce/Product-Go.
+D0 ist gruen genug, um den dev-only Messlauf zu starten. D1, D2, D3, D4, D6, D8, D9, D11, D13, D15, A2, A3 und B3 liefern belastbare Dev-Signale. D5 bewertet das gemessene S1/S1b-Recovery-Gate gegen managed REPLACE-Demotion, Setup-Exception-Unabhaengigkeit, Re-Read und Owner/Admin-Operate-Probe; S2 `/config/.storage/auth`-Korruption bleibt bewusst **observational only** und kein PASS-Hebel. D7 liefert eine ehrliche Leak-Matrix, bleibt aber wegen nicht verifizierbarer Registry-/History-/Logbook-Baselines **PARTIAL**. D12 bleibt **BLOCKED**. Welle D nimmt D9 nur als **fail-closed Klassifikationsmatrix** ab; Welle E nimmt Lifecycle-Gates nur fuer `ha-tessera-dev` ab. Weiter kein Enforce/Product-Go.
 
 ## DoD Matrix
 
@@ -24,6 +24,9 @@ D0 ist gruen genug, um den dev-only Messlauf zu starten. D1, D2, D3, D4, D6, D8,
 | D7 | PARTIAL | full REST+WS leak matrix documented; leaks bound view-scope, not operate/control |
 | D8 | PASS | real long-lived token lifecycle measured without storing token values |
 | D9 | PASS | custom-component classification matrix exists; UNKNOWN_BLOCK_ENFORCE remains fail-closed for unverified inputs |
+| D11 | PASS | unsupported HA version simulation refuses enforce before native auth write |
+| D13 | PASS | simulated HACS update/downgrade rollback restores exact native auth fingerprint |
+| D15 | PASS | off/monitor no-write, enforce full-superset native write, restore exact fingerprint |
 | B3 | PASS | managed Tessera users are not members of HA system-users allow-all group |
 | A2 | PASS | native async_update_user(group_ids) is REPLACE; caller full-superset contract proven |
 | A3 | PASS | rescue restore rejects non-tessera group ids such as system-users |
@@ -117,13 +120,13 @@ Gate-Results:
   "device": {
     "area_id": "tessera_living",
     "config_entry_id_present": true,
-    "device_id": "fc6dda75fa8dfea6bf6c6f4603ec0008"
+    "device_id": "a7407165a0f25fab467277369b22c4bc"
   },
   "entities": [
     {
       "area_id": null,
       "class": "device_area_allowed_light",
-      "device_id": "fc6dda75fa8dfea6bf6c6f4603ec0008",
+      "device_id": "a7407165a0f25fab467277369b22c4bc",
       "disabled_by": null,
       "domain": "light",
       "entity_id": "light.tessera_seed_allowed_light",
@@ -141,7 +144,7 @@ Gate-Results:
     {
       "area_id": null,
       "class": "device_area_allowed_cover",
-      "device_id": "fc6dda75fa8dfea6bf6c6f4603ec0008",
+      "device_id": "a7407165a0f25fab467277369b22c4bc",
       "disabled_by": null,
       "domain": "cover",
       "entity_id": "cover.tessera_seed_allowed_cover",
@@ -358,7 +361,6 @@ Gate-Results:
     ]
   },
   "d5_boot_rescue_prepare": {
-    "auth_store_corrupted": true,
     "auth_store_path": "/config/.storage/auth",
     "boot_rescue_corruption_tested": null,
     "corrupt_tessera_store_path": "/config/.storage/tessera.config",
@@ -369,10 +371,11 @@ Gate-Results:
       "tessera:extra",
       "tessera:test"
     ],
+    "managed_group_replace_drift_injected": true,
     "no_admin_lockout": null,
     "partial_reason": "D5 requires post-restart rescue, setup-exception independence, reread, and owner/admin operate probes",
     "prepared": true,
-    "run_id": "b1a822d787a249038873b03b253b1d31",
+    "run_id": "58eed0517a764564855657e0f2f70f73",
     "setup_exception_trigger_path": "/config/tessera_spike_force_setup_exception.json",
     "snapshot_path": "/config/tessera_spike_rescue_snapshot.json",
     "trigger_path": "/config/tessera_spike_rescue_trigger.json",
@@ -507,7 +510,6 @@ Restart-Survival:
       "token_values_redacted": true,
       "user_name": "tessera-test-admin"
     },
-    "auth_store_corrupted": true,
     "boot_rescue_corruption_tested": true,
     "corrupt_tessera_store_error": "JSONDecodeError",
     "corrupt_tessera_store_parse_failed": true,
@@ -570,7 +572,7 @@ Restart-Survival:
         "name": "tessera-rescue-user"
       }
     ],
-    "run_id": "b1a822d787a249038873b03b253b1d31",
+    "run_id": "58eed0517a764564855657e0f2f70f73",
     "run_id_matches": true,
     "setup_exception_error_type": "RuntimeError",
     "setup_exception_requested": true,
@@ -581,7 +583,7 @@ Restart-Survival:
     "touched_user_names": [
       "tessera-rescue-user"
     ],
-    "trigger_run_id": "b1a822d787a249038873b03b253b1d31",
+    "trigger_run_id": "58eed0517a764564855657e0f2f70f73",
     "used_public_async_update_user": true,
     "verdict": "PASS"
   }
@@ -836,7 +838,7 @@ D5 S2 Auth-Store-Korruption, **observational only**:
       },
       {
         "allowed_entity_seen": false,
-        "baseline_present": false,
+        "baseline_present": true,
         "body": {
           "body_type": "list",
           "items": 0
@@ -847,7 +849,7 @@ D5 S2 Auth-Store-Korruption, **observational only**:
         "status": 200,
         "transport": "rest",
         "vector": "/api/logbook",
-        "verdict": "NOT_VERIFIABLE"
+        "verdict": "ALLOW"
       },
       {
         "allowed_entity_seen": false,
@@ -1035,21 +1037,6 @@ D5 S2 Auth-Store-Korruption, **observational only**:
       }
     ],
     "not_verifiable": [
-      {
-        "allowed_entity_seen": false,
-        "baseline_present": false,
-        "body": {
-          "body_type": "list",
-          "items": 0
-        },
-        "error": null,
-        "forbidden_entity_seen": false,
-        "leak_hint": false,
-        "status": 200,
-        "transport": "rest",
-        "vector": "/api/logbook",
-        "verdict": "NOT_VERIFIABLE"
-      },
       {
         "allowed_entity_seen": false,
         "baseline_present": false,
@@ -1527,6 +1514,54 @@ Welle-C-Lesart: `D6.entity_targeted_pass` bewertet nur die nativen entity-target
 
 D9-Lesart: `PASS` bedeutet hier **nicht** `ALLOW` fuer reale HACS-Komponenten. Es bedeutet: Die Matrix ist vorhanden, nutzt eine explizite Input-Provenienz statt `/Volumes/config`-Live-Scan und setzt fuer nicht runtime-verifizierte Service/HTTP/WS-Kandidaten konsequent `UNKNOWN_BLOCK_ENFORCE`. Solange `enforce_blocked_by_unknown` true ist, bleibt Enforce fail-closed blockiert.
 
+## D11/D13/D15 Lifecycle-Gates
+
+```json
+{
+  "d11_version_gate": {
+    "auth_fingerprint_unchanged": true,
+    "effective_mode": "monitor",
+    "enforce_requested": true,
+    "native_write_attempted": false,
+    "native_write_blocked": true,
+    "native_write_call_count": 0,
+    "native_write_measurement_source": "spy:hass.auth.async_update_user",
+    "native_write_refused_before_call": true,
+    "native_write_spy_installed": true,
+    "native_write_spy_restored": true,
+    "owner_admin_no_lockout": true,
+    "repair_issue_created": true,
+    "requested_mode": "enforce",
+    "status": "PASS",
+    "version_mismatch_detected": true
+  },
+  "d13_hacs_rollback": {
+    "auth_fingerprint_changed_by_update": true,
+    "native_write_attempted": true,
+    "owner_admin_no_lockout": true,
+    "rollback_restored_exact_fingerprint": true,
+    "simulation_method": "in-process HACS update/downgrade simulation; no real HACS package install",
+    "status": "PASS"
+  },
+  "d15_lifecycle": {
+    "enforce_full_superset_written": true,
+    "enforce_native_write_attempted": true,
+    "enforce_native_write_blocked": false,
+    "enforce_permission_probe": {
+      "forbidden_control": true,
+      "forbidden_read": true
+    },
+    "monitor_native_write_observed": false,
+    "off_native_write_observed": false,
+    "owner_admin_no_lockout": true,
+    "restore_exact_fingerprint": true,
+    "status": "PASS"
+  }
+}
+```
+
+Lifecycle-Lesart: `D11` belegt im Dev-Spike den fail-closed Version-Gate-Pfad per unsupported-version Lifecycle-Transition, Repairs-Issue, unveraendertem Auth-Fingerprint und echtem Spy/Counter um `hass.auth.async_update_user`; PASS verlangt `call_count == 0` aus dieser Messung. `D13` ist eine HACS-Update/Downgrade-Simulation, kein echter HACS-Paketwechsel; PASS verlangt einen beobachteten Zwischen-Write und exakten Rollback. `D15` misst `off -> monitor -> enforce -> restore` in-process mit vollem Gruppen-Superset, Permission-Probe und exaktem Restore-Fingerprint. Alle drei bleiben Dev-Spike-Belege, kein Produkt-Enforce-Go.
+
 ## Core-Anker
 
 - HA `auth_store.py`: private `_groups`, `_data_to_save()`, `_store.async_save()` sind der gemessene Schreibpfad.
@@ -1538,7 +1573,7 @@ D9-Lesart: `PASS` bedeutet hier **nicht** `ALLOW` fuer reale HACS-Komponenten. E
 
 - **Go fuer weitere Phase-0-Haertung:** ja.
 - **Go fuer Tessera-Enforce/Product:** nein.
-- **Naechste Pflicht:** D10/CM5-Benchmark, D12/OIDC und echte Produkt-/Release-Gates gesondert; kein Enforce/Product-Go aus diesem Spike.
+- **Naechste Pflicht:** echte HACS-/Upgrade-Probe ausserhalb der Simulation, D10/CM5-Benchmark, D12/OIDC und Produkt-/Release-Gates gesondert; kein Enforce/Product-Go aus diesem Spike.
 
 ## Artefakte
 

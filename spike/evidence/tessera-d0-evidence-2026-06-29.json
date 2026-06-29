@@ -56,7 +56,7 @@
     "error_type": "RuntimeError",
     "observed": true,
     "rescue_independent_of_healthy_tessera": true,
-    "run_id": "b1a822d787a249038873b03b253b1d31"
+    "run_id": "58eed0517a764564855657e0f2f70f73"
   },
   "exit_code": 0,
   "failure_redaction_check": {
@@ -223,6 +223,9 @@
     "keys": [
       "auth",
       "b3_system_users_gate_post_restart",
+      "d11_version_gate",
+      "d13_hacs_rollback",
+      "d15_lifecycle",
       "d1_restart_survival",
       "d2_three_way_after_restart",
       "d3_rest_ws_service",
@@ -242,7 +245,7 @@
       "binds": [
         "ha-tessera-dev-config:/config"
       ],
-      "id_short": "9087c49c1c2a",
+      "id_short": "0322975c18b1",
       "image": "ghcr.io/home-assistant/home-assistant:2026.6.4",
       "mounts": [
         {
@@ -295,7 +298,7 @@
       "binds": [
         "ha-tessera-dev-config:/config"
       ],
-      "id_short": "6e2591306fe0",
+      "id_short": "4aa6ed5f1d59",
       "image": "ghcr.io/home-assistant/home-assistant:2026.6.4",
       "mounts": [
         {
@@ -339,13 +342,13 @@
     "device": {
       "area_id": "tessera_living",
       "config_entry_id_present": true,
-      "device_id": "fc6dda75fa8dfea6bf6c6f4603ec0008"
+      "device_id": "a7407165a0f25fab467277369b22c4bc"
     },
     "entities": [
       {
         "area_id": null,
         "class": "device_area_allowed_light",
-        "device_id": "fc6dda75fa8dfea6bf6c6f4603ec0008",
+        "device_id": "a7407165a0f25fab467277369b22c4bc",
         "disabled_by": null,
         "domain": "light",
         "entity_id": "light.tessera_seed_allowed_light",
@@ -363,7 +366,7 @@
       {
         "area_id": null,
         "class": "device_area_allowed_cover",
-        "device_id": "fc6dda75fa8dfea6bf6c6f4603ec0008",
+        "device_id": "a7407165a0f25fab467277369b22c4bc",
         "disabled_by": null,
         "domain": "cover",
         "entity_id": "cover.tessera_seed_allowed_cover",
@@ -407,7 +410,7 @@
     ]
   },
   "setup_exception_boot_http_status": 401,
-  "started_at": "2026-06-29T17:43:06",
+  "started_at": "2026-06-29T20:53:03",
   "status": "GREEN",
   "target": {
     "container": "ha-tessera-dev",
