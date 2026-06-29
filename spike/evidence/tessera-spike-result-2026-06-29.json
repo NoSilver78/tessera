@@ -411,6 +411,88 @@
       "boot_rescue_corruption_tested": false,
       "public_async_update_user_restore_available": true
     },
-    "phase": "pre_restart"
+    "phase": "pre_restart",
+    "seed_fixture": {
+      "areas": [
+        {
+          "area_id": "tessera_living",
+          "name": "Tessera Living"
+        },
+        {
+          "area_id": "tessera_kitchen",
+          "name": "Tessera Kitchen"
+        }
+      ],
+      "complete_for_welle_a": true,
+      "device": {
+        "area_id": "tessera_living",
+        "config_entry_id_present": true,
+        "device_id": "2a2f425d887118dde9aba4cb8427c782"
+      },
+      "entities": [
+        {
+          "area_id": null,
+          "class": "device_area_allowed_light",
+          "device_id": "2a2f425d887118dde9aba4cb8427c782",
+          "disabled_by": null,
+          "domain": "light",
+          "entity_id": "light.tessera_seed_allowed_light",
+          "hidden_by": null
+        },
+        {
+          "area_id": "tessera_kitchen",
+          "class": "direct_area_forbidden_sensor",
+          "device_id": null,
+          "disabled_by": null,
+          "domain": "sensor",
+          "entity_id": "sensor.tessera_seed_forbidden_sensor",
+          "hidden_by": null
+        },
+        {
+          "area_id": null,
+          "class": "device_area_allowed_cover",
+          "device_id": "2a2f425d887118dde9aba4cb8427c782",
+          "disabled_by": null,
+          "domain": "cover",
+          "entity_id": "cover.tessera_seed_allowed_cover",
+          "hidden_by": null
+        },
+        {
+          "area_id": "tessera_kitchen",
+          "class": "hidden_direct_area_camera",
+          "device_id": null,
+          "disabled_by": null,
+          "domain": "camera",
+          "entity_id": "camera.tessera_seed_hidden_camera",
+          "hidden_by": "user"
+        },
+        {
+          "area_id": "tessera_living",
+          "class": "disabled_direct_area_lock",
+          "device_id": null,
+          "disabled_by": "user",
+          "domain": "lock",
+          "entity_id": "lock.tessera_seed_disabled_lock",
+          "hidden_by": null
+        },
+        {
+          "area_id": null,
+          "class": "state_only_without_registry",
+          "device_id": null,
+          "disabled_by": null,
+          "domain": "sensor",
+          "entity_id": "sensor.tessera_state_only",
+          "hidden_by": null
+        }
+      ],
+      "fixture_version": 2,
+      "non_entity_services": [
+        {
+          "class": "intentionally_non_entity_dev_service",
+          "service": "tessera_spike.snapshot",
+          "values_redacted": true
+        }
+      ]
+    }
   }
 }

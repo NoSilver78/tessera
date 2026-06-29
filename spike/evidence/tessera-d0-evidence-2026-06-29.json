@@ -1,4 +1,5 @@
 {
+  "abort_reason": null,
   "auth_baseline": {
     "groups_count": 3,
     "tokens": [
@@ -45,6 +46,13 @@
       }
     ]
   },
+  "blocking_io_log_check": {
+    "checked": true,
+    "clean": true,
+    "match_count": 0,
+    "matches": []
+  },
+  "exit_code": 0,
   "fresh_baseline": {
     "errors": [],
     "ok": true
@@ -53,8 +61,60 @@
     "errors": [],
     "ok": true
   },
+  "gate_results": [
+    {
+      "gate": "target_isolation",
+      "status": "PASS"
+    },
+    {
+      "gate": "fresh_baseline",
+      "status": "PASS"
+    },
+    {
+      "detail": "HTTP evidence stores body type/keys only; values redacted",
+      "gate": "failure_redaction",
+      "status": "PASS"
+    },
+    {
+      "gate": "a1_8_services",
+      "registered_services": [
+        "ensure_group",
+        "flush_auth_store",
+        "invalidate_user",
+        "probe_check_entity",
+        "restore",
+        "run_spike",
+        "set_group_policy",
+        "set_user_groups",
+        "snapshot"
+      ],
+      "status": "PASS"
+    },
+    {
+      "gate": "a1_no_blocking_io_warning",
+      "match_count": 0,
+      "status": "PASS"
+    },
+    {
+      "entities": 6,
+      "gate": "a2_seed_fixture",
+      "status": "PASS"
+    }
+  ],
   "harness": {
     "loaded": true,
+    "missing_required_services": [],
+    "registered_services": [
+      "ensure_group",
+      "flush_auth_store",
+      "invalidate_user",
+      "probe_check_entity",
+      "restore",
+      "run_spike",
+      "set_group_policy",
+      "set_user_groups",
+      "snapshot"
+    ],
     "services_status": 200
   },
   "onboarding_after": [
@@ -95,12 +155,12 @@
   ],
   "onboarding_steps": [
     {
-      "body_keys": [],
+      "body_type": "dict",
       "path": "/api/onboarding/core_config",
       "status": 200
     },
     {
-      "body_keys": [],
+      "body_type": "dict",
       "path": "/api/onboarding/analytics",
       "status": 200
     },
@@ -108,12 +168,20 @@
       "body_keys": [
         "auth_code"
       ],
+      "body_type": "dict",
       "path": "/api/onboarding/integration",
+      "sensitive_keys_redacted": [
+        "auth_code"
+      ],
       "status": 200
     }
   ],
   "onboarding_user": {
     "body_keys": [
+      "auth_code"
+    ],
+    "body_type": "dict",
+    "sensitive_keys_redacted": [
       "auth_code"
     ],
     "status": 200
@@ -139,7 +207,7 @@
       "binds": [
         "ha-tessera-dev-config:/config"
       ],
-      "id_short": "ff4219821761",
+      "id_short": "e116877388fe",
       "image": "ghcr.io/home-assistant/home-assistant:2026.6.4",
       "mounts": [
         {
@@ -176,7 +244,8 @@
       "d3_internal_check_entity",
       "d4_union_restore",
       "d5_restore_primitive",
-      "phase"
+      "phase",
+      "seed_fixture"
     ],
     "ok": true
   },
@@ -186,7 +255,7 @@
       "binds": [
         "ha-tessera-dev-config:/config"
       ],
-      "id_short": "864dc4538f18",
+      "id_short": "84a933f32291",
       "image": "ghcr.io/home-assistant/home-assistant:2026.6.4",
       "mounts": [
         {
@@ -215,7 +284,89 @@
     "isolation_ok": true
   },
   "secret_policy": "no token/password/auth-code values emitted",
-  "started_at": "2026-06-29T06:55:16",
+  "seed_inventory": {
+    "areas": [
+      {
+        "area_id": "tessera_living",
+        "name": "Tessera Living"
+      },
+      {
+        "area_id": "tessera_kitchen",
+        "name": "Tessera Kitchen"
+      }
+    ],
+    "complete_for_welle_a": true,
+    "device": {
+      "area_id": "tessera_living",
+      "config_entry_id_present": true,
+      "device_id": "2a2f425d887118dde9aba4cb8427c782"
+    },
+    "entities": [
+      {
+        "area_id": null,
+        "class": "device_area_allowed_light",
+        "device_id": "2a2f425d887118dde9aba4cb8427c782",
+        "disabled_by": null,
+        "domain": "light",
+        "entity_id": "light.tessera_seed_allowed_light",
+        "hidden_by": null
+      },
+      {
+        "area_id": "tessera_kitchen",
+        "class": "direct_area_forbidden_sensor",
+        "device_id": null,
+        "disabled_by": null,
+        "domain": "sensor",
+        "entity_id": "sensor.tessera_seed_forbidden_sensor",
+        "hidden_by": null
+      },
+      {
+        "area_id": null,
+        "class": "device_area_allowed_cover",
+        "device_id": "2a2f425d887118dde9aba4cb8427c782",
+        "disabled_by": null,
+        "domain": "cover",
+        "entity_id": "cover.tessera_seed_allowed_cover",
+        "hidden_by": null
+      },
+      {
+        "area_id": "tessera_kitchen",
+        "class": "hidden_direct_area_camera",
+        "device_id": null,
+        "disabled_by": null,
+        "domain": "camera",
+        "entity_id": "camera.tessera_seed_hidden_camera",
+        "hidden_by": "user"
+      },
+      {
+        "area_id": "tessera_living",
+        "class": "disabled_direct_area_lock",
+        "device_id": null,
+        "disabled_by": "user",
+        "domain": "lock",
+        "entity_id": "lock.tessera_seed_disabled_lock",
+        "hidden_by": null
+      },
+      {
+        "area_id": null,
+        "class": "state_only_without_registry",
+        "device_id": null,
+        "disabled_by": null,
+        "domain": "sensor",
+        "entity_id": "sensor.tessera_state_only",
+        "hidden_by": null
+      }
+    ],
+    "fixture_version": 2,
+    "non_entity_services": [
+      {
+        "class": "intentionally_non_entity_dev_service",
+        "service": "tessera_spike.snapshot",
+        "values_redacted": true
+      }
+    ]
+  },
+  "started_at": "2026-06-29T10:23:33",
   "status": "GREEN",
   "target": {
     "container": "ha-tessera-dev",
@@ -230,6 +381,11 @@
       "ha_auth_provider",
       "refresh_token",
       "token_type"
+    ],
+    "body_type": "dict",
+    "sensitive_keys_redacted": [
+      "access_token",
+      "refresh_token"
     ],
     "status": 200,
     "token_values_redacted": true

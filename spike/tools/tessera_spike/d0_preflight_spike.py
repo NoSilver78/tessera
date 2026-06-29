@@ -8,7 +8,8 @@ This tool is intentionally narrow:
 - no /Volumes/config bind may be present
 - evidence never contains token/password/auth-code values
 
-It writes reports to outputs/ and writes only to the disposable HA dev container.
+It writes reports to spike/reports, evidence to spike/evidence, and writes only
+to the disposable HA dev container.
 """
 
 from __future__ import annotations
@@ -16,13 +17,11 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
-import os
 import secrets
 import shutil
 import subprocess
 import sys
 import tempfile
-import textwrap
 import time
 import urllib.error
 import urllib.parse
@@ -32,395 +31,35 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[2]
-OUTPUTS = ROOT / "outputs"
+REPORTS = ROOT / "reports"
+EVIDENCE = ROOT / "evidence"
+HARNESS = Path(__file__).resolve().parent / "harness"
 CONTAINER = "ha-tessera-dev"
 VOLUME = "ha-tessera-dev-config"
 IMAGE = "ghcr.io/home-assistant/home-assistant:2026.6.4"
 PORT = "8124"
 BASE = f"http://127.0.0.1:{PORT}"
 TODAY = dt.date.today().isoformat()
-
-
-HARNESS_INIT = r'''
-"""Dev-only Tessera spike harness for HA 2026.6.4."""
-
-from __future__ import annotations
-
-import asyncio
-import json
-from pathlib import Path
-from typing import Any
-
-import voluptuous as vol
-
-from homeassistant.auth import models
-from homeassistant.auth.const import GROUP_ID_ADMIN, GROUP_ID_READ_ONLY
-from homeassistant.auth.permissions.const import CAT_ENTITIES, POLICY_CONTROL, POLICY_READ
-from homeassistant.const import CONF_NAME
-from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
-from homeassistant.helpers import aiohttp_client
-from homeassistant.helpers.typing import ConfigType
-
-DOMAIN = "tessera_spike"
-RESULT_PATH = Path("/config/tessera_spike_result.json")
-STATE_PATH = Path("/config/tessera_spike_state.json")
-
-ALLOWED_ENTITY = "input_boolean.tessera_allowed_light"
-FORBIDDEN_ENTITY = "input_boolean.tessera_forbidden_light"
-STATE_ONLY_ENTITY = "sensor.tessera_state_only"
-GROUP_ID = "tessera:test"
-GROUP_ID_EXTRA = "tessera:extra"
-TEST_USER_NAME = "tessera-test-user"
-TEST_ADMIN_NAME = "tessera-test-admin"
-TEST_RO_NAME = "tessera-test-ro"
-
-CONFIG_SCHEMA = vol.Schema({DOMAIN: vol.Schema({})}, extra=vol.ALLOW_EXTRA)
-
-
-def _policy(entity_id: str, *, read: bool = True, control: bool = False) -> dict[str, Any]:
-    leaf: dict[str, bool] = {}
-    if read:
-        leaf[POLICY_READ] = True
-    if control:
-        leaf[POLICY_CONTROL] = True
-    return {CAT_ENTITIES: {"entity_ids": {entity_id: leaf}}}
-
-
-def _sanitize_user(user: models.User) -> dict[str, Any]:
-    return {
-        "name": user.name,
-        "is_owner": user.is_owner,
-        "is_admin": user.is_admin,
-        "is_active": user.is_active,
-        "system_generated": user.system_generated,
-        "groups": [group.id for group in user.groups],
-        "credentials_count": len(user.credentials),
-        "refresh_token_classes": sorted(
-            {token.token_type for token in user.refresh_tokens.values()}
-        ),
-        "refresh_token_count": len(user.refresh_tokens),
-    }
-
-
-async def _auth_snapshot(hass: HomeAssistant) -> dict[str, Any]:
-    users = await hass.auth.async_get_users()
-    groups = await hass.auth._store.async_get_groups()  # noqa: SLF001 - spike probes private API.
-    return {
-        "users": [_sanitize_user(user) for user in users],
-        "groups": [
-            {
-                "id": group.id,
-                "name": group.name,
-                "system_generated": group.system_generated,
-                "has_policy": bool(group.policy),
-                "policy_keys": sorted(group.policy.keys()) if isinstance(group.policy, dict) else [],
-            }
-            for group in groups
-        ],
-    }
-
-
-async def _persist_auth(hass: HomeAssistant) -> None:
-    store = hass.auth._store  # noqa: SLF001 - this spike explicitly probes private API.
-    await store._store.async_save(store._data_to_save())  # noqa: SLF001
-    await asyncio.sleep(0.2)
-
-
-async def _ensure_group(hass: HomeAssistant, group_id: str, name: str, policy: dict[str, Any]) -> models.Group:
-    store = hass.auth._store  # noqa: SLF001
-    await store.async_get_groups()
-    group = await hass.auth.async_get_group(group_id)
-    if group is None:
-        group = models.Group(id=group_id, name=name, policy=policy, system_generated=False)
-        store._groups[group_id] = group  # noqa: SLF001
-    else:
-        group.name = name
-        group.policy = policy
-    await _persist_auth(hass)
-    return group
-
-
-async def _ensure_test_user(hass: HomeAssistant, name: str, group_ids: list[str]) -> models.User:
-    users = await hass.auth.async_get_users()
-    for user in users:
-        if user.name == name:
-            await hass.auth.async_update_user(user, group_ids=group_ids)
-            return user
-    return await hass.auth.async_create_user(name, group_ids=group_ids, local_only=True)
-
-
-async def _make_access_token(hass: HomeAssistant, user: models.User, client_name: str) -> tuple[str, models.RefreshToken]:
-    token = await hass.auth.async_create_refresh_token(
-        user,
-        client_id="http://localhost:8124/",
-        client_name=client_name,
-    )
-    access_token = hass.auth.async_create_access_token(token, "127.0.0.1")
-    return access_token, token
-
-
-async def _http_json(
-    hass: HomeAssistant,
-    method: str,
-    path: str,
-    access_token: str,
-    payload: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    session = aiohttp_client.async_get_clientsession(hass)
-    headers = {"Authorization": f"Bearer {access_token}"}
-    url = f"http://127.0.0.1:8123{path}"
-    async with session.request(method, url, headers=headers, json=payload) as resp:
-        text = await resp.text()
-        try:
-            body = json.loads(text) if text else None
-        except json.JSONDecodeError:
-            body = {"raw": text[:200]}
-        return {"status": resp.status, "body_type": type(body).__name__, "body": body}
-
-
-def _status(verdict: str, evidence: dict[str, Any]) -> dict[str, Any]:
-    return {"verdict": verdict, "evidence": evidence}
-
-
-async def _phase_pre_restart(hass: HomeAssistant) -> dict[str, Any]:
-    hass.states.async_set(STATE_ONLY_ENTITY, "42", {"friendly_name": "Tessera State Only"})
-    before = await _auth_snapshot(hass)
-
-    await _ensure_group(
-        hass,
-        GROUP_ID,
-        "Tessera Test",
-        _policy(ALLOWED_ENTITY, read=True, control=True),
-    )
-    await _ensure_group(
-        hass,
-        GROUP_ID_EXTRA,
-        "Tessera Extra",
-        _policy(FORBIDDEN_ENTITY, read=True, control=False),
-    )
-    # Managed Tessera users must not remain in system-users while enforcing; HA
-    # group policies merge permissively. Keep this probe user only in tessera:test.
-    test_user = await _ensure_test_user(hass, TEST_USER_NAME, [GROUP_ID])
-    test_admin = await _ensure_test_user(hass, TEST_ADMIN_NAME, [GROUP_ID_ADMIN])
-    test_ro = await _ensure_test_user(hass, TEST_RO_NAME, [GROUP_ID_READ_ONLY])
-
-    allowed_read = test_user.permissions.check_entity(ALLOWED_ENTITY, POLICY_READ)
-    forbidden_read = test_user.permissions.check_entity(FORBIDDEN_ENTITY, POLICY_READ)
-    allowed_control = test_user.permissions.check_entity(ALLOWED_ENTITY, POLICY_CONTROL)
-    forbidden_control = test_user.permissions.check_entity(FORBIDDEN_ENTITY, POLICY_CONTROL)
-
-    # D2: policy-only change without membership change.
-    group = await hass.auth.async_get_group(GROUP_ID)
-    assert group is not None
-    group.policy = _policy(FORBIDDEN_ENTITY, read=True, control=True)
-    test_user.invalidate_cache()
-    d2_after_change = {
-        "allowed_read_after_policy_change": test_user.permissions.check_entity(ALLOWED_ENTITY, POLICY_READ),
-        "forbidden_read_after_policy_change": test_user.permissions.check_entity(FORBIDDEN_ENTITY, POLICY_READ),
-        "forbidden_control_after_policy_change": test_user.permissions.check_entity(FORBIDDEN_ENTITY, POLICY_CONTROL),
-    }
-    # Restore intended D1/D3 policy.
-    group.policy = _policy(ALLOWED_ENTITY, read=True, control=True)
-    test_user.invalidate_cache()
-    await _persist_auth(hass)
-
-    # D4: full union and restore.
-    original_groups = [group.id for group in test_user.groups]
-    await hass.auth.async_update_user(test_user, group_ids=[GROUP_ID, GROUP_ID_EXTRA])
-    union_groups = [group.id for group in test_user.groups]
-    await hass.auth.async_update_user(test_user, group_ids=original_groups)
-    restored_groups = [group.id for group in test_user.groups]
-    await _persist_auth(hass)
-
-    STATE_PATH.write_text(
-        json.dumps(
-            {
-                "test_user_name": TEST_USER_NAME,
-                "test_admin_name": TEST_ADMIN_NAME,
-                "test_ro_name": TEST_RO_NAME,
-                "group_id": GROUP_ID,
-                "group_id_extra": GROUP_ID_EXTRA,
-                "original_groups": original_groups,
-            },
-            indent=2,
-            sort_keys=True,
-        )
-    )
-
-    after = await _auth_snapshot(hass)
-    result = {
-        "phase": "pre_restart",
-        "before": before,
-        "after": after,
-        "d1_pre_restart": {
-            "group_created": (await hass.auth.async_get_group(GROUP_ID)) is not None,
-            "policy_written": bool((await hass.auth.async_get_group(GROUP_ID)).policy),
-        },
-        "d2_policy_change_no_restart": d2_after_change,
-        "d3_internal_check_entity": {
-            "allowed_read": allowed_read,
-            "forbidden_read": forbidden_read,
-            "allowed_control": allowed_control,
-            "forbidden_control": forbidden_control,
-        },
-        "d4_union_restore": {
-            "original_groups": original_groups,
-            "union_groups": union_groups,
-            "restored_groups": restored_groups,
-        },
-        "d5_restore_primitive": {
-            "public_async_update_user_restore_available": True,
-            "boot_rescue_corruption_tested": False,
-        },
-    }
-    RESULT_PATH.write_text(json.dumps({"pre_restart": result}, indent=2, sort_keys=True))
-    return result
-
-
-async def _phase_post_restart(hass: HomeAssistant) -> dict[str, Any]:
-    data: dict[str, Any] = {}
-    if RESULT_PATH.exists():
-        data = json.loads(RESULT_PATH.read_text())
-    state = json.loads(STATE_PATH.read_text()) if STATE_PATH.exists() else {}
-    users = await hass.auth.async_get_users()
-    test_user = next((user for user in users if user.name == TEST_USER_NAME), None)
-    group = await hass.auth.async_get_group(GROUP_ID)
-
-    d1 = {
-        "group_survived_restart": group is not None,
-        "policy_survived_restart": bool(group and group.policy),
-        "user_survived_restart": test_user is not None,
-    }
-
-    d3_rest: dict[str, Any] = {"tested": False}
-    d6_services: dict[str, Any] = {"tested": False}
-    d7_leaks: dict[str, Any] = {"tested": False}
-    d8_llat: dict[str, Any] = {"tested": False, "reason": "no real LLAT created; normal dev access token used for headless probe only"}
-
-    if test_user is not None:
-        access_token, refresh_token = await _make_access_token(hass, test_user, "tessera-spike-headless")
-        states = await _http_json(hass, "GET", "/api/states", access_token)
-        state_entities: list[str] = []
-        if isinstance(states.get("body"), list):
-            state_entities = [item.get("entity_id") for item in states["body"] if isinstance(item, dict)]
-        allowed_state = await _http_json(hass, "GET", f"/api/states/{ALLOWED_ENTITY}", access_token)
-        forbidden_state = await _http_json(hass, "GET", f"/api/states/{FORBIDDEN_ENTITY}", access_token)
-        allowed_service = await _http_json(
-            hass,
-            "POST",
-            "/api/services/input_boolean/turn_on",
-            access_token,
-            {"entity_id": ALLOWED_ENTITY},
-        )
-        forbidden_service = await _http_json(
-            hass,
-            "POST",
-            "/api/services/input_boolean/turn_on",
-            access_token,
-            {"entity_id": FORBIDDEN_ENTITY},
-        )
-        all_service = await _http_json(
-            hass,
-            "POST",
-            "/api/services/input_boolean/turn_off",
-            access_token,
-            {"entity_id": "all"},
-        )
-        template = await _http_json(
-            hass,
-            "POST",
-            "/api/template",
-            access_token,
-            {"template": "{{ states('input_boolean.tessera_forbidden_light') }}"},
-        )
-
-        d3_rest = {
-            "tested": True,
-            "state_list_status": states["status"],
-            "allowed_in_state_list": ALLOWED_ENTITY in state_entities,
-            "forbidden_in_state_list": FORBIDDEN_ENTITY in state_entities,
-            "allowed_single_status": allowed_state["status"],
-            "forbidden_single_status": forbidden_state["status"],
-            "service_allowed_status": allowed_service["status"],
-            "service_forbidden_status": forbidden_service["status"],
-            "ws_tested": False,
-        }
-        d6_services = {
-            "tested": True,
-            "entity_service_allowed_status": allowed_service["status"],
-            "entity_service_forbidden_status": forbidden_service["status"],
-            "entity_id_all_status": all_service["status"],
-            "return_response_changed_states_tested": False,
-            "non_entity_service_tested": False,
-        }
-        d7_leaks = {
-            "tested": True,
-            "render_template_status": template["status"],
-            "render_template_body_type": template["body_type"],
-            "logbook_rest_tested": False,
-            "registry_ws_tested": False,
-            "history_tested": False,
-        }
-        d8_llat = {
-            "tested": True,
-            "normal_headless_access_token_probe": True,
-            "llat_created": False,
-            "refresh_token_revoked_after_probe": True,
-        }
-        hass.auth.async_remove_refresh_token(refresh_token)
-        await _persist_auth(hass)
-
-    result = {
-        "phase": "post_restart",
-        "state_file": state,
-        "auth": await _auth_snapshot(hass),
-        "d1_restart_survival": d1,
-        "d3_rest_ws_service": d3_rest,
-        "d6_service_matrix": d6_services,
-        "d7_leak_matrix": d7_leaks,
-        "d8_headless_token": d8_llat,
-        "d9_custom_component_runtime": {
-            "runtime_custom_components_tested": False,
-            "static_host_scan_expected": True,
-        },
-    }
-    data["post_restart"] = result
-    RESULT_PATH.write_text(json.dumps(data, indent=2, sort_keys=True))
-    return result
-
-
-async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    hass.states.async_set(STATE_ONLY_ENTITY, "42", {"friendly_name": "Tessera State Only"})
-
-    async def run_spike(call: ServiceCall) -> dict[str, Any]:
-        phase = call.data.get("phase", "pre_restart")
-        if phase == "pre_restart":
-            return await _phase_pre_restart(hass)
-        if phase == "post_restart":
-            return await _phase_post_restart(hass)
-        return {"error": f"unknown phase {phase}"}
-
-    hass.services.async_register(
-        DOMAIN,
-        "run_spike",
-        run_spike,
-        schema=vol.Schema({vol.Required("phase"): vol.In(["pre_restart", "post_restart"])}),
-        supports_response=SupportsResponse.ONLY,
-    )
-    return True
-'''
-
-
-MANIFEST = r'''{
-  "domain": "tessera_spike",
-  "name": "Tessera Spike Harness",
-  "version": "0.0.1",
-  "documentation": "https://example.invalid/tessera-spike",
-  "dependencies": [],
-  "codeowners": [],
-  "requirements": []
+HARNESS_REQUIRED_SERVICES = {
+    "ensure_group",
+    "set_group_policy",
+    "set_user_groups",
+    "flush_auth_store",
+    "invalidate_user",
+    "snapshot",
+    "restore",
+    "probe_check_entity",
 }
-'''
+SENSITIVE_KEYS = {
+    "access_token",
+    "auth_code",
+    "code",
+    "id_token",
+    "password",
+    "refresh_token",
+    "token",
+}
+SECRET_VALUE_MARKERS = ("Bearer ", "eyJ")
 
 
 CONFIGURATION = r'''
@@ -447,6 +86,39 @@ def run(cmd: list[str], *, check: bool = True, capture: bool = True) -> subproce
         stdout=subprocess.PIPE if capture else None,
         stderr=subprocess.PIPE if capture else None,
     )
+
+
+def body_keys(body: Any) -> list[str]:
+    """Return only response-body keys for evidence; never response values."""
+    if isinstance(body, dict):
+        return sorted(str(key) for key in body)
+    return []
+
+
+def safe_body_summary(body: Any) -> dict[str, Any]:
+    """Summarize an HTTP response body without exposing values."""
+    summary: dict[str, Any] = {"body_type": type(body).__name__}
+    keys = body_keys(body)
+    if keys:
+        summary["body_keys"] = keys
+        summary["sensitive_keys_redacted"] = sorted(set(keys) & SENSITIVE_KEYS)
+    elif isinstance(body, list):
+        summary["items"] = len(body)
+    return summary
+
+
+def safe_http_error(context: str, status: int, body: Any) -> RuntimeError:
+    """Create a token-free HTTP failure exception."""
+    return RuntimeError(f"{context}: status={status} body={safe_body_summary(body)}")
+
+
+def redact_text(text: str) -> str:
+    """Redact obvious token-like log fragments before writing evidence."""
+    redacted = text
+    for marker in SECRET_VALUE_MARKERS:
+        if marker in redacted:
+            redacted = redacted.split(marker, 1)[0] + marker + "<redacted>"
+    return redacted
 
 
 def docker_json(args: list[str]) -> Any:
@@ -668,6 +340,18 @@ print(json.dumps({"users": users, "groups_count": len(data.get("groups", [])), "
     )
 
 
+def wait_auth_baseline(timeout: int = 60) -> dict[str, Any]:
+    """Wait until HA has persisted its initial auth store."""
+    deadline = time.time() + timeout
+    last: dict[str, Any] = {"users": [], "groups_count": 0, "tokens": []}
+    while time.time() < deadline:
+        last = auth_baseline()
+        if last.get("users") or last.get("groups_count") or last.get("tokens"):
+            return last
+        time.sleep(1)
+    return last
+
+
 def assert_fresh_baseline(base: dict[str, Any], onboarding: list[dict[str, Any]]) -> tuple[bool, list[str]]:
     errors: list[str] = []
     if any(step.get("done") for step in onboarding):
@@ -704,10 +388,7 @@ def assert_fresh_baseline(base: dict[str, Any], onboarding: list[dict[str, Any]]
 def install_harness() -> None:
     with tempfile.TemporaryDirectory(prefix="tessera-spike-") as tmp:
         tmp_path = Path(tmp)
-        comp = tmp_path / "custom_components" / "tessera_spike"
-        comp.mkdir(parents=True)
-        (comp / "__init__.py").write_text(HARNESS_INIT)
-        (comp / "manifest.json").write_text(MANIFEST)
+        shutil.copytree(HARNESS / "custom_components", tmp_path / "custom_components")
         (tmp_path / "configuration.yaml").write_text(CONFIGURATION)
         run(["docker", "cp", str(tmp_path / "custom_components"), f"{CONTAINER}:/config/"])
         run(["docker", "cp", str(tmp_path / "configuration.yaml"), f"{CONTAINER}:/config/configuration.yaml"])
@@ -729,9 +410,9 @@ def onboard(evidence: dict[str, Any]) -> str:
             "language": "en",
         },
     )
-    evidence["onboarding_user"] = {"status": status, "body_keys": sorted(body.keys()) if isinstance(body, dict) else []}
+    evidence["onboarding_user"] = {"status": status, **safe_body_summary(body)}
     if status != 200 or "auth_code" not in body:
-        raise RuntimeError(f"user onboarding failed: {status} {body}")
+        raise safe_http_error("user onboarding failed", status, body)
     auth_code = body["auth_code"]
     status, token_body = http_json(
         "POST",
@@ -740,11 +421,11 @@ def onboard(evidence: dict[str, Any]) -> str:
     )
     evidence["token_exchange"] = {
         "status": status,
-        "body_keys": sorted(token_body.keys()) if isinstance(token_body, dict) else [],
+        **safe_body_summary(token_body),
         "token_values_redacted": True,
     }
     if status != 200 or "access_token" not in token_body:
-        raise RuntimeError(f"token exchange failed: {status} {token_body}")
+        raise safe_http_error("token exchange failed", status, token_body)
     access_token = token_body["access_token"]
 
     for path, payload in (
@@ -754,10 +435,10 @@ def onboard(evidence: dict[str, Any]) -> str:
     ):
         status, step_body = http_json("POST", path, token=access_token, payload=payload)
         evidence.setdefault("onboarding_steps", []).append(
-            {"path": path, "status": status, "body_keys": sorted(step_body.keys()) if isinstance(step_body, dict) else []}
+            {"path": path, "status": status, **safe_body_summary(step_body)}
         )
         if status not in (200, 201):
-            raise RuntimeError(f"onboarding step failed {path}: {status} {step_body}")
+            raise safe_http_error(f"onboarding step failed {path}", status, step_body)
     evidence["onboarding_after"] = wait_http("/api/onboarding")
     return access_token
 
@@ -771,10 +452,117 @@ def call_service(token: str, phase: str) -> dict[str, Any]:
         timeout=120,
     )
     if status != 200:
-        raise RuntimeError(f"run_spike {phase} failed: {status} {body}")
+        raise safe_http_error(f"run_spike {phase} failed", status, body)
     if isinstance(body, dict) and "service_response" in body:
         return body["service_response"]
     return body
+
+
+def registered_harness_services(services: Any) -> list[str]:
+    """Extract registered tessera_spike service names from /api/services."""
+    if not isinstance(services, list):
+        return []
+    for domain in services:
+        if not isinstance(domain, dict) or domain.get("domain") != "tessera_spike":
+            continue
+        service_map = domain.get("services", {})
+        if isinstance(service_map, dict):
+            return sorted(str(name) for name in service_map)
+    return []
+
+
+def blocking_io_log_check() -> dict[str, Any]:
+    """Return matching blocking-I/O log lines for the spike harness only."""
+    proc = run(["docker", "logs", "--tail", "2000", CONTAINER], check=False)
+    lines = (proc.stdout + "\n" + proc.stderr).splitlines()
+    matches = [
+        line
+        for line in lines
+        if "Detected blocking call" in line and "tessera_spike" in line
+    ]
+    return {
+        "checked": True,
+        "matches": [redact_text(line) for line in matches[:20]],
+        "match_count": len(matches),
+        "clean": not matches,
+    }
+
+
+def fallback_incomplete_seed_inventory() -> dict[str, Any]:
+    """Describe missing seed evidence when the harness did not return it."""
+    return {
+        "fixture_version": 1,
+        "entities": [
+            {
+                "entity_id": "input_boolean.tessera_allowed_light",
+                "domain": "input_boolean",
+                "class": "allowed_control_entity",
+                "provided_by": "configuration.yaml",
+            },
+            {
+                "entity_id": "input_boolean.tessera_forbidden_light",
+                "domain": "input_boolean",
+                "class": "forbidden_entity",
+                "provided_by": "configuration.yaml",
+            },
+            {
+                "entity_id": "sensor.tessera_state_only",
+                "domain": "sensor",
+                "class": "state_only_without_registry",
+                "provided_by": "hass.states.async_set",
+            },
+        ],
+        "known_gaps": [
+            "area/device registry fixture is not created in Welle A yet",
+            "multi-domain light/sensor/cover/camera/lock fixture remains for Welle C",
+            "hidden/disabled registry entries remain for Welle C",
+            "unsafe non-entity dev-service classification remains for Welle C/D9",
+        ],
+    }
+
+
+def gate_results(evidence: dict[str, Any]) -> list[dict[str, Any]]:
+    """Build machine-readable D0/A evidence gates."""
+    seed = evidence.get("seed_inventory", {})
+    harness = evidence.get("harness", {})
+    blocking = evidence.get("blocking_io_log_check", {})
+    return [
+        {
+            "gate": "target_isolation",
+            "status": "PASS"
+            if evidence.get("recreated_target", {}).get("isolation_ok")
+            or evidence.get("existing_target", {}).get("isolation_ok")
+            else "FAIL",
+        },
+        {
+            "gate": "fresh_baseline",
+            "status": "PASS"
+            if evidence.get("fresh_baseline", {}).get("ok")
+            else "FAIL",
+        },
+        {
+            "gate": "failure_redaction",
+            "status": "PASS",
+            "detail": "HTTP evidence stores body type/keys only; values redacted",
+        },
+        {
+            "gate": "a1_8_services",
+            "status": "PASS"
+            if harness.get("loaded") and not harness.get("missing_required_services")
+            else "FAIL",
+            "registered_services": harness.get("registered_services", []),
+        },
+        {
+            "gate": "a1_no_blocking_io_warning",
+            "status": "PASS" if blocking.get("clean") else "FAIL",
+            "match_count": blocking.get("match_count"),
+        },
+        {
+            "gate": "a2_seed_fixture",
+            "status": "PASS" if seed.get("complete_for_welle_a") else "FAIL",
+            "entities": len(seed.get("entities", [])),
+        },
+    ]
 
 
 def read_container_json(path: str) -> Any:
@@ -864,10 +652,10 @@ def verdicts_from_result(result: dict[str, Any], d0_green: bool) -> dict[str, di
 
 
 def write_markdown(evidence: dict[str, Any], spike: dict[str, Any], verdicts: dict[str, dict[str, Any]]) -> Path:
-    report = OUTPUTS / f"tessera-spike-report-{TODAY}.md"
-    d0_report = OUTPUTS / f"tessera-d0-evidence-{TODAY}.md"
-    d0_json = OUTPUTS / f"tessera-d0-evidence-{TODAY}.json"
-    spike_json = OUTPUTS / f"tessera-spike-result-{TODAY}.json"
+    report = REPORTS / f"tessera-spike-report-{TODAY}.md"
+    d0_report = EVIDENCE / f"tessera-d0-evidence-{TODAY}.md"
+    d0_json = EVIDENCE / f"tessera-d0-evidence-{TODAY}.json"
+    spike_json = EVIDENCE / f"tessera-spike-result-{TODAY}.json"
 
     d0_json.write_text(json.dumps(evidence, indent=2, sort_keys=True))
     spike_json.write_text(json.dumps(spike, indent=2, sort_keys=True))
@@ -887,7 +675,16 @@ def write_markdown(evidence: dict[str, Any], spike: dict[str, Any], verdicts: di
         f"- Onboarding user status: `{evidence.get('onboarding_user', {}).get('status')}`",
         f"- Token exchange status: `{evidence.get('token_exchange', {}).get('status')}` (values redacted)",
         f"- Harness installed/loaded: `{evidence.get('harness', {}).get('loaded')}`",
+        f"- Harness services: `{evidence.get('harness', {}).get('registered_services')}`",
+        f"- Blocking-I/O matches: `{evidence.get('blocking_io_log_check', {}).get('match_count')}`",
+        f"- Exit code: `{evidence.get('exit_code')}`",
         f"- Recreate proof: Docker container and volume were recreated after target-isolation check.",
+        "",
+        "## Gate Results",
+        "",
+        "```json",
+        json.dumps(evidence.get("gate_results", []), indent=2, sort_keys=True),
+        "```",
         "",
         "Full sanitized JSON: `" + str(d0_json.relative_to(ROOT)) + "`",
         "",
@@ -920,8 +717,23 @@ D0 ist gruen genug, um den dev-only Messlauf zu starten. D1, D2 und D4 liefern s
 - Harte Docker-Isolation: `{evidence.get('recreated_target', {}).get('isolation_ok')}`
 - Fresh-Baseline-Allowlist: `{evidence.get('fresh_baseline', {}).get('ok')}`
 - Onboarding abgeschlossen: `{all(step.get('done') for step in evidence.get('onboarding_after', []))}`
+- Exit-Code: `{evidence.get('exit_code')}`
 - Harness-Service geladen: `{evidence.get('harness', {}).get('loaded')}`
+- 8-Service-Load-Check: `{not evidence.get('harness', {}).get('missing_required_services')}`; registriert `{evidence.get('harness', {}).get('registered_services')}`
+- Blocking-I/O-Warnungen aus `tessera_spike`: `{evidence.get('blocking_io_log_check', {}).get('match_count')}`
 - Token-/Passwortwerte: nicht im Report enthalten.
+
+Gate-Results:
+
+```json
+{json.dumps(evidence.get('gate_results', []), indent=2, sort_keys=True)}
+```
+
+## Seed-Fixture
+
+```json
+{json.dumps(evidence.get('seed_inventory', {}), indent=2, sort_keys=True)}
+```
 
 ## D1-D5 Auth-Store / Recovery Kern
 
@@ -975,7 +787,8 @@ def main() -> int:
     parser.add_argument("--no-reset", action="store_true", help="Do not recreate the disposable dev container first.")
     args = parser.parse_args()
 
-    OUTPUTS.mkdir(exist_ok=True)
+    REPORTS.mkdir(exist_ok=True)
+    EVIDENCE.mkdir(exist_ok=True)
     evidence: dict[str, Any] = {
         "started_at": dt.datetime.now().isoformat(timespec="seconds"),
         "target": {"container": CONTAINER, "volume": VOLUME, "image": IMAGE, "port": PORT},
@@ -1000,7 +813,7 @@ def main() -> int:
         wait_http("/api/onboarding", timeout=180)
         install_harness()
         onboarding_before = wait_http("/api/onboarding", timeout=180)
-        baseline = auth_baseline()
+        baseline = wait_auth_baseline()
         ok, errors = assert_fresh_baseline(baseline, onboarding_before)
         evidence["onboarding_before"] = onboarding_before
         evidence["auth_baseline"] = baseline
@@ -1019,17 +832,25 @@ def main() -> int:
         owner_token = onboard(evidence)
         # No token values written; only use in memory below.
         status, services = http_json("GET", "/api/services", token=owner_token)
-        loaded = status == 200 and any(
-            svc.get("domain") == "tessera_spike"
-            for svc in services
-            if isinstance(svc, dict)
-        )
-        evidence["harness"] = {"services_status": status, "loaded": loaded}
+        registered = registered_harness_services(services)
+        missing = sorted(HARNESS_REQUIRED_SERVICES - set(registered))
+        loaded = status == 200 and not missing
+        evidence["harness"] = {
+            "services_status": status,
+            "loaded": loaded,
+            "registered_services": registered,
+            "missing_required_services": missing,
+        }
         if not loaded:
-            raise RuntimeError("tessera_spike service not loaded")
+            raise RuntimeError(f"tessera_spike required services not loaded: {missing}")
 
         pre = call_service(owner_token, "pre_restart")
         evidence["pre_restart_service"] = {"ok": True, "keys": sorted(pre.keys())}
+        evidence["seed_inventory"] = pre.get(
+            "seed_fixture", fallback_incomplete_seed_inventory()
+        )
+        if not evidence["seed_inventory"].get("complete_for_welle_a"):
+            raise RuntimeError("seed fixture incomplete for Welle A")
 
         run(["docker", "restart", CONTAINER])
         evidence["post_restart_http_status"] = wait_http_status("/api/", {200, 401}, timeout=180)
@@ -1040,8 +861,12 @@ def main() -> int:
 
         spike = read_container_json("/config/tessera_spike_result.json")
         spike["d9_static_scan"] = static_d9_scan()
+        evidence["blocking_io_log_check"] = blocking_io_log_check()
         d0_green = True
         evidence["status"] = "GREEN"
+        evidence["exit_code"] = 0
+        evidence["abort_reason"] = None
+        evidence["gate_results"] = gate_results(evidence)
         verdicts = verdicts_from_result(spike, d0_green)
         report = write_markdown(evidence, spike, verdicts)
         print(f"D0 GREEN; spike report written: {report}")
@@ -1049,7 +874,11 @@ def main() -> int:
     except Exception as exc:  # noqa: BLE001
         evidence["status"] = "RED"
         evidence["error"] = str(exc)
-        failure = OUTPUTS / f"tessera-d0-evidence-{TODAY}.json"
+        evidence["exit_code"] = 2
+        evidence["abort_reason"] = str(exc)
+        evidence["blocking_io_log_check"] = blocking_io_log_check()
+        evidence["gate_results"] = gate_results(evidence)
+        failure = EVIDENCE / f"tessera-d0-evidence-{TODAY}.json"
         failure.write_text(json.dumps(evidence, indent=2, sort_keys=True))
         print(f"D0 RED: {exc}", file=sys.stderr)
         print(f"sanitized evidence: {failure}", file=sys.stderr)
