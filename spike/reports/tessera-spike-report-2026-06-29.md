@@ -1,6 +1,6 @@
 # Tessera Phase-0 Spike Report
 
-Stand: 2026-06-29T06:55:36
+Stand: 2026-06-29T10:23:52
 
 Modus: Dev-only gegen `ha-tessera-dev`; `/Volumes/config` nur read-only fuer D9-Statik; keine Secrets/Token/Auth-Codes ausgegeben.
 
@@ -30,8 +30,143 @@ D0 ist gruen genug, um den dev-only Messlauf zu starten. D1, D2 und D4 liefern s
 - Harte Docker-Isolation: `True`
 - Fresh-Baseline-Allowlist: `True`
 - Onboarding abgeschlossen: `True`
+- Exit-Code: `0`
 - Harness-Service geladen: `True`
+- 8-Service-Load-Check: `True`; registriert `['ensure_group', 'flush_auth_store', 'invalidate_user', 'probe_check_entity', 'restore', 'run_spike', 'set_group_policy', 'set_user_groups', 'snapshot']`
+- Blocking-I/O-Warnungen aus `tessera_spike`: `0`
 - Token-/Passwortwerte: nicht im Report enthalten.
+
+Gate-Results:
+
+```json
+[
+  {
+    "gate": "target_isolation",
+    "status": "PASS"
+  },
+  {
+    "gate": "fresh_baseline",
+    "status": "PASS"
+  },
+  {
+    "detail": "HTTP evidence stores body type/keys only; values redacted",
+    "gate": "failure_redaction",
+    "status": "PASS"
+  },
+  {
+    "gate": "a1_8_services",
+    "registered_services": [
+      "ensure_group",
+      "flush_auth_store",
+      "invalidate_user",
+      "probe_check_entity",
+      "restore",
+      "run_spike",
+      "set_group_policy",
+      "set_user_groups",
+      "snapshot"
+    ],
+    "status": "PASS"
+  },
+  {
+    "gate": "a1_no_blocking_io_warning",
+    "match_count": 0,
+    "status": "PASS"
+  },
+  {
+    "entities": 6,
+    "gate": "a2_seed_fixture",
+    "status": "PASS"
+  }
+]
+```
+
+## Seed-Fixture
+
+```json
+{
+  "areas": [
+    {
+      "area_id": "tessera_living",
+      "name": "Tessera Living"
+    },
+    {
+      "area_id": "tessera_kitchen",
+      "name": "Tessera Kitchen"
+    }
+  ],
+  "complete_for_welle_a": true,
+  "device": {
+    "area_id": "tessera_living",
+    "config_entry_id_present": true,
+    "device_id": "2a2f425d887118dde9aba4cb8427c782"
+  },
+  "entities": [
+    {
+      "area_id": null,
+      "class": "device_area_allowed_light",
+      "device_id": "2a2f425d887118dde9aba4cb8427c782",
+      "disabled_by": null,
+      "domain": "light",
+      "entity_id": "light.tessera_seed_allowed_light",
+      "hidden_by": null
+    },
+    {
+      "area_id": "tessera_kitchen",
+      "class": "direct_area_forbidden_sensor",
+      "device_id": null,
+      "disabled_by": null,
+      "domain": "sensor",
+      "entity_id": "sensor.tessera_seed_forbidden_sensor",
+      "hidden_by": null
+    },
+    {
+      "area_id": null,
+      "class": "device_area_allowed_cover",
+      "device_id": "2a2f425d887118dde9aba4cb8427c782",
+      "disabled_by": null,
+      "domain": "cover",
+      "entity_id": "cover.tessera_seed_allowed_cover",
+      "hidden_by": null
+    },
+    {
+      "area_id": "tessera_kitchen",
+      "class": "hidden_direct_area_camera",
+      "device_id": null,
+      "disabled_by": null,
+      "domain": "camera",
+      "entity_id": "camera.tessera_seed_hidden_camera",
+      "hidden_by": "user"
+    },
+    {
+      "area_id": "tessera_living",
+      "class": "disabled_direct_area_lock",
+      "device_id": null,
+      "disabled_by": "user",
+      "domain": "lock",
+      "entity_id": "lock.tessera_seed_disabled_lock",
+      "hidden_by": null
+    },
+    {
+      "area_id": null,
+      "class": "state_only_without_registry",
+      "device_id": null,
+      "disabled_by": null,
+      "domain": "sensor",
+      "entity_id": "sensor.tessera_state_only",
+      "hidden_by": null
+    }
+  ],
+  "fixture_version": 2,
+  "non_entity_services": [
+    {
+      "class": "intentionally_non_entity_dev_service",
+      "service": "tessera_spike.snapshot",
+      "values_redacted": true
+    }
+  ]
+}
+```
 
 ## D1-D5 Auth-Store / Recovery Kern
 
@@ -163,6 +298,6 @@ Restart-Survival:
 
 ## Artefakte
 
-- D0 Evidence: `outputs/tessera-d0-evidence-2026-06-29.md`
-- D0 JSON: `outputs/tessera-d0-evidence-2026-06-29.json`
-- Spike JSON: `outputs/tessera-spike-result-2026-06-29.json`
+- D0 Evidence: `evidence/tessera-d0-evidence-2026-06-29.md`
+- D0 JSON: `evidence/tessera-d0-evidence-2026-06-29.json`
+- Spike JSON: `evidence/tessera-spike-result-2026-06-29.json`

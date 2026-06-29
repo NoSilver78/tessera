@@ -1,0 +1,9 @@
+{
+  "domain": "tessera_spike",
+  "name": "Tessera Spike Harness",
+  "version": "0.0.1",
+  "documentation": "https://example.invalid/tessera-spike",
+  "dependencies": [],
+  "codeowners": [],
+  "requirements": []
+}
