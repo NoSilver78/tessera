@@ -913,6 +913,10 @@ def verdicts_from_result(
                 and d11.get("native_write_blocked")
                 and d11.get("native_write_call_count") == 0
                 and d11.get("native_write_refused_before_call")
+                and d11.get("native_write_measurement_source")
+                == "spy:hass.auth.async_update_user"
+                and d11.get("native_write_spy", {}).get("installed") is True
+                and d11.get("native_write_spy", {}).get("restored") is True
                 and d11.get("effective_mode") in {"monitor", "off"}
                 and d11.get("auth_fingerprint_unchanged")
                 and d11.get("repair_issue_created")
@@ -1001,6 +1005,15 @@ def lifecycle_report_summary(spike: dict[str, Any]) -> dict[str, Any]:
             "native_write_call_count": d11.get("native_write_call_count"),
             "native_write_refused_before_call": d11.get(
                 "native_write_refused_before_call"
+            ),
+            "native_write_measurement_source": d11.get(
+                "native_write_measurement_source"
+            ),
+            "native_write_spy_installed": d11.get("native_write_spy", {}).get(
+                "installed"
+            ),
+            "native_write_spy_restored": d11.get("native_write_spy", {}).get(
+                "restored"
             ),
             "repair_issue_created": d11.get("repair_issue_created"),
             "auth_fingerprint_unchanged": d11.get("auth_fingerprint_unchanged"),
@@ -1188,7 +1201,7 @@ D9-Lesart: `PASS` bedeutet hier **nicht** `ALLOW` fuer reale HACS-Komponenten. E
 {json.dumps(lifecycle_summary, indent=2, sort_keys=True)}
 ```
 
-Lifecycle-Lesart: `D11` belegt im Dev-Spike den fail-closed Version-Gate-Pfad per unsupported-version Lifecycle-Transition, Repairs-Issue und unveraendertem Auth-Fingerprint. `D13` ist eine HACS-Update/Downgrade-Simulation, kein echter HACS-Paketwechsel; PASS verlangt einen beobachteten Zwischen-Write und exakten Rollback. `D15` misst `off -> monitor -> enforce -> restore` in-process mit vollem Gruppen-Superset, Permission-Probe und exaktem Restore-Fingerprint. Alle drei bleiben Dev-Spike-Belege, kein Produkt-Enforce-Go.
+Lifecycle-Lesart: `D11` belegt im Dev-Spike den fail-closed Version-Gate-Pfad per unsupported-version Lifecycle-Transition, Repairs-Issue, unveraendertem Auth-Fingerprint und echtem Spy/Counter um `hass.auth.async_update_user`; PASS verlangt `call_count == 0` aus dieser Messung. `D13` ist eine HACS-Update/Downgrade-Simulation, kein echter HACS-Paketwechsel; PASS verlangt einen beobachteten Zwischen-Write und exakten Rollback. `D15` misst `off -> monitor -> enforce -> restore` in-process mit vollem Gruppen-Superset, Permission-Probe und exaktem Restore-Fingerprint. Alle drei bleiben Dev-Spike-Belege, kein Produkt-Enforce-Go.
 
 ## Core-Anker
 

@@ -1,6 +1,6 @@
 # Tessera Phase-0 Spike Report
 
-Stand: 2026-06-29T20:46:21
+Stand: 2026-06-29T20:53:44
 
 Modus: Dev-only gegen `ha-tessera-dev`; keine Secrets/Token/Auth-Codes ausgegeben. Live-/`/Volumes/config`-Scans sind im Standardlauf bewusst deaktiviert und brauchen ein eigenes Gate.
 
@@ -120,13 +120,13 @@ Gate-Results:
   "device": {
     "area_id": "tessera_living",
     "config_entry_id_present": true,
-    "device_id": "b56d2699cd35b0c851bae1f66ec6ddab"
+    "device_id": "a7407165a0f25fab467277369b22c4bc"
   },
   "entities": [
     {
       "area_id": null,
       "class": "device_area_allowed_light",
-      "device_id": "b56d2699cd35b0c851bae1f66ec6ddab",
+      "device_id": "a7407165a0f25fab467277369b22c4bc",
       "disabled_by": null,
       "domain": "light",
       "entity_id": "light.tessera_seed_allowed_light",
@@ -144,7 +144,7 @@ Gate-Results:
     {
       "area_id": null,
       "class": "device_area_allowed_cover",
-      "device_id": "b56d2699cd35b0c851bae1f66ec6ddab",
+      "device_id": "a7407165a0f25fab467277369b22c4bc",
       "disabled_by": null,
       "domain": "cover",
       "entity_id": "cover.tessera_seed_allowed_cover",
@@ -375,7 +375,7 @@ Gate-Results:
     "no_admin_lockout": null,
     "partial_reason": "D5 requires post-restart rescue, setup-exception independence, reread, and owner/admin operate probes",
     "prepared": true,
-    "run_id": "d8fa8ea3b3624deb96028e9b7769250e",
+    "run_id": "58eed0517a764564855657e0f2f70f73",
     "setup_exception_trigger_path": "/config/tessera_spike_force_setup_exception.json",
     "snapshot_path": "/config/tessera_spike_rescue_snapshot.json",
     "trigger_path": "/config/tessera_spike_rescue_trigger.json",
@@ -572,7 +572,7 @@ Restart-Survival:
         "name": "tessera-rescue-user"
       }
     ],
-    "run_id": "d8fa8ea3b3624deb96028e9b7769250e",
+    "run_id": "58eed0517a764564855657e0f2f70f73",
     "run_id_matches": true,
     "setup_exception_error_type": "RuntimeError",
     "setup_exception_requested": true,
@@ -583,7 +583,7 @@ Restart-Survival:
     "touched_user_names": [
       "tessera-rescue-user"
     ],
-    "trigger_run_id": "d8fa8ea3b3624deb96028e9b7769250e",
+    "trigger_run_id": "58eed0517a764564855657e0f2f70f73",
     "used_public_async_update_user": true,
     "verdict": "PASS"
   }
@@ -1525,7 +1525,10 @@ D9-Lesart: `PASS` bedeutet hier **nicht** `ALLOW` fuer reale HACS-Komponenten. E
     "native_write_attempted": false,
     "native_write_blocked": true,
     "native_write_call_count": 0,
+    "native_write_measurement_source": "spy:hass.auth.async_update_user",
     "native_write_refused_before_call": true,
+    "native_write_spy_installed": true,
+    "native_write_spy_restored": true,
     "owner_admin_no_lockout": true,
     "repair_issue_created": true,
     "requested_mode": "enforce",
@@ -1557,7 +1560,7 @@ D9-Lesart: `PASS` bedeutet hier **nicht** `ALLOW` fuer reale HACS-Komponenten. E
 }
 ```
 
-Lifecycle-Lesart: `D11` belegt im Dev-Spike den fail-closed Version-Gate-Pfad per unsupported-version Lifecycle-Transition, Repairs-Issue und unveraendertem Auth-Fingerprint. `D13` ist eine HACS-Update/Downgrade-Simulation, kein echter HACS-Paketwechsel; PASS verlangt einen beobachteten Zwischen-Write und exakten Rollback. `D15` misst `off -> monitor -> enforce -> restore` in-process mit vollem Gruppen-Superset, Permission-Probe und exaktem Restore-Fingerprint. Alle drei bleiben Dev-Spike-Belege, kein Produkt-Enforce-Go.
+Lifecycle-Lesart: `D11` belegt im Dev-Spike den fail-closed Version-Gate-Pfad per unsupported-version Lifecycle-Transition, Repairs-Issue, unveraendertem Auth-Fingerprint und echtem Spy/Counter um `hass.auth.async_update_user`; PASS verlangt `call_count == 0` aus dieser Messung. `D13` ist eine HACS-Update/Downgrade-Simulation, kein echter HACS-Paketwechsel; PASS verlangt einen beobachteten Zwischen-Write und exakten Rollback. `D15` misst `off -> monitor -> enforce -> restore` in-process mit vollem Gruppen-Superset, Permission-Probe und exaktem Restore-Fingerprint. Alle drei bleiben Dev-Spike-Belege, kein Produkt-Enforce-Go.
 
 ## Core-Anker
 

@@ -819,7 +819,16 @@
       "native_write_attempted": false,
       "native_write_blocked": true,
       "native_write_call_count": 0,
+      "native_write_measurement_source": "spy:hass.auth.async_update_user",
       "native_write_refused_before_call": true,
+      "native_write_spy": {
+        "call_count": 0,
+        "calls": [],
+        "installed": true,
+        "restored": true,
+        "secret_redaction": "PASS: no token, password, auth code, or group-id values recorded",
+        "target": "hass.auth.async_update_user"
+      },
       "owner_admin_lockout_probe": {
         "active_owner_or_admin_users": [
           {
@@ -1392,7 +1401,16 @@
         "native_write_attempted": false,
         "native_write_blocked": true,
         "native_write_call_count": 0,
+        "native_write_measurement_source": "spy:hass.auth.async_update_user",
         "native_write_refused_before_call": true,
+        "native_write_spy": {
+          "call_count": 0,
+          "calls": [],
+          "installed": true,
+          "restored": true,
+          "secret_redaction": "PASS: no token, password, auth code, or group-id values recorded",
+          "target": "hass.auth.async_update_user"
+        },
         "repair_issue_created": true,
         "repair_issue_id": "unsupported_version_enforce_refused",
         "requested_mode": "enforce",
@@ -5601,7 +5619,7 @@
           "name": "tessera-rescue-user"
         }
       ],
-      "run_id": "d8fa8ea3b3624deb96028e9b7769250e",
+      "run_id": "58eed0517a764564855657e0f2f70f73",
       "run_id_matches": true,
       "setup_exception_error_type": "RuntimeError",
       "setup_exception_requested": true,
@@ -5612,7 +5630,7 @@
       "touched_user_names": [
         "tessera-rescue-user"
       ],
-      "trigger_run_id": "d8fa8ea3b3624deb96028e9b7769250e",
+      "trigger_run_id": "58eed0517a764564855657e0f2f70f73",
       "used_public_async_update_user": true,
       "verdict": "PASS"
     },
@@ -6829,7 +6847,7 @@
       "no_admin_lockout": null,
       "partial_reason": "D5 requires post-restart rescue, setup-exception independence, reread, and owner/admin operate probes",
       "prepared": true,
-      "run_id": "d8fa8ea3b3624deb96028e9b7769250e",
+      "run_id": "58eed0517a764564855657e0f2f70f73",
       "setup_exception_trigger_path": "/config/tessera_spike_force_setup_exception.json",
       "snapshot_path": "/config/tessera_spike_rescue_snapshot.json",
       "trigger_path": "/config/tessera_spike_rescue_trigger.json",
@@ -6858,13 +6876,13 @@
       "device": {
         "area_id": "tessera_living",
         "config_entry_id_present": true,
-        "device_id": "b56d2699cd35b0c851bae1f66ec6ddab"
+        "device_id": "a7407165a0f25fab467277369b22c4bc"
       },
       "entities": [
         {
           "area_id": null,
           "class": "device_area_allowed_light",
-          "device_id": "b56d2699cd35b0c851bae1f66ec6ddab",
+          "device_id": "a7407165a0f25fab467277369b22c4bc",
           "disabled_by": null,
           "domain": "light",
           "entity_id": "light.tessera_seed_allowed_light",
@@ -6882,7 +6900,7 @@
         {
           "area_id": null,
           "class": "device_area_allowed_cover",
-          "device_id": "b56d2699cd35b0c851bae1f66ec6ddab",
+          "device_id": "a7407165a0f25fab467277369b22c4bc",
           "disabled_by": null,
           "domain": "cover",
           "entity_id": "cover.tessera_seed_allowed_cover",

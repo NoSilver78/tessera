@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -1559,6 +1560,44 @@ async def _request_lifecycle_transition(
     }
 
 
+async def _measure_native_update_user_calls(
+    hass: HomeAssistant, operation: Callable[[], Awaitable[dict[str, Any]]]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Run operation with a secret-free counter around async_update_user."""
+    original_update_user = hass.auth.async_update_user
+    calls: list[dict[str, Any]] = []
+    restored = False
+
+    async def async_update_user_spy(*args: Any, **kwargs: Any) -> Any:
+        user_arg = args[0] if args else kwargs.get("user")
+        group_ids = kwargs.get("group_ids")
+        calls.append(
+            {
+                "args_count": len(args),
+                "kwargs_keys": sorted(str(key) for key in kwargs),
+                "user_name": getattr(user_arg, "name", None),
+                "group_ids_count": len(group_ids) if group_ids is not None else None,
+            }
+        )
+        return await original_update_user(*args, **kwargs)
+
+    hass.auth.async_update_user = async_update_user_spy
+    try:
+        result = await operation()
+    finally:
+        hass.auth.async_update_user = original_update_user
+        restored = True
+
+    return result, {
+        "installed": True,
+        "restored": restored,
+        "target": "hass.auth.async_update_user",
+        "call_count": len(calls),
+        "calls": calls,
+        "secret_redaction": "PASS: no token, password, auth code, or group-id values recorded",
+    }
+
+
 async def _probe_d11_version_gate(hass: HomeAssistant) -> dict[str, Any]:
     """Simulate unsupported HA version and prove enforce is refused before writes."""
     user = await _find_user(hass, TEST_USER_NAME)
@@ -1570,23 +1609,45 @@ async def _probe_d11_version_gate(hass: HomeAssistant) -> dict[str, Any]:
         }
     simulated_unsupported_version = "9999.0.0"
     original_groups = sorted(group.id for group in user.groups)
-    transition = await _request_lifecycle_transition(
+    transition, native_write_spy = await _measure_native_update_user_calls(
         hass,
-        mode="enforce",
-        user=user,
-        original_groups=original_groups,
-        group_id=GROUP_ID_LIFECYCLE,
-        entity_id=FORBIDDEN_ENTITY,
-        simulated_ha_version=simulated_unsupported_version,
+        lambda: _request_lifecycle_transition(
+            hass,
+            mode="enforce",
+            user=user,
+            original_groups=original_groups,
+            group_id=GROUP_ID_LIFECYCLE,
+            entity_id=FORBIDDEN_ENTITY,
+            simulated_ha_version=simulated_unsupported_version,
+        ),
+    )
+    measured_call_count = native_write_spy["call_count"]
+    measured_write_attempted = measured_call_count > 0
+    measured_refused_before_call = (
+        transition.get("version_mismatch_detected") is True
+        and transition.get("enforce_requested") is True
+        and measured_call_count == 0
+    )
+    transition.update(
+        {
+            "native_write_attempted": measured_write_attempted,
+            "native_write_blocked": measured_refused_before_call,
+            "native_write_call_count": measured_call_count,
+            "native_write_refused_before_call": measured_refused_before_call,
+            "native_write_measurement_source": "spy:hass.auth.async_update_user",
+            "native_write_spy": native_write_spy,
+        }
     )
     unchanged = transition.get("auth_fingerprint_unchanged") is True
     passed = (
         transition.get("version_mismatch_detected") is True
         and transition.get("enforce_requested") is True
-        and transition.get("native_write_attempted") is False
+        and measured_write_attempted is False
         and transition.get("native_write_blocked") is True
-        and transition.get("native_write_call_count") == 0
-        and transition.get("native_write_refused_before_call") is True
+        and measured_call_count == 0
+        and measured_refused_before_call is True
+        and native_write_spy.get("installed") is True
+        and native_write_spy.get("restored") is True
         and transition.get("effective_mode") in {"monitor", "off"}
         and transition.get("repair_issue_created") is True
         and unchanged
@@ -1609,6 +1670,10 @@ async def _probe_d11_version_gate(hass: HomeAssistant) -> dict[str, Any]:
         "native_write_refused_before_call": transition.get(
             "native_write_refused_before_call"
         ),
+        "native_write_measurement_source": transition.get(
+            "native_write_measurement_source"
+        ),
+        "native_write_spy": native_write_spy,
         "repair_issue_created": transition.get("repair_issue_created"),
         "repair_issue_id": transition.get("repair_issue_id"),
         "auth_fingerprint_before": transition.get("auth_fingerprint_before"),
