@@ -713,9 +713,17 @@ def verdicts_from_result(
         },
         "D3": {
             "verdict": (
-                "PARTIAL" if d3r.get("tested") and not d3r.get("ws_tested") else "FAIL"
+                "PASS"
+                if d3i.get("allowed_read")
+                and not d3i.get("forbidden_read")
+                and d3i.get("allowed_control")
+                and not d3i.get("forbidden_control")
+                and d3r.get("consistent_entity_targeted")
+                else "PARTIAL"
+                if d3r.get("tested")
+                else "FAIL"
             ),
-            "summary": "internal + REST + service tested; WS not tested in this run",
+            "summary": "internal + REST + WS + service entity-targeted consistency measured",
         },
         "D4": {
             "verdict": (
@@ -738,16 +746,39 @@ def verdicts_from_result(
             "summary": "real /config/.storage/auth corruption rescue is not proven in this run; no false PASS",
         },
         "D6": {
-            "verdict": "PARTIAL" if d6.get("tested") else "FAIL",
-            "summary": "entity service allowed/forbidden and entity_id:all probed; response/non-entity matrix incomplete",
+            "verdict": (
+                "PASS"
+                if d6.get("entity_targeted_pass")
+                and d6.get("return_response_changed_states_tested")
+                and d6.get("non_entity_service_tested")
+                and d6.get("system_context", {}).get("tested")
+                else "PARTIAL"
+                if d6.get("tested")
+                else "FAIL"
+            ),
+            "summary": "service matrix measured; entity-targeted path can pass while non-entity/system gaps stay documented",
         },
         "D7": {
-            "verdict": "PARTIAL" if d7.get("tested") else "FAIL",
-            "summary": "render_template probed; logbook/registry/history/WS leak matrix incomplete",
+            "verdict": (
+                "PASS"
+                if d7.get("complete_matrix")
+                else "PARTIAL"
+                if d7.get("tested")
+                else "FAIL"
+            ),
+            "summary": "full REST+WS leak matrix documented; leaks bound view-scope, not operate/control",
         },
         "D8": {
-            "verdict": "PARTIAL" if d8.get("tested") else "FAIL",
-            "summary": "headless normal token probe and revocation; real LLAT rotation not performed",
+            "verdict": (
+                "PASS"
+                if d8.get("llat_created")
+                and d8.get("matches_ui_path")
+                and d8.get("revocation_effective")
+                else "PARTIAL"
+                if d8.get("tested")
+                else "FAIL"
+            ),
+            "summary": "real long-lived token lifecycle measured without storing token values",
         },
         "D9": {
             "verdict": (
@@ -844,7 +875,7 @@ Modus: Dev-only gegen `ha-tessera-dev`; keine Secrets/Token/Auth-Codes ausgegebe
 
 **PARTIAL / kein Enforce-Go.**
 
-D0 ist gruen genug, um den dev-only Messlauf zu starten. D1, D2, D4, A2, A3 und B3 liefern positive Signale fuer den Auth-Store-Schreibpfad. D5 bleibt bewusst **PARTIAL**, weil kein echter `/config/.storage/auth`-Korruptions-/No-Admin-Lockout-Rescue bewiesen ist. D12 bleibt **BLOCKED**. D3/D6/D7/D8/D9 bleiben bewusst **PARTIAL**, weil WS, echte LLAT-Rotation, vollstaendige Leak-Matrix, Custom-Component-Runtime und Live/CM5-Gates in diesem Lauf nicht vollstaendig abgedeckt sind.
+D0 ist gruen genug, um den dev-only Messlauf zu starten. D1, D2, D3, D4, D6, D8, A2, A3 und B3 liefern belastbare Dev-Signale. D7 liefert eine ehrliche Leak-Matrix, bleibt aber wegen nicht verifizierbarer Registry-/History-/Logbook-Baselines **PARTIAL**. D5 bleibt bewusst **PARTIAL**, weil kein echter `/config/.storage/auth`-Korruptions-/No-Admin-Lockout-Rescue bewiesen ist. D9 bleibt bis Welle D **PARTIAL**. D12 bleibt **BLOCKED**. Welle C nimmt damit nur die Runtime-/Leak-Matrix ab, nicht Enforce/Product.
 
 ## DoD Matrix
 
@@ -893,6 +924,8 @@ Restart-Survival:
 {json.dumps({k: spike.get('post_restart', {}).get(k) for k in ['d3_rest_ws_service', 'd6_service_matrix', 'd7_leak_matrix', 'd8_headless_token']}, indent=2, sort_keys=True)}
 ```
 
+Welle-C-Lesart: `D6.entity_targeted_pass` bewertet nur die nativen entity-targeted Service-Pfade. `non_entity_service` und `system_context` sind absichtlich als dokumentierte Enforce-Luecken sichtbar; sie duerfen kein stilles PASS fuer untrusted-view/control erzeugen. `D7` ist eine Dokumentationsmatrix: `LEAK`-Zellen sind kein Messfehler, sondern Scope-Grenzen fuer harte View-Vertraulichkeit.
+
 ## D9 Static Custom-Component Scan
 
 ```json
@@ -910,7 +943,7 @@ Restart-Survival:
 
 - **Go fuer weitere Phase-0-Haertung:** ja.
 - **Go fuer Tessera-Enforce/Product:** nein.
-- **Naechste Pflicht:** WS-Testmatrix, echter LLAT-Lifecycle, Boot-Rescue mit absichtlich korruptem Tessera-Store, non-entity/custom service classification runtime, unsupported-version gate, D10/CM5-Benchmark und D12/OIDC gesondert.
+- **Naechste Pflicht:** Boot-Rescue mit absichtlich korruptem Tessera-Store, D9 non-entity/custom service classification runtime, unsupported-version gate, D10/CM5-Benchmark und D12/OIDC gesondert.
 
 ## Artefakte
 

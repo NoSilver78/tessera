@@ -1,6 +1,6 @@
 # Tessera Phase-0 Spike Report
 
-Stand: 2026-06-29T12:50:45
+Stand: 2026-06-29T13:45:50
 
 Modus: Dev-only gegen `ha-tessera-dev`; keine Secrets/Token/Auth-Codes ausgegeben. Live-/`/Volumes/config`-Scans sind im Standardlauf bewusst deaktiviert und brauchen ein eigenes Gate.
 
@@ -8,7 +8,7 @@ Modus: Dev-only gegen `ha-tessera-dev`; keine Secrets/Token/Auth-Codes ausgegebe
 
 **PARTIAL / kein Enforce-Go.**
 
-D0 ist gruen genug, um den dev-only Messlauf zu starten. D1, D2, D4, A2, A3 und B3 liefern positive Signale fuer den Auth-Store-Schreibpfad. D5 bleibt bewusst **PARTIAL**, weil kein echter `/config/.storage/auth`-Korruptions-/No-Admin-Lockout-Rescue bewiesen ist. D12 bleibt **BLOCKED**. D3/D6/D7/D8/D9 bleiben bewusst **PARTIAL**, weil WS, echte LLAT-Rotation, vollstaendige Leak-Matrix, Custom-Component-Runtime und Live/CM5-Gates in diesem Lauf nicht vollstaendig abgedeckt sind.
+D0 ist gruen genug, um den dev-only Messlauf zu starten. D1, D2, D3, D4, D6, D8, A2, A3 und B3 liefern belastbare Dev-Signale. D7 liefert eine ehrliche Leak-Matrix, bleibt aber wegen nicht verifizierbarer Registry-/History-/Logbook-Baselines **PARTIAL**. D5 bleibt bewusst **PARTIAL**, weil kein echter `/config/.storage/auth`-Korruptions-/No-Admin-Lockout-Rescue bewiesen ist. D9 bleibt bis Welle D **PARTIAL**. D12 bleibt **BLOCKED**. Welle C nimmt damit nur die Runtime-/Leak-Matrix ab, nicht Enforce/Product.
 
 ## DoD Matrix
 
@@ -17,12 +17,12 @@ D0 ist gruen genug, um den dev-only Messlauf zu starten. D1, D2, D4, A2, A3 und 
 | D0 | PASS | Preflight/onboarding/seed/harness gate |
 | D1 | PASS | tessera group/policy/user restart survival |
 | D2 | PASS | policy mutation checked before invalidate, after invalidate, and after restart |
-| D3 | PARTIAL | internal + REST + service tested; WS not tested in this run |
+| D3 | PASS | internal + REST + WS + service entity-targeted consistency measured |
 | D4 | PASS | caller restores by supplying the full group set; HA group_ids writes are replace semantics |
 | D5 | PARTIAL | real /config/.storage/auth corruption rescue is not proven in this run; no false PASS |
-| D6 | PARTIAL | entity service allowed/forbidden and entity_id:all probed; response/non-entity matrix incomplete |
-| D7 | PARTIAL | render_template probed; logbook/registry/history/WS leak matrix incomplete |
-| D8 | PARTIAL | headless normal token probe and revocation; real LLAT rotation not performed |
+| D6 | PASS | service matrix measured; entity-targeted path can pass while non-entity/system gaps stay documented |
+| D7 | PARTIAL | full REST+WS leak matrix documented; leaks bound view-scope, not operate/control |
+| D8 | PASS | real long-lived token lifecycle measured without storing token values |
 | D9 | PARTIAL | live /Volumes/config scan skipped in standard dev run; runtime classification not complete |
 | B3 | PASS | managed Tessera users are not members of HA system-users allow-all group |
 | A2 | PASS | native async_update_user(group_ids) is REPLACE; caller full-superset contract proven |
@@ -117,13 +117,13 @@ Gate-Results:
   "device": {
     "area_id": "tessera_living",
     "config_entry_id_present": true,
-    "device_id": "90c197f4fd7c9a9ae31cafd37a8dee49"
+    "device_id": "0053d38ec47804b79e36ca02b53629d9"
   },
   "entities": [
     {
       "area_id": null,
       "class": "device_area_allowed_light",
-      "device_id": "90c197f4fd7c9a9ae31cafd37a8dee49",
+      "device_id": "0053d38ec47804b79e36ca02b53629d9",
       "disabled_by": null,
       "domain": "light",
       "entity_id": "light.tessera_seed_allowed_light",
@@ -141,7 +141,7 @@ Gate-Results:
     {
       "area_id": null,
       "class": "device_area_allowed_cover",
-      "device_id": "90c197f4fd7c9a9ae31cafd37a8dee49",
+      "device_id": "0053d38ec47804b79e36ca02b53629d9",
       "disabled_by": null,
       "domain": "cover",
       "entity_id": "cover.tessera_seed_allowed_cover",
@@ -523,38 +523,525 @@ Restart-Survival:
   "d3_rest_ws_service": {
     "allowed_in_state_list": true,
     "allowed_single_status": 200,
+    "consistent_entity_targeted": true,
     "forbidden_in_state_list": false,
     "forbidden_single_status": 401,
     "service_allowed_status": 200,
     "service_forbidden_status": 401,
     "state_list_status": 200,
     "tested": true,
-    "ws_tested": false
+    "ws": {
+      "allowed_in_state_list": true,
+      "forbidden_in_state_list": false,
+      "get_states_success": true,
+      "service_allowed_error": null,
+      "service_allowed_success": true,
+      "service_forbidden_error": {
+        "code": "home_assistant_error",
+        "message": "Unauthorized"
+      },
+      "service_forbidden_success": false,
+      "tested": true
+    },
+    "ws_tested": true
   },
   "d6_service_matrix": {
+    "documented_enforce_gaps": [
+      "system_context_user_id_none",
+      "non_entity_service"
+    ],
+    "entity_id_all_after": {
+      "input_boolean.tessera_allowed_light": "off",
+      "input_boolean.tessera_forbidden_light": "on"
+    },
+    "entity_id_all_before": {
+      "input_boolean.tessera_allowed_light": "on",
+      "input_boolean.tessera_forbidden_light": "on"
+    },
     "entity_id_all_status": 200,
     "entity_service_allowed_status": 200,
     "entity_service_forbidden_status": 401,
-    "non_entity_service_tested": false,
-    "return_response_changed_states_tested": false,
-    "tested": true
+    "entity_targeted_pass": true,
+    "non_entity_service": {
+      "body": {
+        "body_type": "dict",
+        "keys": [
+          "changed_states",
+          "service_response"
+        ]
+      },
+      "service": "tessera_spike.snapshot",
+      "status": 200,
+      "verdict": "ENFORCE_BYPASS"
+    },
+    "non_entity_service_tested": true,
+    "return_response_body": {
+      "body_type": "dict",
+      "keys": [
+        "message"
+      ]
+    },
+    "return_response_changed_states_tested": true,
+    "return_response_status": 400,
+    "system_context": {
+      "after_state": "on",
+      "before_state": "off",
+      "changed": true,
+      "context_user_id": null,
+      "entity_id": "input_boolean.tessera_forbidden_light",
+      "error": null,
+      "not_tested_contexts": [
+        "automation",
+        "script",
+        "assist"
+      ],
+      "service": "input_boolean.turn_on",
+      "tested": true,
+      "verdict": "ENFORCE_BYPASS"
+    },
+    "tested": true,
+    "ws_service_allowed_success": true,
+    "ws_service_forbidden_success": false,
+    "ws_service_response_tested": true
   },
   "d7_leak_matrix": {
-    "history_tested": false,
-    "logbook_rest_tested": false,
-    "registry_ws_tested": false,
-    "render_template_body_type": "dict",
-    "render_template_status": 401,
-    "tested": true
+    "complete_matrix": false,
+    "history_tested": true,
+    "leaks": [
+      {
+        "allowed_entity_seen": true,
+        "baseline_present": true,
+        "body": {
+          "body_type": "list",
+          "entity_ids": [
+            "binary_sensor.sun_solar_rising",
+            "camera.tessera_seed_hidden_camera",
+            "cover.tessera_seed_allowed_cover",
+            "event.backup_automatic_backup",
+            "input_boolean.tessera_allowed_light",
+            "input_boolean.tessera_forbidden_light",
+            "light.tessera_seed_allowed_light",
+            "lock.tessera_seed_disabled_lock",
+            "person.test_owner",
+            "sensor.backup_backup_manager_state",
+            "sensor.backup_last_attempted_automatic_backup",
+            "sensor.backup_last_successful_automatic_backup",
+            "sensor.backup_next_scheduled_automatic_backup",
+            "sensor.sun_next_dawn",
+            "sensor.sun_next_dusk",
+            "sensor.sun_next_midnight",
+            "sensor.sun_next_noon",
+            "sensor.sun_next_rising",
+            "sensor.sun_next_setting",
+            "sensor.sun_solar_azimuth",
+            "sensor.sun_solar_elevation",
+            "sensor.tessera_seed_forbidden_sensor",
+            "todo.shopping_list",
+            "tts.google_translate_en_com"
+          ],
+          "entity_ids_truncated": false,
+          "items": 24
+        },
+        "error": null,
+        "forbidden_entity_seen": true,
+        "leak_hint": true,
+        "status": "ok",
+        "transport": "ws",
+        "vector": "config/entity_registry/list",
+        "verdict": "LEAK"
+      },
+      {
+        "allowed_entity_seen": false,
+        "baseline_present": true,
+        "body": {
+          "body_type": "list",
+          "items": 4
+        },
+        "error": null,
+        "forbidden_entity_seen": false,
+        "leak_hint": true,
+        "status": "ok",
+        "transport": "ws",
+        "vector": "config/device_registry/list",
+        "verdict": "LEAK"
+      },
+      {
+        "allowed_entity_seen": false,
+        "baseline_present": true,
+        "body": {
+          "body_type": "list",
+          "items": 5
+        },
+        "error": null,
+        "forbidden_entity_seen": false,
+        "leak_hint": true,
+        "status": "ok",
+        "transport": "ws",
+        "vector": "config/area_registry/list",
+        "verdict": "LEAK"
+      },
+      {
+        "allowed_entity_seen": false,
+        "baseline_present": true,
+        "body": {
+          "body_type": "dict",
+          "keys": [
+            "event_keys",
+            "event_received"
+          ]
+        },
+        "error": null,
+        "forbidden_entity_seen": false,
+        "leak_hint": true,
+        "status": "ok",
+        "transport": "ws",
+        "vector": "render_template",
+        "verdict": "LEAK"
+      }
+    ],
+    "logbook_rest_tested": true,
+    "matrix": [
+      {
+        "allowed_entity_seen": false,
+        "baseline_present": true,
+        "body": {
+          "body_type": "dict",
+          "keys": [
+            "raw"
+          ]
+        },
+        "error": null,
+        "forbidden_entity_seen": false,
+        "leak_hint": false,
+        "status": 401,
+        "transport": "rest",
+        "vector": "/api/template",
+        "verdict": "BLOCKED"
+      },
+      {
+        "allowed_entity_seen": false,
+        "baseline_present": false,
+        "body": {
+          "body_type": "list",
+          "items": 0
+        },
+        "error": null,
+        "forbidden_entity_seen": false,
+        "leak_hint": false,
+        "status": 200,
+        "transport": "rest",
+        "vector": "/api/logbook",
+        "verdict": "NOT_VERIFIABLE"
+      },
+      {
+        "allowed_entity_seen": false,
+        "baseline_present": true,
+        "body": {
+          "body_type": "list",
+          "items": 0
+        },
+        "error": null,
+        "forbidden_entity_seen": false,
+        "leak_hint": false,
+        "status": 200,
+        "transport": "rest",
+        "vector": "/api/history/period",
+        "verdict": "ALLOW"
+      },
+      {
+        "allowed_entity_seen": true,
+        "baseline_present": true,
+        "body": {
+          "body_type": "list",
+          "entity_ids": [
+            "binary_sensor.sun_solar_rising",
+            "camera.tessera_seed_hidden_camera",
+            "cover.tessera_seed_allowed_cover",
+            "event.backup_automatic_backup",
+            "input_boolean.tessera_allowed_light",
+            "input_boolean.tessera_forbidden_light",
+            "light.tessera_seed_allowed_light",
+            "lock.tessera_seed_disabled_lock",
+            "person.test_owner",
+            "sensor.backup_backup_manager_state",
+            "sensor.backup_last_attempted_automatic_backup",
+            "sensor.backup_last_successful_automatic_backup",
+            "sensor.backup_next_scheduled_automatic_backup",
+            "sensor.sun_next_dawn",
+            "sensor.sun_next_dusk",
+            "sensor.sun_next_midnight",
+            "sensor.sun_next_noon",
+            "sensor.sun_next_rising",
+            "sensor.sun_next_setting",
+            "sensor.sun_solar_azimuth",
+            "sensor.sun_solar_elevation",
+            "sensor.tessera_seed_forbidden_sensor",
+            "todo.shopping_list",
+            "tts.google_translate_en_com"
+          ],
+          "entity_ids_truncated": false,
+          "items": 24
+        },
+        "error": null,
+        "forbidden_entity_seen": true,
+        "leak_hint": true,
+        "status": "ok",
+        "transport": "ws",
+        "vector": "config/entity_registry/list",
+        "verdict": "LEAK"
+      },
+      {
+        "allowed_entity_seen": false,
+        "baseline_present": true,
+        "body": {
+          "body_type": "list",
+          "items": 4
+        },
+        "error": null,
+        "forbidden_entity_seen": false,
+        "leak_hint": true,
+        "status": "ok",
+        "transport": "ws",
+        "vector": "config/device_registry/list",
+        "verdict": "LEAK"
+      },
+      {
+        "allowed_entity_seen": false,
+        "baseline_present": true,
+        "body": {
+          "body_type": "list",
+          "items": 5
+        },
+        "error": null,
+        "forbidden_entity_seen": false,
+        "leak_hint": true,
+        "status": "ok",
+        "transport": "ws",
+        "vector": "config/area_registry/list",
+        "verdict": "LEAK"
+      },
+      {
+        "allowed_entity_seen": false,
+        "baseline_present": false,
+        "body": {
+          "body_type": "list",
+          "items": 0
+        },
+        "error": null,
+        "forbidden_entity_seen": false,
+        "leak_hint": false,
+        "status": "ok",
+        "transport": "ws",
+        "vector": "config/floor_registry/list",
+        "verdict": "NOT_VERIFIABLE"
+      },
+      {
+        "allowed_entity_seen": false,
+        "baseline_present": false,
+        "body": {
+          "body_type": "list",
+          "items": 0
+        },
+        "error": null,
+        "forbidden_entity_seen": false,
+        "leak_hint": false,
+        "status": "ok",
+        "transport": "ws",
+        "vector": "config/label_registry/list",
+        "verdict": "NOT_VERIFIABLE"
+      },
+      {
+        "allowed_entity_seen": false,
+        "baseline_present": false,
+        "body": {
+          "body_type": "list",
+          "items": 0
+        },
+        "error": null,
+        "forbidden_entity_seen": false,
+        "leak_hint": false,
+        "status": "ok",
+        "transport": "ws",
+        "vector": "config/category_registry/list",
+        "verdict": "NOT_VERIFIABLE"
+      },
+      {
+        "allowed_entity_seen": false,
+        "baseline_present": false,
+        "body": {
+          "body_type": "dict",
+          "keys": []
+        },
+        "error": null,
+        "forbidden_entity_seen": false,
+        "leak_hint": false,
+        "status": "ok",
+        "transport": "ws",
+        "vector": "history/history_during_period",
+        "verdict": "NOT_VERIFIABLE"
+      },
+      {
+        "allowed_entity_seen": false,
+        "baseline_present": false,
+        "body": {
+          "body_type": "list",
+          "items": 0
+        },
+        "error": null,
+        "forbidden_entity_seen": false,
+        "leak_hint": false,
+        "status": "ok",
+        "transport": "ws",
+        "vector": "logbook/get_events",
+        "verdict": "NOT_VERIFIABLE"
+      },
+      {
+        "allowed_entity_seen": false,
+        "baseline_present": true,
+        "body": {
+          "body_type": "dict",
+          "keys": [
+            "event_keys",
+            "event_received"
+          ]
+        },
+        "error": null,
+        "forbidden_entity_seen": false,
+        "leak_hint": true,
+        "status": "ok",
+        "transport": "ws",
+        "vector": "render_template",
+        "verdict": "LEAK"
+      }
+    ],
+    "not_verifiable": [
+      {
+        "allowed_entity_seen": false,
+        "baseline_present": false,
+        "body": {
+          "body_type": "list",
+          "items": 0
+        },
+        "error": null,
+        "forbidden_entity_seen": false,
+        "leak_hint": false,
+        "status": 200,
+        "transport": "rest",
+        "vector": "/api/logbook",
+        "verdict": "NOT_VERIFIABLE"
+      },
+      {
+        "allowed_entity_seen": false,
+        "baseline_present": false,
+        "body": {
+          "body_type": "list",
+          "items": 0
+        },
+        "error": null,
+        "forbidden_entity_seen": false,
+        "leak_hint": false,
+        "status": "ok",
+        "transport": "ws",
+        "vector": "config/floor_registry/list",
+        "verdict": "NOT_VERIFIABLE"
+      },
+      {
+        "allowed_entity_seen": false,
+        "baseline_present": false,
+        "body": {
+          "body_type": "list",
+          "items": 0
+        },
+        "error": null,
+        "forbidden_entity_seen": false,
+        "leak_hint": false,
+        "status": "ok",
+        "transport": "ws",
+        "vector": "config/label_registry/list",
+        "verdict": "NOT_VERIFIABLE"
+      },
+      {
+        "allowed_entity_seen": false,
+        "baseline_present": false,
+        "body": {
+          "body_type": "list",
+          "items": 0
+        },
+        "error": null,
+        "forbidden_entity_seen": false,
+        "leak_hint": false,
+        "status": "ok",
+        "transport": "ws",
+        "vector": "config/category_registry/list",
+        "verdict": "NOT_VERIFIABLE"
+      },
+      {
+        "allowed_entity_seen": false,
+        "baseline_present": false,
+        "body": {
+          "body_type": "dict",
+          "keys": []
+        },
+        "error": null,
+        "forbidden_entity_seen": false,
+        "leak_hint": false,
+        "status": "ok",
+        "transport": "ws",
+        "vector": "history/history_during_period",
+        "verdict": "NOT_VERIFIABLE"
+      },
+      {
+        "allowed_entity_seen": false,
+        "baseline_present": false,
+        "body": {
+          "body_type": "list",
+          "items": 0
+        },
+        "error": null,
+        "forbidden_entity_seen": false,
+        "leak_hint": false,
+        "status": "ok",
+        "transport": "ws",
+        "vector": "logbook/get_events",
+        "verdict": "NOT_VERIFIABLE"
+      }
+    ],
+    "registry_ws_tested": true,
+    "tested": true,
+    "vectors": [
+      "/api/history/period",
+      "/api/logbook",
+      "/api/template",
+      "config/area_registry/list",
+      "config/category_registry/list",
+      "config/device_registry/list",
+      "config/entity_registry/list",
+      "config/floor_registry/list",
+      "config/label_registry/list",
+      "history/history_during_period",
+      "logbook/get_events",
+      "render_template"
+    ]
   },
   "d8_headless_token": {
-    "llat_created": false,
+    "llat_allowed_in_state_list": true,
+    "llat_created": true,
+    "llat_forbidden_in_state_list": false,
+    "llat_service_allowed_status": 200,
+    "llat_service_forbidden_status": 401,
+    "llat_token_type": "long_lived_access_token",
+    "llat_values_redacted": true,
+    "matches_ui_path": true,
     "normal_headless_access_token_probe": true,
+    "post_revoke_status": 401,
     "refresh_token_revoked_after_probe": true,
+    "revocation_effective": true,
     "tested": true
   }
 }
 ```
+
+Welle-C-Lesart: `D6.entity_targeted_pass` bewertet nur die nativen entity-targeted Service-Pfade. `non_entity_service` und `system_context` sind absichtlich als dokumentierte Enforce-Luecken sichtbar; sie duerfen kein stilles PASS fuer untrusted-view/control erzeugen. `D7` ist eine Dokumentationsmatrix: `LEAK`-Zellen sind kein Messfehler, sondern Scope-Grenzen fuer harte View-Vertraulichkeit.
 
 ## D9 Static Custom-Component Scan
 
@@ -580,7 +1067,7 @@ Restart-Survival:
 
 - **Go fuer weitere Phase-0-Haertung:** ja.
 - **Go fuer Tessera-Enforce/Product:** nein.
-- **Naechste Pflicht:** WS-Testmatrix, echter LLAT-Lifecycle, Boot-Rescue mit absichtlich korruptem Tessera-Store, non-entity/custom service classification runtime, unsupported-version gate, D10/CM5-Benchmark und D12/OIDC gesondert.
+- **Naechste Pflicht:** Boot-Rescue mit absichtlich korruptem Tessera-Store, D9 non-entity/custom service classification runtime, unsupported-version gate, D10/CM5-Benchmark und D12/OIDC gesondert.
 
 ## Artefakte
 

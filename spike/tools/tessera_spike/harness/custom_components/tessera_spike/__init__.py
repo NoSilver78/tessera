@@ -4,19 +4,22 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
 import voluptuous as vol
 
 from homeassistant.auth import models
+from homeassistant.auth.models import TOKEN_TYPE_LONG_LIVED_ACCESS_TOKEN
 from homeassistant.auth.const import GROUP_ID_ADMIN, GROUP_ID_READ_ONLY, GROUP_ID_USER
 from homeassistant.auth.permissions.const import (
     CAT_ENTITIES,
     POLICY_CONTROL,
     POLICY_READ,
 )
-from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
+from homeassistant.const import ATTR_ENTITY_ID
+from homeassistant.core import Context, HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.helpers import aiohttp_client
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
@@ -171,6 +174,419 @@ async def _http_json(
         except json.JSONDecodeError:
             body = {"raw": text[:200]}
         return {"status": resp.status, "body_type": type(body).__name__, "body": body}
+
+
+def _entity_ids_from_body(body: Any) -> set[str]:
+    """Collect entity_id strings from already sanitized HA response objects."""
+    found: set[str] = set()
+    if isinstance(body, dict):
+        value = body.get("entity_id")
+        if isinstance(value, str):
+            found.add(value)
+        for child in body.values():
+            found.update(_entity_ids_from_body(child))
+    elif isinstance(body, list):
+        for child in body:
+            found.update(_entity_ids_from_body(child))
+    return found
+
+
+def _body_summary(body: Any) -> dict[str, Any]:
+    """Summarize response shape without persisting values beyond entity ids."""
+    summary: dict[str, Any] = {"body_type": type(body).__name__}
+    if isinstance(body, dict):
+        summary["keys"] = sorted(str(key) for key in body)
+    elif isinstance(body, list):
+        summary["items"] = len(body)
+    entity_ids = sorted(_entity_ids_from_body(body))
+    if entity_ids:
+        summary["entity_ids"] = entity_ids[:50]
+        summary["entity_ids_truncated"] = len(entity_ids) > 50
+    return summary
+
+
+def _matrix_cell(
+    *,
+    transport: str,
+    vector: str,
+    status: int | str | None,
+    body: Any = None,
+    error: str | None = None,
+    tested: bool = True,
+    leak_hint: bool = False,
+    baseline_present: bool | None = None,
+) -> dict[str, Any]:
+    """Return one leak/enforcement matrix cell with a conservative verdict."""
+    entity_ids = _entity_ids_from_body(body)
+    forbidden_seen = FORBIDDEN_ENTITY in entity_ids
+    allowed_seen = ALLOWED_ENTITY in entity_ids
+    if not tested:
+        verdict = "NOT_TESTED"
+    elif error:
+        verdict = "ERROR"
+    elif forbidden_seen or leak_hint:
+        verdict = "LEAK"
+    elif baseline_present is False:
+        verdict = "NOT_VERIFIABLE"
+    elif status in (401, 403, 404) or status == "blocked":
+        verdict = "BLOCKED"
+    else:
+        verdict = "ALLOW"
+    return {
+        "transport": transport,
+        "vector": vector,
+        "status": status,
+        "verdict": verdict,
+        "allowed_entity_seen": allowed_seen,
+        "forbidden_entity_seen": forbidden_seen,
+        "leak_hint": leak_hint,
+        "baseline_present": baseline_present,
+        "body": _body_summary(body),
+        "error": error,
+    }
+
+
+async def _ws_roundtrip(
+    hass: HomeAssistant, access_token: str, commands: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Run Home Assistant WebSocket commands and return token-free results."""
+    session = aiohttp_client.async_get_clientsession(hass)
+    results: list[dict[str, Any]] = []
+    async with session.ws_connect("http://127.0.0.1:8123/api/websocket") as ws:
+        await ws.receive_json()
+        await ws.send_json({"type": "auth", "access_token": access_token})
+        auth = await ws.receive_json()
+        if auth.get("type") != "auth_ok":
+            return [
+                {
+                    "command_type": command.get("type"),
+                    "success": False,
+                    "error": "websocket_auth_failed",
+                }
+                for command in commands
+            ]
+        for idx, command in enumerate(commands, start=1):
+            payload = {"id": idx, **command}
+            await ws.send_json(payload)
+            while True:
+                msg = await ws.receive_json(timeout=20)
+                if msg.get("id") == idx:
+                    break
+            results.append(
+                {
+                    "command_type": command.get("type"),
+                    "success": msg.get("success"),
+                    "message_type": msg.get("type"),
+                    "error": msg.get("error"),
+                    "result": msg.get("result"),
+                }
+            )
+    return results
+
+
+async def _probe_d3_ws(
+    hass: HomeAssistant, access_token: str
+) -> dict[str, Any]:
+    """Measure read/control consistency through Home Assistant WebSocket."""
+    commands = [
+        {"type": "get_states"},
+        {
+            "type": "call_service",
+            "domain": "input_boolean",
+            "service": "turn_on",
+            "target": {"entity_id": ALLOWED_ENTITY},
+        },
+        {
+            "type": "call_service",
+            "domain": "input_boolean",
+            "service": "turn_on",
+            "target": {"entity_id": FORBIDDEN_ENTITY},
+        },
+    ]
+    get_states, allowed_service, forbidden_service = await _ws_roundtrip(
+        hass, access_token, commands
+    )
+    state_entities = _entity_ids_from_body(get_states.get("result"))
+    return {
+        "tested": True,
+        "get_states_success": get_states.get("success"),
+        "allowed_in_state_list": ALLOWED_ENTITY in state_entities,
+        "forbidden_in_state_list": FORBIDDEN_ENTITY in state_entities,
+        "service_allowed_success": allowed_service.get("success"),
+        "service_allowed_error": allowed_service.get("error"),
+        "service_forbidden_success": forbidden_service.get("success"),
+        "service_forbidden_error": forbidden_service.get("error"),
+    }
+
+
+async def _probe_d7_ws_matrix(
+    hass: HomeAssistant,
+    access_token: str,
+    *,
+    admin_access_token: str | None = None,
+) -> list[dict[str, Any]]:
+    """Measure known read/leak vectors reachable through WebSocket."""
+    now = "2026-06-29T00:00:00+00:00"
+    commands = [
+        {"type": "config/entity_registry/list"},
+        {"type": "config/device_registry/list"},
+        {"type": "config/area_registry/list"},
+        {"type": "config/floor_registry/list"},
+        {"type": "config/label_registry/list"},
+        {"type": "config/category_registry/list", "scope": "entity"},
+        {
+            "type": "history/history_during_period",
+            "start_time": now,
+            "entity_ids": [FORBIDDEN_ENTITY],
+            "minimal_response": True,
+            "no_attributes": True,
+        },
+        {
+            "type": "logbook/get_events",
+            "start_time": now,
+            "end_time": "2026-06-29T23:59:59+00:00",
+            "entity_ids": [FORBIDDEN_ENTITY],
+        },
+    ]
+    admin_responses = (
+        await _ws_roundtrip(hass, admin_access_token, commands)
+        if admin_access_token is not None
+        else []
+    )
+    responses = await _ws_roundtrip(hass, access_token, commands)
+    cells: list[dict[str, Any]] = []
+    for index, (command, response) in enumerate(zip(commands, responses, strict=True)):
+        admin_result = (
+            admin_responses[index].get("result")
+            if index < len(admin_responses)
+            else None
+        )
+        vector = str(command["type"])
+        baseline_present = None
+        leak_hint = False
+        if vector.startswith("config/"):
+            baseline_present = bool(admin_result)
+            leak_hint = bool(response.get("result"))
+        elif "history" in vector or "logbook" in vector:
+            baseline_present = bool(_entity_ids_from_body(admin_result))
+            leak_hint = FORBIDDEN_ENTITY in _entity_ids_from_body(
+                response.get("result")
+            )
+        cells.append(
+            _matrix_cell(
+                transport="ws",
+                vector=vector,
+                status="ok" if response.get("success") else "blocked",
+                body=response.get("result"),
+                error=(
+                    str(response.get("error")) if not response.get("success") else None
+                ),
+                leak_hint=leak_hint,
+                baseline_present=baseline_present,
+            )
+        )
+    return cells
+
+
+async def _probe_ws_render_template(
+    hass: HomeAssistant, access_token: str, *, admin_access_token: str | None = None
+) -> dict[str, Any]:
+    """Measure the WebSocket render_template leak vector without storing values."""
+
+    async def _run(token: str) -> dict[str, Any]:
+        session = aiohttp_client.async_get_clientsession(hass)
+        async with session.ws_connect("http://127.0.0.1:8123/api/websocket") as ws:
+            await ws.receive_json()
+            await ws.send_json({"type": "auth", "access_token": token})
+            auth = await ws.receive_json()
+            if auth.get("type") != "auth_ok":
+                return {"success": False, "error": "websocket_auth_failed"}
+            await ws.send_json(
+                {
+                    "id": 1,
+                    "type": "render_template",
+                    "template": "{{ states('input_boolean.tessera_forbidden_light') }}",
+                }
+            )
+            initial = await ws.receive_json(timeout=20)
+            event: dict[str, Any] | None = None
+            if initial.get("success"):
+                event = await ws.receive_json(timeout=20)
+                await ws.send_json({"id": 2, "type": "unsubscribe_events", "subscription": 1})
+                await ws.receive_json(timeout=20)
+            return {
+                "success": initial.get("success"),
+                "error": initial.get("error"),
+                "event_received": event is not None,
+                "event_keys": sorted(event.keys()) if isinstance(event, dict) else [],
+                "result_present": (
+                    isinstance(event, dict)
+                    and isinstance(event.get("event"), dict)
+                    and event["event"].get("result") not in (None, "")
+                ),
+            }
+
+    result = await _run(access_token)
+    admin_result = await _run(admin_access_token) if admin_access_token is not None else {}
+    return _matrix_cell(
+        transport="ws",
+        vector="render_template",
+        status="ok" if result.get("success") else "blocked",
+        body={
+            "event_received": result.get("event_received"),
+            "event_keys": result.get("event_keys", []),
+        },
+        error=str(result.get("error")) if not result.get("success") else None,
+        leak_hint=result.get("result_present") is True,
+        baseline_present=admin_result.get("result_present")
+        if admin_access_token is not None
+        else None,
+    )
+
+
+async def _probe_d6_system_context(hass: HomeAssistant) -> dict[str, Any]:
+    """Measure whether service calls with user_id=None bypass entity checks."""
+    await hass.services.async_call(
+        "input_boolean",
+        "turn_off",
+        {ATTR_ENTITY_ID: FORBIDDEN_ENTITY},
+        blocking=True,
+    )
+    before = hass.states.get(FORBIDDEN_ENTITY)
+    before_state = before.state if before is not None else None
+    try:
+        await hass.services.async_call(
+            "input_boolean",
+            "turn_on",
+            {"entity_id": FORBIDDEN_ENTITY},
+            blocking=True,
+            context=Context(user_id=None),
+        )
+        error = None
+    except Exception as err:  # pragma: no cover - spike evidence path
+        error = type(err).__name__
+    after = hass.states.get(FORBIDDEN_ENTITY)
+    after_state = after.state if after is not None else None
+    return {
+        "tested": True,
+        "context_user_id": None,
+        "service": "input_boolean.turn_on",
+        "entity_id": FORBIDDEN_ENTITY,
+        "before_state": before_state,
+        "after_state": after_state,
+        "changed": before_state != after_state,
+        "error": error,
+        "verdict": (
+            "ENFORCE_BYPASS"
+            if error is None and before_state != after_state
+            else "NO_EFFECT"
+            if error is None
+            else "BLOCKED"
+        ),
+        "not_tested_contexts": ["automation", "script", "assist"],
+    }
+
+
+async def _probe_d7_rest_matrix(
+    hass: HomeAssistant,
+    access_token: str,
+    *,
+    admin_access_token: str | None = None,
+) -> list[dict[str, Any]]:
+    """Measure known read/leak vectors reachable through REST."""
+    template = await _http_json(
+        hass,
+        "POST",
+        "/api/template",
+        access_token,
+        {"template": "{{ states('input_boolean.tessera_forbidden_light') }}"},
+    )
+    logbook = await _http_json(
+        hass,
+        "GET",
+        f"/api/logbook?entity={FORBIDDEN_ENTITY}",
+        access_token,
+    )
+    history = await _http_json(
+        hass,
+        "GET",
+        f"/api/history/period?filter_entity_id={FORBIDDEN_ENTITY}&minimal_response",
+        access_token,
+    )
+    admin_template = (
+        await _http_json(
+            hass,
+            "POST",
+            "/api/template",
+            admin_access_token,
+            {"template": "{{ states('input_boolean.tessera_forbidden_light') }}"},
+        )
+        if admin_access_token is not None
+        else {"body": None}
+    )
+    admin_logbook = (
+        await _http_json(
+            hass,
+            "GET",
+            f"/api/logbook?entity={FORBIDDEN_ENTITY}",
+            admin_access_token,
+        )
+        if admin_access_token is not None
+        else {"body": None}
+    )
+    admin_history = (
+        await _http_json(
+            hass,
+            "GET",
+            f"/api/history/period?filter_entity_id={FORBIDDEN_ENTITY}&minimal_response",
+            admin_access_token,
+        )
+        if admin_access_token is not None
+        else {"body": None}
+    )
+    return [
+        _matrix_cell(
+            transport="rest",
+            vector="/api/template",
+            status=template["status"],
+            body=template.get("body"),
+            leak_hint=template["status"] == 200 and template.get("body") not in (None, ""),
+            baseline_present=admin_template.get("body") not in (None, ""),
+        ),
+        _matrix_cell(
+            transport="rest",
+            vector="/api/logbook",
+            status=logbook["status"],
+            body=logbook.get("body"),
+            leak_hint=FORBIDDEN_ENTITY in _entity_ids_from_body(logbook.get("body")),
+            baseline_present=FORBIDDEN_ENTITY
+            in _entity_ids_from_body(admin_logbook.get("body")),
+        ),
+        _matrix_cell(
+            transport="rest",
+            vector="/api/history/period",
+            status=history["status"],
+            body=history.get("body"),
+            leak_hint=FORBIDDEN_ENTITY in _entity_ids_from_body(history.get("body")),
+            baseline_present=FORBIDDEN_ENTITY
+            in _entity_ids_from_body(admin_history.get("body")),
+        ),
+    ]
+
+
+async def _make_llat_access_token(
+    hass: HomeAssistant, user: models.User, client_name: str
+) -> tuple[str, models.RefreshToken]:
+    """Create a real HA long-lived token object and an access token for it."""
+    token = await hass.auth.async_create_refresh_token(
+        user,
+        client_id="http://localhost:8124/",
+        client_name=client_name,
+        token_type=TOKEN_TYPE_LONG_LIVED_ACCESS_TOKEN,
+        access_token_expiration=timedelta(days=3650),
+    )
+    access_token = hass.auth.async_create_access_token(token, "127.0.0.1")
+    return access_token, token
 
 
 def _status(verdict: str, evidence: dict[str, Any]) -> dict[str, Any]:
@@ -780,6 +1196,7 @@ async def _phase_post_restart(hass: HomeAssistant) -> dict[str, Any]:
     state = await _read_json(hass, STATE_PATH)
     rescue_result = await _read_json(hass, RESCUE_RESULT_PATH)
     test_user = await _find_user(hass, TEST_USER_NAME)
+    admin_user = await _find_user(hass, TEST_ADMIN_NAME)
     d2_user = await _find_user(hass, TEST_D2_USER_NAME)
     group = await hass.auth.async_get_group(GROUP_ID)
 
@@ -800,6 +1217,25 @@ async def _phase_post_restart(hass: HomeAssistant) -> dict[str, Any]:
     if test_user is not None:
         access_token, refresh_token = await _make_access_token(
             hass, test_user, "tessera-spike-headless"
+        )
+        admin_access_token: str | None = None
+        admin_refresh_token: models.RefreshToken | None = None
+        if admin_user is not None:
+            admin_access_token, admin_refresh_token = await _make_access_token(
+                hass, admin_user, "tessera-spike-admin-baseline"
+            )
+        await hass.services.async_call(
+            "input_boolean",
+            "turn_off",
+            {ATTR_ENTITY_ID: [ALLOWED_ENTITY, FORBIDDEN_ENTITY]},
+            blocking=True,
+        )
+        await hass.services.async_call(
+            "input_boolean",
+            "turn_on",
+            {ATTR_ENTITY_ID: FORBIDDEN_ENTITY},
+            blocking=True,
+            context=Context(user_id=None),
         )
         states = await _http_json(hass, "GET", "/api/states", access_token)
         state_entities: list[str] = []
@@ -829,6 +1265,8 @@ async def _phase_post_restart(hass: HomeAssistant) -> dict[str, Any]:
             access_token,
             {"entity_id": FORBIDDEN_ENTITY},
         )
+        before_all_allowed = hass.states.get(ALLOWED_ENTITY)
+        before_all_forbidden = hass.states.get(FORBIDDEN_ENTITY)
         all_service = await _http_json(
             hass,
             "POST",
@@ -836,12 +1274,58 @@ async def _phase_post_restart(hass: HomeAssistant) -> dict[str, Any]:
             access_token,
             {"entity_id": "all"},
         )
-        template = await _http_json(
+        after_all_allowed = hass.states.get(ALLOWED_ENTITY)
+        after_all_forbidden = hass.states.get(FORBIDDEN_ENTITY)
+        response_service = await _http_json(
             hass,
             "POST",
-            "/api/template",
+            "/api/services/input_boolean/turn_on?return_response",
             access_token,
-            {"template": "{{ states('input_boolean.tessera_forbidden_light') }}"},
+            {"entity_id": ALLOWED_ENTITY},
+        )
+        non_entity_service = await _http_json(
+            hass,
+            "POST",
+            "/api/services/tessera_spike/snapshot?return_response",
+            access_token,
+            {},
+        )
+        d3_ws = await _probe_d3_ws(hass, access_token)
+        d7_rest_matrix = await _probe_d7_rest_matrix(
+            hass, access_token, admin_access_token=admin_access_token
+        )
+        d7_ws_matrix = await _probe_d7_ws_matrix(
+            hass, access_token, admin_access_token=admin_access_token
+        )
+        d7_ws_template = await _probe_ws_render_template(
+            hass, access_token, admin_access_token=admin_access_token
+        )
+        d7_ws_matrix.append(d7_ws_template)
+        d6_system_context = await _probe_d6_system_context(hass)
+        llat_access_token, llat_refresh_token = await _make_llat_access_token(
+            hass, test_user, "tessera-spike-real-llat"
+        )
+        llat_states_before_revoke = await _http_json(
+            hass, "GET", "/api/states", llat_access_token
+        )
+        llat_state_entities = _entity_ids_from_body(llat_states_before_revoke.get("body"))
+        llat_allowed_service = await _http_json(
+            hass,
+            "POST",
+            "/api/services/input_boolean/turn_on",
+            llat_access_token,
+            {"entity_id": ALLOWED_ENTITY},
+        )
+        llat_forbidden_service = await _http_json(
+            hass,
+            "POST",
+            "/api/services/input_boolean/turn_on",
+            llat_access_token,
+            {"entity_id": FORBIDDEN_ENTITY},
+        )
+        hass.auth.async_remove_refresh_token(llat_refresh_token)
+        llat_after_revoke = await _http_json(
+            hass, "GET", "/api/states", llat_access_token
         )
 
         d3_rest = {
@@ -853,31 +1337,134 @@ async def _phase_post_restart(hass: HomeAssistant) -> dict[str, Any]:
             "forbidden_single_status": forbidden_state["status"],
             "service_allowed_status": allowed_service["status"],
             "service_forbidden_status": forbidden_service["status"],
-            "ws_tested": False,
+            "ws_tested": d3_ws.get("tested") is True,
+            "ws": d3_ws,
+            "consistent_entity_targeted": (
+                states["status"] == 200
+                and ALLOWED_ENTITY in state_entities
+                and FORBIDDEN_ENTITY not in state_entities
+                and allowed_state["status"] == 200
+                and forbidden_state["status"] in (401, 403, 404)
+                and allowed_service["status"] == 200
+                and forbidden_service["status"] in (401, 403, 404)
+                and d3_ws.get("allowed_in_state_list") is True
+                and d3_ws.get("forbidden_in_state_list") is False
+                and d3_ws.get("service_allowed_success") is True
+                and d3_ws.get("service_forbidden_success") is False
+            ),
         }
         d6_services = {
             "tested": True,
             "entity_service_allowed_status": allowed_service["status"],
             "entity_service_forbidden_status": forbidden_service["status"],
             "entity_id_all_status": all_service["status"],
-            "return_response_changed_states_tested": False,
-            "non_entity_service_tested": False,
+            "entity_id_all_before": {
+                ALLOWED_ENTITY: before_all_allowed.state
+                if before_all_allowed is not None
+                else None,
+                FORBIDDEN_ENTITY: before_all_forbidden.state
+                if before_all_forbidden is not None
+                else None,
+            },
+            "entity_id_all_after": {
+                ALLOWED_ENTITY: after_all_allowed.state
+                if after_all_allowed is not None
+                else None,
+                FORBIDDEN_ENTITY: after_all_forbidden.state
+                if after_all_forbidden is not None
+                else None,
+            },
+            "return_response_changed_states_tested": True,
+            "return_response_status": response_service["status"],
+            "return_response_body": _body_summary(response_service.get("body")),
+            "non_entity_service_tested": True,
+            "non_entity_service": {
+                "service": "tessera_spike.snapshot",
+                "status": non_entity_service["status"],
+                "body": _body_summary(non_entity_service.get("body")),
+                "verdict": "ENFORCE_BYPASS"
+                if non_entity_service["status"] == 200
+                else "BLOCKED",
+            },
+            "ws_service_response_tested": True,
+            "ws_service_allowed_success": d3_ws.get("service_allowed_success"),
+            "ws_service_forbidden_success": d3_ws.get("service_forbidden_success"),
+            "system_context": d6_system_context,
+            "entity_targeted_pass": (
+                allowed_service["status"] == 200
+                and forbidden_service["status"] in (401, 403, 404)
+                and d3_ws.get("service_allowed_success") is True
+                and d3_ws.get("service_forbidden_success") is False
+            ),
+            "documented_enforce_gaps": [
+                "system_context_user_id_none"
+                if d6_system_context.get("verdict") == "ENFORCE_BYPASS"
+                else None,
+                "non_entity_service"
+                if non_entity_service["status"] == 200
+                else None,
+            ],
         }
+        d6_services["documented_enforce_gaps"] = [
+            item for item in d6_services["documented_enforce_gaps"] if item
+        ]
         d7_leaks = {
             "tested": True,
-            "render_template_status": template["status"],
-            "render_template_body_type": template["body_type"],
-            "logbook_rest_tested": False,
-            "registry_ws_tested": False,
-            "history_tested": False,
+            "matrix": [*d7_rest_matrix, *d7_ws_matrix],
+            "logbook_rest_tested": any(
+                cell["vector"] == "/api/logbook" for cell in d7_rest_matrix
+            ),
+            "registry_ws_tested": any(
+                str(cell["vector"]).startswith("config/")
+                for cell in d7_ws_matrix
+            ),
+            "history_tested": any(
+                "history" in str(cell["vector"])
+                for cell in [*d7_rest_matrix, *d7_ws_matrix]
+            ),
+            "vectors": sorted(
+                str(cell["vector"]) for cell in [*d7_rest_matrix, *d7_ws_matrix]
+            ),
+            "leaks": [
+                cell
+                for cell in [*d7_rest_matrix, *d7_ws_matrix]
+                if cell["verdict"] == "LEAK"
+            ],
+            "complete_matrix": len(d7_rest_matrix) == 3
+            and len(d7_ws_matrix) == 9
+            and all(
+                cell["verdict"] not in {"ERROR", "NOT_TESTED", "NOT_VERIFIABLE"}
+                for cell in [*d7_rest_matrix, *d7_ws_matrix]
+            ),
+            "not_verifiable": [
+                cell
+                for cell in [*d7_rest_matrix, *d7_ws_matrix]
+                if cell["verdict"] == "NOT_VERIFIABLE"
+            ],
         }
         d8_llat = {
             "tested": True,
             "normal_headless_access_token_probe": True,
-            "llat_created": False,
+            "llat_created": True,
+            "llat_token_type": llat_refresh_token.token_type,
+            "llat_values_redacted": True,
+            "llat_allowed_in_state_list": ALLOWED_ENTITY in llat_state_entities,
+            "llat_forbidden_in_state_list": FORBIDDEN_ENTITY in llat_state_entities,
+            "llat_service_allowed_status": llat_allowed_service["status"],
+            "llat_service_forbidden_status": llat_forbidden_service["status"],
             "refresh_token_revoked_after_probe": True,
+            "post_revoke_status": llat_after_revoke["status"],
+            "matches_ui_path": (
+                ALLOWED_ENTITY in llat_state_entities
+                and FORBIDDEN_ENTITY not in llat_state_entities
+                and llat_allowed_service["status"] == 200
+                and llat_forbidden_service["status"] in (401, 403, 404)
+            ),
+            "revocation_effective": llat_after_revoke["status"] in (401, 403),
         }
         hass.auth.async_remove_refresh_token(refresh_token)
+        if admin_refresh_token is not None:
+            hass.auth.async_remove_refresh_token(admin_refresh_token)
         await _persist_auth(hass)
 
     result = {

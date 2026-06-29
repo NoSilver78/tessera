@@ -277,13 +277,27 @@
     "d3_rest_ws_service": {
       "allowed_in_state_list": true,
       "allowed_single_status": 200,
+      "consistent_entity_targeted": true,
       "forbidden_in_state_list": false,
       "forbidden_single_status": 401,
       "service_allowed_status": 200,
       "service_forbidden_status": 401,
       "state_list_status": 200,
       "tested": true,
-      "ws_tested": false
+      "ws": {
+        "allowed_in_state_list": true,
+        "forbidden_in_state_list": false,
+        "get_states_success": true,
+        "service_allowed_error": null,
+        "service_allowed_success": true,
+        "service_forbidden_error": {
+          "code": "home_assistant_error",
+          "message": "Unauthorized"
+        },
+        "service_forbidden_success": false,
+        "tested": true
+      },
+      "ws_tested": true
     },
     "d5_boot_rescue_after_restart": {
       "auth_store_corrupted": false,
@@ -313,25 +327,496 @@
       "used_public_async_update_user": true
     },
     "d6_service_matrix": {
+      "documented_enforce_gaps": [
+        "system_context_user_id_none",
+        "non_entity_service"
+      ],
+      "entity_id_all_after": {
+        "input_boolean.tessera_allowed_light": "off",
+        "input_boolean.tessera_forbidden_light": "on"
+      },
+      "entity_id_all_before": {
+        "input_boolean.tessera_allowed_light": "on",
+        "input_boolean.tessera_forbidden_light": "on"
+      },
       "entity_id_all_status": 200,
       "entity_service_allowed_status": 200,
       "entity_service_forbidden_status": 401,
-      "non_entity_service_tested": false,
-      "return_response_changed_states_tested": false,
-      "tested": true
+      "entity_targeted_pass": true,
+      "non_entity_service": {
+        "body": {
+          "body_type": "dict",
+          "keys": [
+            "changed_states",
+            "service_response"
+          ]
+        },
+        "service": "tessera_spike.snapshot",
+        "status": 200,
+        "verdict": "ENFORCE_BYPASS"
+      },
+      "non_entity_service_tested": true,
+      "return_response_body": {
+        "body_type": "dict",
+        "keys": [
+          "message"
+        ]
+      },
+      "return_response_changed_states_tested": true,
+      "return_response_status": 400,
+      "system_context": {
+        "after_state": "on",
+        "before_state": "off",
+        "changed": true,
+        "context_user_id": null,
+        "entity_id": "input_boolean.tessera_forbidden_light",
+        "error": null,
+        "not_tested_contexts": [
+          "automation",
+          "script",
+          "assist"
+        ],
+        "service": "input_boolean.turn_on",
+        "tested": true,
+        "verdict": "ENFORCE_BYPASS"
+      },
+      "tested": true,
+      "ws_service_allowed_success": true,
+      "ws_service_forbidden_success": false,
+      "ws_service_response_tested": true
     },
     "d7_leak_matrix": {
-      "history_tested": false,
-      "logbook_rest_tested": false,
-      "registry_ws_tested": false,
-      "render_template_body_type": "dict",
-      "render_template_status": 401,
-      "tested": true
+      "complete_matrix": false,
+      "history_tested": true,
+      "leaks": [
+        {
+          "allowed_entity_seen": true,
+          "baseline_present": true,
+          "body": {
+            "body_type": "list",
+            "entity_ids": [
+              "binary_sensor.sun_solar_rising",
+              "camera.tessera_seed_hidden_camera",
+              "cover.tessera_seed_allowed_cover",
+              "event.backup_automatic_backup",
+              "input_boolean.tessera_allowed_light",
+              "input_boolean.tessera_forbidden_light",
+              "light.tessera_seed_allowed_light",
+              "lock.tessera_seed_disabled_lock",
+              "person.test_owner",
+              "sensor.backup_backup_manager_state",
+              "sensor.backup_last_attempted_automatic_backup",
+              "sensor.backup_last_successful_automatic_backup",
+              "sensor.backup_next_scheduled_automatic_backup",
+              "sensor.sun_next_dawn",
+              "sensor.sun_next_dusk",
+              "sensor.sun_next_midnight",
+              "sensor.sun_next_noon",
+              "sensor.sun_next_rising",
+              "sensor.sun_next_setting",
+              "sensor.sun_solar_azimuth",
+              "sensor.sun_solar_elevation",
+              "sensor.tessera_seed_forbidden_sensor",
+              "todo.shopping_list",
+              "tts.google_translate_en_com"
+            ],
+            "entity_ids_truncated": false,
+            "items": 24
+          },
+          "error": null,
+          "forbidden_entity_seen": true,
+          "leak_hint": true,
+          "status": "ok",
+          "transport": "ws",
+          "vector": "config/entity_registry/list",
+          "verdict": "LEAK"
+        },
+        {
+          "allowed_entity_seen": false,
+          "baseline_present": true,
+          "body": {
+            "body_type": "list",
+            "items": 4
+          },
+          "error": null,
+          "forbidden_entity_seen": false,
+          "leak_hint": true,
+          "status": "ok",
+          "transport": "ws",
+          "vector": "config/device_registry/list",
+          "verdict": "LEAK"
+        },
+        {
+          "allowed_entity_seen": false,
+          "baseline_present": true,
+          "body": {
+            "body_type": "list",
+            "items": 5
+          },
+          "error": null,
+          "forbidden_entity_seen": false,
+          "leak_hint": true,
+          "status": "ok",
+          "transport": "ws",
+          "vector": "config/area_registry/list",
+          "verdict": "LEAK"
+        },
+        {
+          "allowed_entity_seen": false,
+          "baseline_present": true,
+          "body": {
+            "body_type": "dict",
+            "keys": [
+              "event_keys",
+              "event_received"
+            ]
+          },
+          "error": null,
+          "forbidden_entity_seen": false,
+          "leak_hint": true,
+          "status": "ok",
+          "transport": "ws",
+          "vector": "render_template",
+          "verdict": "LEAK"
+        }
+      ],
+      "logbook_rest_tested": true,
+      "matrix": [
+        {
+          "allowed_entity_seen": false,
+          "baseline_present": true,
+          "body": {
+            "body_type": "dict",
+            "keys": [
+              "raw"
+            ]
+          },
+          "error": null,
+          "forbidden_entity_seen": false,
+          "leak_hint": false,
+          "status": 401,
+          "transport": "rest",
+          "vector": "/api/template",
+          "verdict": "BLOCKED"
+        },
+        {
+          "allowed_entity_seen": false,
+          "baseline_present": false,
+          "body": {
+            "body_type": "list",
+            "items": 0
+          },
+          "error": null,
+          "forbidden_entity_seen": false,
+          "leak_hint": false,
+          "status": 200,
+          "transport": "rest",
+          "vector": "/api/logbook",
+          "verdict": "NOT_VERIFIABLE"
+        },
+        {
+          "allowed_entity_seen": false,
+          "baseline_present": true,
+          "body": {
+            "body_type": "list",
+            "items": 0
+          },
+          "error": null,
+          "forbidden_entity_seen": false,
+          "leak_hint": false,
+          "status": 200,
+          "transport": "rest",
+          "vector": "/api/history/period",
+          "verdict": "ALLOW"
+        },
+        {
+          "allowed_entity_seen": true,
+          "baseline_present": true,
+          "body": {
+            "body_type": "list",
+            "entity_ids": [
+              "binary_sensor.sun_solar_rising",
+              "camera.tessera_seed_hidden_camera",
+              "cover.tessera_seed_allowed_cover",
+              "event.backup_automatic_backup",
+              "input_boolean.tessera_allowed_light",
+              "input_boolean.tessera_forbidden_light",
+              "light.tessera_seed_allowed_light",
+              "lock.tessera_seed_disabled_lock",
+              "person.test_owner",
+              "sensor.backup_backup_manager_state",
+              "sensor.backup_last_attempted_automatic_backup",
+              "sensor.backup_last_successful_automatic_backup",
+              "sensor.backup_next_scheduled_automatic_backup",
+              "sensor.sun_next_dawn",
+              "sensor.sun_next_dusk",
+              "sensor.sun_next_midnight",
+              "sensor.sun_next_noon",
+              "sensor.sun_next_rising",
+              "sensor.sun_next_setting",
+              "sensor.sun_solar_azimuth",
+              "sensor.sun_solar_elevation",
+              "sensor.tessera_seed_forbidden_sensor",
+              "todo.shopping_list",
+              "tts.google_translate_en_com"
+            ],
+            "entity_ids_truncated": false,
+            "items": 24
+          },
+          "error": null,
+          "forbidden_entity_seen": true,
+          "leak_hint": true,
+          "status": "ok",
+          "transport": "ws",
+          "vector": "config/entity_registry/list",
+          "verdict": "LEAK"
+        },
+        {
+          "allowed_entity_seen": false,
+          "baseline_present": true,
+          "body": {
+            "body_type": "list",
+            "items": 4
+          },
+          "error": null,
+          "forbidden_entity_seen": false,
+          "leak_hint": true,
+          "status": "ok",
+          "transport": "ws",
+          "vector": "config/device_registry/list",
+          "verdict": "LEAK"
+        },
+        {
+          "allowed_entity_seen": false,
+          "baseline_present": true,
+          "body": {
+            "body_type": "list",
+            "items": 5
+          },
+          "error": null,
+          "forbidden_entity_seen": false,
+          "leak_hint": true,
+          "status": "ok",
+          "transport": "ws",
+          "vector": "config/area_registry/list",
+          "verdict": "LEAK"
+        },
+        {
+          "allowed_entity_seen": false,
+          "baseline_present": false,
+          "body": {
+            "body_type": "list",
+            "items": 0
+          },
+          "error": null,
+          "forbidden_entity_seen": false,
+          "leak_hint": false,
+          "status": "ok",
+          "transport": "ws",
+          "vector": "config/floor_registry/list",
+          "verdict": "NOT_VERIFIABLE"
+        },
+        {
+          "allowed_entity_seen": false,
+          "baseline_present": false,
+          "body": {
+            "body_type": "list",
+            "items": 0
+          },
+          "error": null,
+          "forbidden_entity_seen": false,
+          "leak_hint": false,
+          "status": "ok",
+          "transport": "ws",
+          "vector": "config/label_registry/list",
+          "verdict": "NOT_VERIFIABLE"
+        },
+        {
+          "allowed_entity_seen": false,
+          "baseline_present": false,
+          "body": {
+            "body_type": "list",
+            "items": 0
+          },
+          "error": null,
+          "forbidden_entity_seen": false,
+          "leak_hint": false,
+          "status": "ok",
+          "transport": "ws",
+          "vector": "config/category_registry/list",
+          "verdict": "NOT_VERIFIABLE"
+        },
+        {
+          "allowed_entity_seen": false,
+          "baseline_present": false,
+          "body": {
+            "body_type": "dict",
+            "keys": []
+          },
+          "error": null,
+          "forbidden_entity_seen": false,
+          "leak_hint": false,
+          "status": "ok",
+          "transport": "ws",
+          "vector": "history/history_during_period",
+          "verdict": "NOT_VERIFIABLE"
+        },
+        {
+          "allowed_entity_seen": false,
+          "baseline_present": false,
+          "body": {
+            "body_type": "list",
+            "items": 0
+          },
+          "error": null,
+          "forbidden_entity_seen": false,
+          "leak_hint": false,
+          "status": "ok",
+          "transport": "ws",
+          "vector": "logbook/get_events",
+          "verdict": "NOT_VERIFIABLE"
+        },
+        {
+          "allowed_entity_seen": false,
+          "baseline_present": true,
+          "body": {
+            "body_type": "dict",
+            "keys": [
+              "event_keys",
+              "event_received"
+            ]
+          },
+          "error": null,
+          "forbidden_entity_seen": false,
+          "leak_hint": true,
+          "status": "ok",
+          "transport": "ws",
+          "vector": "render_template",
+          "verdict": "LEAK"
+        }
+      ],
+      "not_verifiable": [
+        {
+          "allowed_entity_seen": false,
+          "baseline_present": false,
+          "body": {
+            "body_type": "list",
+            "items": 0
+          },
+          "error": null,
+          "forbidden_entity_seen": false,
+          "leak_hint": false,
+          "status": 200,
+          "transport": "rest",
+          "vector": "/api/logbook",
+          "verdict": "NOT_VERIFIABLE"
+        },
+        {
+          "allowed_entity_seen": false,
+          "baseline_present": false,
+          "body": {
+            "body_type": "list",
+            "items": 0
+          },
+          "error": null,
+          "forbidden_entity_seen": false,
+          "leak_hint": false,
+          "status": "ok",
+          "transport": "ws",
+          "vector": "config/floor_registry/list",
+          "verdict": "NOT_VERIFIABLE"
+        },
+        {
+          "allowed_entity_seen": false,
+          "baseline_present": false,
+          "body": {
+            "body_type": "list",
+            "items": 0
+          },
+          "error": null,
+          "forbidden_entity_seen": false,
+          "leak_hint": false,
+          "status": "ok",
+          "transport": "ws",
+          "vector": "config/label_registry/list",
+          "verdict": "NOT_VERIFIABLE"
+        },
+        {
+          "allowed_entity_seen": false,
+          "baseline_present": false,
+          "body": {
+            "body_type": "list",
+            "items": 0
+          },
+          "error": null,
+          "forbidden_entity_seen": false,
+          "leak_hint": false,
+          "status": "ok",
+          "transport": "ws",
+          "vector": "config/category_registry/list",
+          "verdict": "NOT_VERIFIABLE"
+        },
+        {
+          "allowed_entity_seen": false,
+          "baseline_present": false,
+          "body": {
+            "body_type": "dict",
+            "keys": []
+          },
+          "error": null,
+          "forbidden_entity_seen": false,
+          "leak_hint": false,
+          "status": "ok",
+          "transport": "ws",
+          "vector": "history/history_during_period",
+          "verdict": "NOT_VERIFIABLE"
+        },
+        {
+          "allowed_entity_seen": false,
+          "baseline_present": false,
+          "body": {
+            "body_type": "list",
+            "items": 0
+          },
+          "error": null,
+          "forbidden_entity_seen": false,
+          "leak_hint": false,
+          "status": "ok",
+          "transport": "ws",
+          "vector": "logbook/get_events",
+          "verdict": "NOT_VERIFIABLE"
+        }
+      ],
+      "registry_ws_tested": true,
+      "tested": true,
+      "vectors": [
+        "/api/history/period",
+        "/api/logbook",
+        "/api/template",
+        "config/area_registry/list",
+        "config/category_registry/list",
+        "config/device_registry/list",
+        "config/entity_registry/list",
+        "config/floor_registry/list",
+        "config/label_registry/list",
+        "history/history_during_period",
+        "logbook/get_events",
+        "render_template"
+      ]
     },
     "d8_headless_token": {
-      "llat_created": false,
+      "llat_allowed_in_state_list": true,
+      "llat_created": true,
+      "llat_forbidden_in_state_list": false,
+      "llat_service_allowed_status": 200,
+      "llat_service_forbidden_status": 401,
+      "llat_token_type": "long_lived_access_token",
+      "llat_values_redacted": true,
+      "matches_ui_path": true,
       "normal_headless_access_token_probe": true,
+      "post_revoke_status": 401,
       "refresh_token_revoked_after_probe": true,
+      "revocation_effective": true,
       "tested": true
     },
     "d9_custom_component_runtime": {
@@ -742,13 +1227,13 @@
       "device": {
         "area_id": "tessera_living",
         "config_entry_id_present": true,
-        "device_id": "90c197f4fd7c9a9ae31cafd37a8dee49"
+        "device_id": "0053d38ec47804b79e36ca02b53629d9"
       },
       "entities": [
         {
           "area_id": null,
           "class": "device_area_allowed_light",
-          "device_id": "90c197f4fd7c9a9ae31cafd37a8dee49",
+          "device_id": "0053d38ec47804b79e36ca02b53629d9",
           "disabled_by": null,
           "domain": "light",
           "entity_id": "light.tessera_seed_allowed_light",
@@ -766,7 +1251,7 @@
         {
           "area_id": null,
           "class": "device_area_allowed_cover",
-          "device_id": "90c197f4fd7c9a9ae31cafd37a8dee49",
+          "device_id": "0053d38ec47804b79e36ca02b53629d9",
           "disabled_by": null,
           "domain": "cover",
           "entity_id": "cover.tessera_seed_allowed_cover",
