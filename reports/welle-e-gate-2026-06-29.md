@@ -19,3 +19,14 @@ D15 (enforce-kritisch) + D13 + Isolation sind sauber gemessen. **Ein** Claim ist
 
 ## Re-Gate
 Nur **D11** muss neu — D15/D13/Restore/Isolation sind bereits verifiziert. Nach Fix: CI grün + PR-Update → Re-Gate (D11-fokussiert).
+
+---
+
+## Re-Gate (Re-Spin `ff3091d` → gemerged `b30d8c1`) — PASS
+**D11 ehrlich instrumentiert** (Eigen-Prüfung, kein Panel nötig bei fokussiertem Single-Claim):
+- Monkeypatch-**Spy** um `hass.auth.async_update_user` (`:1567-1588`) zählt echte Calls (`call_count=len(calls)`).
+- `native_write_call_count`/`refused_before_call` aus der **Messung** (`:1624-1636`), Feld `native_write_measurement_source="spy:hass.auth.async_update_user"`.
+- d0_preflight-Gate (`:909-913`) liest jetzt die **gemessenen** Felder, nicht Konstanten.
+- Evidence: **0 native Writes** im Version-Mismatch-Pfad → D11 PASS gemessen belegt.
+D15/D13/D5/D7-Verdikte erhalten, Diff nur `spike/`+`tests/`, Produkt unberührt. Gemerged `b30d8c1`.
+**Offen (Cleanup-Pass):** D5-Auflagen (`auth_store_corrupted`-Rename, Seeds @754/@761) — Hardening, nicht-blockierend.
