@@ -38,6 +38,39 @@ def test_policy_schema_accepts_read_control_leafs() -> None:
     assert validate_policy_data(policy) == policy
 
 
+def test_policy_schema_accepts_legitimate_control_and_removal_leafs() -> None:
+    """Policy schema keeps valid control-implies-read and all-false leaves."""
+    policy = default_policy_data()
+    policy["area_grants"] = {
+        "living_room": {
+            "operator": {"control": True},
+            "reader": {"read": True, "control": False},
+            "viewer": {"read": True, "control": True},
+        }
+    }
+    policy["entity_overrides"] = {
+        "light.read_hidden": {"viewer": {"read": False}},
+        "light.table": {"operator": {"read": False, "control": False}},
+    }
+
+    assert validate_policy_data(policy) == policy
+
+
+@pytest.mark.parametrize(
+    ("section", "target"),
+    [("area_grants", "living_room"), ("entity_overrides", "light.table")],
+)
+def test_policy_schema_rejects_contradictory_control_without_read(
+    section: str, target: str
+) -> None:
+    """Policy schema rejects explicit read denial paired with control allow."""
+    policy = default_policy_data()
+    policy[section] = {target: {"operator": {"read": False, "control": True}}}
+
+    with pytest.raises(TesseraSchemaError, match="control implies read"):
+        validate_policy_data(policy)
+
+
 @pytest.mark.parametrize(
     "bad_leaf",
     [True, {"entities": True}, {"domains": True}, {"read": "yes"}, {}],

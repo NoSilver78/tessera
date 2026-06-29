@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 import pytest
 from custom_components.tessera.const import CONFIG_STORAGE_KEY, POLICY_STORAGE_KEY
-from custom_components.tessera.schema import default_config_data, default_policy_data
+from custom_components.tessera.schema import (
+    TesseraPolicyData,
+    TesseraSchemaError,
+    default_config_data,
+    default_policy_data,
+)
 from custom_components.tessera.store import TesseraStore
 
 
@@ -74,3 +79,32 @@ async def test_store_rejects_invalid_empty_payload() -> None:
 
     with pytest.raises(ValueError):
         await store.async_load_config()
+
+
+@pytest.mark.asyncio
+async def test_store_rejects_contradictory_policy_on_save() -> None:
+    """Store refuses to save read-deny/control-allow policy leaves."""
+    store = TesseraStore(hass=object(), store_factory=MemoryStore)
+    policy = default_policy_data()
+    policy["entity_overrides"] = {
+        "light.table": {"operator": {"read": False, "control": True}}
+    }
+
+    with pytest.raises(TesseraSchemaError, match="control implies read"):
+        await store.async_save_policy(cast(TesseraPolicyData, policy))
+
+    assert POLICY_STORAGE_KEY not in MemoryStore.buckets
+
+
+@pytest.mark.asyncio
+async def test_store_rejects_contradictory_policy_on_load() -> None:
+    """Store refuses existing read-deny/control-allow policy leaves."""
+    policy = default_policy_data()
+    policy["area_grants"] = {
+        "living_room": {"operator": {"read": False, "control": True}}
+    }
+    MemoryStore.buckets = {POLICY_STORAGE_KEY: cast(dict[str, Any], policy)}
+    store = TesseraStore(hass=object(), store_factory=MemoryStore)
+
+    with pytest.raises(TesseraSchemaError, match="control implies read"):
+        await store.async_load_policy()

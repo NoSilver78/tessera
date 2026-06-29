@@ -224,6 +224,8 @@ def _validate_permission_leaf(data: object, path: str) -> PermissionLeaf:
             if not isinstance(value, bool):
                 raise TesseraSchemaError(f"{path}.{key} must be boolean")
             result[key] = value
+    if result.get("control") is True and result.get("read") is False:
+        raise TesseraSchemaError(f"{path}.control implies read")
     return result
 
 
