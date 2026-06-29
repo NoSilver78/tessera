@@ -1,6 +1,6 @@
 # Tessera Phase-0 Spike Report
 
-Stand: 2026-06-29T13:45:50
+Stand: 2026-06-29T14:18:29
 
 Modus: Dev-only gegen `ha-tessera-dev`; keine Secrets/Token/Auth-Codes ausgegeben. Live-/`/Volumes/config`-Scans sind im Standardlauf bewusst deaktiviert und brauchen ein eigenes Gate.
 
@@ -8,7 +8,7 @@ Modus: Dev-only gegen `ha-tessera-dev`; keine Secrets/Token/Auth-Codes ausgegebe
 
 **PARTIAL / kein Enforce-Go.**
 
-D0 ist gruen genug, um den dev-only Messlauf zu starten. D1, D2, D3, D4, D6, D8, A2, A3 und B3 liefern belastbare Dev-Signale. D7 liefert eine ehrliche Leak-Matrix, bleibt aber wegen nicht verifizierbarer Registry-/History-/Logbook-Baselines **PARTIAL**. D5 bleibt bewusst **PARTIAL**, weil kein echter `/config/.storage/auth`-Korruptions-/No-Admin-Lockout-Rescue bewiesen ist. D9 bleibt bis Welle D **PARTIAL**. D12 bleibt **BLOCKED**. Welle C nimmt damit nur die Runtime-/Leak-Matrix ab, nicht Enforce/Product.
+D0 ist gruen genug, um den dev-only Messlauf zu starten. D1, D2, D3, D4, D6, D8, D9, A2, A3 und B3 liefern belastbare Dev-Signale. D7 liefert eine ehrliche Leak-Matrix, bleibt aber wegen nicht verifizierbarer Registry-/History-/Logbook-Baselines **PARTIAL**. D5 bleibt bewusst **PARTIAL**, weil kein echter `/config/.storage/auth`-Korruptions-/No-Admin-Lockout-Rescue bewiesen ist. D12 bleibt **BLOCKED**. Welle D nimmt D9 nur als **fail-closed Klassifikationsmatrix** ab: unverified Input-Komponenten bleiben `UNKNOWN_BLOCK_ENFORCE`, also weiter kein Enforce/Product-Go.
 
 ## DoD Matrix
 
@@ -23,7 +23,7 @@ D0 ist gruen genug, um den dev-only Messlauf zu starten. D1, D2, D3, D4, D6, D8,
 | D6 | PASS | service matrix measured; entity-targeted path can pass while non-entity/system gaps stay documented |
 | D7 | PARTIAL | full REST+WS leak matrix documented; leaks bound view-scope, not operate/control |
 | D8 | PASS | real long-lived token lifecycle measured without storing token values |
-| D9 | PARTIAL | live /Volumes/config scan skipped in standard dev run; runtime classification not complete |
+| D9 | PASS | custom-component classification matrix exists; UNKNOWN_BLOCK_ENFORCE remains fail-closed for unverified inputs |
 | B3 | PASS | managed Tessera users are not members of HA system-users allow-all group |
 | A2 | PASS | native async_update_user(group_ids) is REPLACE; caller full-superset contract proven |
 | A3 | PASS | rescue restore rejects non-tessera group ids such as system-users |
@@ -117,13 +117,13 @@ Gate-Results:
   "device": {
     "area_id": "tessera_living",
     "config_entry_id_present": true,
-    "device_id": "0053d38ec47804b79e36ca02b53629d9"
+    "device_id": "445d24df865e5c62a69535b934f25e45"
   },
   "entities": [
     {
       "area_id": null,
       "class": "device_area_allowed_light",
-      "device_id": "0053d38ec47804b79e36ca02b53629d9",
+      "device_id": "445d24df865e5c62a69535b934f25e45",
       "disabled_by": null,
       "domain": "light",
       "entity_id": "light.tessera_seed_allowed_light",
@@ -141,7 +141,7 @@ Gate-Results:
     {
       "area_id": null,
       "class": "device_area_allowed_cover",
-      "device_id": "0053d38ec47804b79e36ca02b53629d9",
+      "device_id": "445d24df865e5c62a69535b934f25e45",
       "disabled_by": null,
       "domain": "cover",
       "entity_id": "cover.tessera_seed_allowed_cover",
@@ -1047,14 +1047,380 @@ Welle-C-Lesart: `D6.entity_targeted_pass` bewertet nur die nativen entity-target
 
 ```json
 {
-  "available": false,
-  "components_count": null,
-  "http_or_ws_candidates": [],
-  "reason": "standard dev spike does not touch /Volumes/config; live static scans require an explicit separate review gate",
-  "services_yaml_components": [],
-  "skipped": true
+  "available": true,
+  "components": [
+    "browser_mod",
+    "dreame_vacuum",
+    "epex_spot",
+    "gruenbeck_cloud",
+    "solarman",
+    "solcast_solar",
+    "unifi_insights",
+    "unifi_network_map"
+  ],
+  "components_count": 8,
+  "input_source": "exchange/2026-06-29/tessera-welle-d-task-claude-2026-06-29.md plus prior read-only HACS inventory",
+  "live_volumes_config_scanned": false,
+  "reason": "Welle D uses the explicit relevant-component input list from the review handoff and does not scan /Volumes/config in this run",
+  "skipped": false
 }
 ```
+
+## D9 Runtime-Klassifikation
+
+```json
+{
+  "allow_count": 0,
+  "classification_rules": {
+    "ALLOW": "only for runtime-verified components without enforcement-relevant surface or with proven user-context checks",
+    "DENY": "reserved for reproduced unsafe behavior",
+    "TIER-2": "needs Zusatz-Enforcement / explicit non-production or supplemental controls",
+    "UNKNOWN_BLOCK_ENFORCE": "fail-closed default whenever runtime verification is absent or incomplete"
+  },
+  "components_count": 8,
+  "d9_gate_pass_fail_closed": true,
+  "deny_count": 0,
+  "dev_runtime_components": [
+    {
+      "actor": "dev runtime inventory, not production input ALLOW",
+      "allowed_entity_result": null,
+      "component": "tessera_spike",
+      "component_id": "tessera_spike",
+      "confidence": "dev-runtime-inventory",
+      "context_user_id": "not_probed_per_service",
+      "forbidden_entity_result": null,
+      "input_source": "ha-tessera-dev /config/custom_components runtime inventory",
+      "input_timestamp": "2026-06-29",
+      "installed_in_dev": true,
+      "permission_path": "unknown",
+      "reason": "dev harness exposes non-entity services and is explicitly not a production allow candidate",
+      "required_followup": "component-specific runtime probe required before production ALLOW",
+      "response_leak": "not_probed",
+      "runtime_services": [
+        "boot_rescue_status",
+        "ensure_group",
+        "flush_auth_store",
+        "invalidate_user",
+        "prepare_boot_rescue",
+        "probe_check_entity",
+        "probe_d2_three_way",
+        "probe_system_users_gate",
+        "restore",
+        "run_spike",
+        "set_group_policy",
+        "set_user_groups",
+        "snapshot"
+      ],
+      "runtime_verified": true,
+      "service_type": "non-entity/mixed",
+      "static_findings": {
+        "http_or_panel_marker": true,
+        "python_files": 1,
+        "registers_services": true,
+        "services_yaml": true,
+        "websocket_marker": true
+      },
+      "surfaces": {
+        "http_or_panel": true,
+        "services": [
+          "boot_rescue_status",
+          "ensure_group",
+          "flush_auth_store",
+          "invalidate_user",
+          "prepare_boot_rescue",
+          "probe_check_entity",
+          "probe_d2_three_way",
+          "probe_system_users_gate",
+          "restore",
+          "run_spike",
+          "set_group_policy",
+          "set_user_groups",
+          "snapshot"
+        ],
+        "services_yaml": true,
+        "websocket": true
+      },
+      "verdict": "TIER-2"
+    }
+  ],
+  "dev_runtime_components_count": 1,
+  "dev_runtime_tier2_count": 1,
+  "enforce_blocked_by_unknown": true,
+  "input_components": [
+    {
+      "actor": "restricted_non_admin/admin/system not runtime-probed for this input",
+      "allowed_entity_result": null,
+      "component": "browser_mod",
+      "component_id": "browser_mod",
+      "confidence": "high-fail-closed",
+      "context_user_id": "unknown",
+      "file_line": "exchange/2026-06-29/tessera-welle-d-task-claude-2026-06-29.md:10",
+      "forbidden_entity_result": null,
+      "input_source": "historical read-only custom_components review; no /Volumes/config scan in this run",
+      "input_timestamp": "2026-06-29",
+      "installed_in_dev": false,
+      "permission_path": "unknown",
+      "reason": "input component is not installed in ha-tessera-dev, so no runtime ALLOW is possible",
+      "required_followup": "install same component/version in ha-tessera-dev and run service/http/ws/user-context probes before any ALLOW",
+      "response_leak": "unknown",
+      "runtime_services": [],
+      "runtime_verified": false,
+      "service_type": "unknown",
+      "static_findings": {
+        "http_or_panel_marker": null,
+        "registers_services": null,
+        "services_yaml": null,
+        "websocket_marker": null
+      },
+      "surfaces": {
+        "http_or_panel": null,
+        "services": [],
+        "services_yaml": null,
+        "websocket": null
+      },
+      "verdict": "UNKNOWN_BLOCK_ENFORCE"
+    },
+    {
+      "actor": "restricted_non_admin/admin/system not runtime-probed for this input",
+      "allowed_entity_result": null,
+      "component": "dreame_vacuum",
+      "component_id": "dreame_vacuum",
+      "confidence": "high-fail-closed",
+      "context_user_id": "unknown",
+      "file_line": "exchange/2026-06-29/tessera-welle-d-task-claude-2026-06-29.md:10",
+      "forbidden_entity_result": null,
+      "input_source": "historical read-only custom_components review; no /Volumes/config scan in this run",
+      "input_timestamp": "2026-06-29",
+      "installed_in_dev": false,
+      "permission_path": "unknown",
+      "reason": "input component is not installed in ha-tessera-dev, so no runtime ALLOW is possible",
+      "required_followup": "install same component/version in ha-tessera-dev and run service/http/ws/user-context probes before any ALLOW",
+      "response_leak": "unknown",
+      "runtime_services": [],
+      "runtime_verified": false,
+      "service_type": "unknown",
+      "static_findings": {
+        "http_or_panel_marker": null,
+        "registers_services": null,
+        "services_yaml": null,
+        "websocket_marker": null
+      },
+      "surfaces": {
+        "http_or_panel": null,
+        "services": [],
+        "services_yaml": null,
+        "websocket": null
+      },
+      "verdict": "UNKNOWN_BLOCK_ENFORCE"
+    },
+    {
+      "actor": "restricted_non_admin/admin/system not runtime-probed for this input",
+      "allowed_entity_result": null,
+      "component": "epex_spot",
+      "component_id": "epex_spot",
+      "confidence": "high-fail-closed",
+      "context_user_id": "unknown",
+      "file_line": "exchange/2026-06-29/tessera-welle-d-task-claude-2026-06-29.md:10",
+      "forbidden_entity_result": null,
+      "input_source": "historical read-only custom_components review; no /Volumes/config scan in this run",
+      "input_timestamp": "2026-06-29",
+      "installed_in_dev": false,
+      "permission_path": "unknown",
+      "reason": "input component is not installed in ha-tessera-dev, so no runtime ALLOW is possible",
+      "required_followup": "install same component/version in ha-tessera-dev and run service/http/ws/user-context probes before any ALLOW",
+      "response_leak": "unknown",
+      "runtime_services": [],
+      "runtime_verified": false,
+      "service_type": "unknown",
+      "static_findings": {
+        "http_or_panel_marker": null,
+        "registers_services": null,
+        "services_yaml": null,
+        "websocket_marker": null
+      },
+      "surfaces": {
+        "http_or_panel": null,
+        "services": [],
+        "services_yaml": null,
+        "websocket": null
+      },
+      "verdict": "UNKNOWN_BLOCK_ENFORCE"
+    },
+    {
+      "actor": "restricted_non_admin/admin/system not runtime-probed for this input",
+      "allowed_entity_result": null,
+      "component": "gruenbeck_cloud",
+      "component_id": "gruenbeck_cloud",
+      "confidence": "high-fail-closed",
+      "context_user_id": "unknown",
+      "file_line": "exchange/2026-06-29/tessera-welle-d-task-claude-2026-06-29.md:10",
+      "forbidden_entity_result": null,
+      "input_source": "historical read-only custom_components review; no /Volumes/config scan in this run",
+      "input_timestamp": "2026-06-29",
+      "installed_in_dev": false,
+      "permission_path": "unknown",
+      "reason": "input component is not installed in ha-tessera-dev, so no runtime ALLOW is possible",
+      "required_followup": "install same component/version in ha-tessera-dev and run service/http/ws/user-context probes before any ALLOW",
+      "response_leak": "unknown",
+      "runtime_services": [],
+      "runtime_verified": false,
+      "service_type": "unknown",
+      "static_findings": {
+        "http_or_panel_marker": null,
+        "registers_services": null,
+        "services_yaml": null,
+        "websocket_marker": null
+      },
+      "surfaces": {
+        "http_or_panel": null,
+        "services": [],
+        "services_yaml": null,
+        "websocket": null
+      },
+      "verdict": "UNKNOWN_BLOCK_ENFORCE"
+    },
+    {
+      "actor": "restricted_non_admin/admin/system not runtime-probed for this input",
+      "allowed_entity_result": null,
+      "component": "solarman",
+      "component_id": "solarman",
+      "confidence": "high-fail-closed",
+      "context_user_id": "unknown",
+      "file_line": "exchange/2026-06-29/tessera-welle-d-task-claude-2026-06-29.md:10",
+      "forbidden_entity_result": null,
+      "input_source": "historical read-only custom_components review; no /Volumes/config scan in this run",
+      "input_timestamp": "2026-06-29",
+      "installed_in_dev": false,
+      "permission_path": "unknown",
+      "reason": "input component is not installed in ha-tessera-dev, so no runtime ALLOW is possible",
+      "required_followup": "install same component/version in ha-tessera-dev and run service/http/ws/user-context probes before any ALLOW",
+      "response_leak": "unknown",
+      "runtime_services": [],
+      "runtime_verified": false,
+      "service_type": "unknown",
+      "static_findings": {
+        "http_or_panel_marker": null,
+        "registers_services": null,
+        "services_yaml": null,
+        "websocket_marker": null
+      },
+      "surfaces": {
+        "http_or_panel": null,
+        "services": [],
+        "services_yaml": null,
+        "websocket": null
+      },
+      "verdict": "UNKNOWN_BLOCK_ENFORCE"
+    },
+    {
+      "actor": "restricted_non_admin/admin/system not runtime-probed for this input",
+      "allowed_entity_result": null,
+      "component": "solcast_solar",
+      "component_id": "solcast_solar",
+      "confidence": "high-fail-closed",
+      "context_user_id": "unknown",
+      "file_line": "exchange/2026-06-29/tessera-welle-d-task-claude-2026-06-29.md:10",
+      "forbidden_entity_result": null,
+      "input_source": "historical read-only custom_components review; no /Volumes/config scan in this run",
+      "input_timestamp": "2026-06-29",
+      "installed_in_dev": false,
+      "permission_path": "unknown",
+      "reason": "input component is not installed in ha-tessera-dev, so no runtime ALLOW is possible",
+      "required_followup": "install same component/version in ha-tessera-dev and run service/http/ws/user-context probes before any ALLOW",
+      "response_leak": "unknown",
+      "runtime_services": [],
+      "runtime_verified": false,
+      "service_type": "unknown",
+      "static_findings": {
+        "http_or_panel_marker": null,
+        "registers_services": null,
+        "services_yaml": null,
+        "websocket_marker": null
+      },
+      "surfaces": {
+        "http_or_panel": null,
+        "services": [],
+        "services_yaml": null,
+        "websocket": null
+      },
+      "verdict": "UNKNOWN_BLOCK_ENFORCE"
+    },
+    {
+      "actor": "restricted_non_admin/admin/system not runtime-probed for this input",
+      "allowed_entity_result": null,
+      "component": "unifi_insights",
+      "component_id": "unifi_insights",
+      "confidence": "high-fail-closed",
+      "context_user_id": "unknown",
+      "file_line": "exchange/2026-06-29/tessera-welle-d-task-claude-2026-06-29.md:10",
+      "forbidden_entity_result": null,
+      "input_source": "historical read-only custom_components review; no /Volumes/config scan in this run",
+      "input_timestamp": "2026-06-29",
+      "installed_in_dev": false,
+      "permission_path": "unknown",
+      "reason": "input component is not installed in ha-tessera-dev, so no runtime ALLOW is possible",
+      "required_followup": "install same component/version in ha-tessera-dev and run service/http/ws/user-context probes before any ALLOW",
+      "response_leak": "unknown",
+      "runtime_services": [],
+      "runtime_verified": false,
+      "service_type": "unknown",
+      "static_findings": {
+        "http_or_panel_marker": null,
+        "registers_services": null,
+        "services_yaml": null,
+        "websocket_marker": null
+      },
+      "surfaces": {
+        "http_or_panel": null,
+        "services": [],
+        "services_yaml": null,
+        "websocket": null
+      },
+      "verdict": "UNKNOWN_BLOCK_ENFORCE"
+    },
+    {
+      "actor": "restricted_non_admin/admin/system not runtime-probed for this input",
+      "allowed_entity_result": null,
+      "component": "unifi_network_map",
+      "component_id": "unifi_network_map",
+      "confidence": "high-fail-closed",
+      "context_user_id": "unknown",
+      "file_line": "exchange/2026-06-29/tessera-welle-d-task-claude-2026-06-29.md:10",
+      "forbidden_entity_result": null,
+      "input_source": "historical read-only custom_components review; no /Volumes/config scan in this run",
+      "input_timestamp": "2026-06-29",
+      "installed_in_dev": false,
+      "permission_path": "unknown",
+      "reason": "input component is not installed in ha-tessera-dev, so no runtime ALLOW is possible",
+      "required_followup": "install same component/version in ha-tessera-dev and run service/http/ws/user-context probes before any ALLOW",
+      "response_leak": "unknown",
+      "runtime_services": [],
+      "runtime_verified": false,
+      "service_type": "unknown",
+      "static_findings": {
+        "http_or_panel_marker": null,
+        "registers_services": null,
+        "services_yaml": null,
+        "websocket_marker": null
+      },
+      "surfaces": {
+        "http_or_panel": null,
+        "services": [],
+        "services_yaml": null,
+        "websocket": null
+      },
+      "verdict": "UNKNOWN_BLOCK_ENFORCE"
+    }
+  ],
+  "input_components_count": 8,
+  "live_volumes_config_scanned": false,
+  "runtime_custom_components_tested": true,
+  "tier2_count": 0,
+  "unknown_block_enforce_count": 8
+}
+```
+
+D9-Lesart: `PASS` bedeutet hier **nicht** `ALLOW` fuer reale HACS-Komponenten. Es bedeutet: Die Matrix ist vorhanden, nutzt eine explizite Input-Provenienz statt `/Volumes/config`-Live-Scan und setzt fuer nicht runtime-verifizierte Service/HTTP/WS-Kandidaten konsequent `UNKNOWN_BLOCK_ENFORCE`. Solange `enforce_blocked_by_unknown` true ist, bleibt Enforce fail-closed blockiert.
 
 ## Core-Anker
 

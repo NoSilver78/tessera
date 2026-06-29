@@ -55,6 +55,16 @@ ENFORCE_MANAGED_USER_NAMES = {
 }
 MANAGED_USER_PREFIX = "tessera-"
 MANAGED_GROUP_PREFIX = "tessera:"
+RELEVANT_CUSTOM_COMPONENT_INPUTS = (
+    "browser_mod",
+    "dreame_vacuum",
+    "epex_spot",
+    "gruenbeck_cloud",
+    "solarman",
+    "solcast_solar",
+    "unifi_insights",
+    "unifi_network_map",
+)
 
 CONFIG_SCHEMA = vol.Schema({DOMAIN: vol.Schema({})}, extra=vol.ALLOW_EXTRA)
 
@@ -1077,6 +1087,239 @@ async def _probe_system_users_gate(hass: HomeAssistant) -> dict[str, Any]:
     }
 
 
+def _registered_service_names(hass: HomeAssistant, domain: str) -> list[str]:
+    """Return registered service names for a domain."""
+    domain_services = hass.services.async_services().get(domain, {})
+    return sorted(str(service) for service in domain_services)
+
+
+def _static_surface_markers(component_path: Path) -> dict[str, Any]:
+    """Classify static surface markers for a dev-container component."""
+    files = [
+        path
+        for path in component_path.rglob("*")
+        if path.is_file() and path.suffix in {".py", ".yaml", ".json"}
+    ]
+    services_yaml = component_path / "services.yaml"
+    markers = {
+        "services_yaml": services_yaml.exists(),
+        "python_files": sum(1 for path in files if path.suffix == ".py"),
+        "registers_services": False,
+        "http_or_panel_marker": False,
+        "websocket_marker": False,
+    }
+    for path in files:
+        try:
+            text = path.read_text(errors="ignore")
+        except OSError:
+            continue
+        markers["registers_services"] = markers["registers_services"] or (
+            "async_register" in text and "services" in text
+        )
+        markers["http_or_panel_marker"] = markers["http_or_panel_marker"] or any(
+            item in text for item in ("HomeAssistantView", "register_view", "panel")
+        )
+        markers["websocket_marker"] = markers["websocket_marker"] or any(
+            item in text for item in ("websocket_command", "async_register_command")
+        )
+    return markers
+
+
+def _custom_component_static_inventory(config_path: str) -> dict[str, dict[str, Any]]:
+    """Return static dev-container custom-component inventory off the event loop."""
+    custom_dir = Path(config_path)
+    if not custom_dir.exists():
+        return {}
+    inventory: dict[str, dict[str, Any]] = {}
+    for path in custom_dir.iterdir():
+        if path.is_dir() and not path.name.startswith("__"):
+            inventory[path.name] = {
+                "path": str(path),
+                "static_findings": _static_surface_markers(path),
+            }
+    return inventory
+
+
+async def _classify_custom_components(hass: HomeAssistant) -> dict[str, Any]:
+    """Build the D9 fail-closed custom-component classification matrix."""
+    dev_components = await hass.async_add_executor_job(
+        _custom_component_static_inventory,
+        hass.config.path("custom_components"),
+    )
+    components: list[dict[str, Any]] = []
+
+    for component in RELEVANT_CUSTOM_COMPONENT_INPUTS:
+        installed_component = dev_components.get(component)
+        static_findings = (
+            installed_component["static_findings"]
+            if installed_component is not None
+            else {
+                "services_yaml": None,
+                "registers_services": None,
+                "http_or_panel_marker": None,
+                "websocket_marker": None,
+            }
+        )
+        runtime_services = _registered_service_names(hass, component)
+        runtime_verified = bool(installed_component and runtime_services)
+        verdict = "UNKNOWN_BLOCK_ENFORCE"
+        reason = (
+            "input component is not installed in ha-tessera-dev, so no runtime "
+            "ALLOW is possible"
+            if installed_component is None
+            else "runtime service/user-context behavior is not fully verified"
+        )
+        components.append(
+            {
+                "component_id": component,
+                "component": component,
+                "input_source": "historical read-only custom_components review; no /Volumes/config scan in this run",
+                "input_timestamp": "2026-06-29",
+                "installed_in_dev": installed_component is not None,
+                "runtime_services": runtime_services,
+                "runtime_verified": runtime_verified,
+                "surfaces": {
+                    "services": runtime_services,
+                    "services_yaml": static_findings.get("services_yaml"),
+                    "http_or_panel": static_findings.get("http_or_panel_marker"),
+                    "websocket": static_findings.get("websocket_marker"),
+                },
+                "service_type": "unknown",
+                "actor": "restricted_non_admin/admin/system not runtime-probed for this input",
+                "context_user_id": "unknown",
+                "permission_path": "unknown",
+                "allowed_entity_result": None,
+                "forbidden_entity_result": None,
+                "response_leak": "unknown",
+                "static_findings": static_findings,
+                "verdict": verdict,
+                "reason": reason,
+                "confidence": "high-fail-closed",
+                "required_followup": "install same component/version in ha-tessera-dev and run service/http/ws/user-context probes before any ALLOW",
+                "file_line": "exchange/2026-06-29/tessera-welle-d-task-claude-2026-06-29.md:10",
+            }
+        )
+
+    dev_runtime_components: list[dict[str, Any]] = []
+    for component, static_inventory in sorted(dev_components.items()):
+        services = _registered_service_names(hass, component)
+        static_findings = static_inventory["static_findings"]
+        if component == DOMAIN:
+            verdict = "TIER-2"
+            reason = (
+                "dev harness exposes non-entity services and is explicitly not "
+                "a production allow candidate"
+            )
+        elif services or any(
+            static_findings[key]
+            for key in (
+                "services_yaml",
+                "registers_services",
+                "http_or_panel_marker",
+                "websocket_marker",
+            )
+        ):
+            verdict = "UNKNOWN_BLOCK_ENFORCE"
+            reason = "dev component has enforcement-relevant surfaces without component-specific runtime proof"
+        else:
+            verdict = "UNKNOWN_BLOCK_ENFORCE"
+            reason = (
+                "dev component has no observed services/http/ws/panel surface, "
+                "but D9 does not emit static ALLOW without component/version "
+                "runtime proof"
+            )
+        dev_runtime_components.append(
+            {
+                "component_id": component,
+                "component": component,
+                "input_source": "ha-tessera-dev /config/custom_components runtime inventory",
+                "input_timestamp": "2026-06-29",
+                "installed_in_dev": True,
+                "runtime_services": services,
+                "runtime_verified": True,
+                "surfaces": {
+                    "services": services,
+                    "services_yaml": static_findings.get("services_yaml"),
+                    "http_or_panel": static_findings.get("http_or_panel_marker"),
+                    "websocket": static_findings.get("websocket_marker"),
+                },
+                "service_type": "non-entity/mixed" if services else "none-observed",
+                "actor": "dev runtime inventory, not production input ALLOW",
+                "context_user_id": "not_probed_per_service",
+                "permission_path": "unknown" if services else "no_surface_observed",
+                "allowed_entity_result": None,
+                "forbidden_entity_result": None,
+                "response_leak": "not_probed",
+                "static_findings": static_findings,
+                "verdict": verdict,
+                "reason": reason,
+                "confidence": "dev-runtime-inventory",
+                "required_followup": "component-specific runtime probe required before production ALLOW",
+            }
+        )
+
+    return {
+        "runtime_custom_components_tested": True,
+        "live_volumes_config_scanned": False,
+        "classification_rules": {
+            "ALLOW": "only for runtime-verified components without enforcement-relevant surface or with proven user-context checks",
+            "DENY": "reserved for reproduced unsafe behavior",
+            "TIER-2": "needs Zusatz-Enforcement / explicit non-production or supplemental controls",
+            "UNKNOWN_BLOCK_ENFORCE": "fail-closed default whenever runtime verification is absent or incomplete",
+        },
+        "input_components": components,
+        "dev_runtime_components": dev_runtime_components,
+        "components_count": len(components),
+        "input_components_count": len(components),
+        "dev_runtime_components_count": len(dev_runtime_components),
+        "unknown_block_enforce_count": sum(
+            1 for item in components if item["verdict"] == "UNKNOWN_BLOCK_ENFORCE"
+        ),
+        "allow_count": sum(1 for item in components if item["verdict"] == "ALLOW"),
+        "deny_count": sum(1 for item in components if item["verdict"] == "DENY"),
+        "tier2_count": sum(1 for item in components if item["verdict"] == "TIER-2"),
+        "dev_runtime_tier2_count": sum(
+            1 for item in dev_runtime_components if item["verdict"] == "TIER-2"
+        ),
+        "d9_gate_pass_fail_closed": (
+            len(components) == len(RELEVANT_CUSTOM_COMPONENT_INPUTS)
+            and all(
+                item["verdict"] == "UNKNOWN_BLOCK_ENFORCE" for item in components
+            )
+            and all(item["verdict"] != "ALLOW" for item in dev_runtime_components)
+        ),
+        "enforce_blocked_by_unknown": any(
+            item["verdict"] == "UNKNOWN_BLOCK_ENFORCE" for item in components
+        ),
+    }
+
+
+async def _classify_custom_components_safely(hass: HomeAssistant) -> dict[str, Any]:
+    """Return D9 classification evidence, failing closed on probe errors."""
+    try:
+        return await _classify_custom_components(hass)
+    except Exception as err:  # pragma: no cover - dev evidence path
+        return {
+            "runtime_custom_components_tested": False,
+            "live_volumes_config_scanned": False,
+            "classification_error": type(err).__name__,
+            "classification_error_message": str(err)[:200],
+            "verdict": "FAIL",
+            "reason": "D9 classifier raised; fail closed, no ALLOW emitted",
+            "input_components": [
+                {
+                    "component_id": component,
+                    "component": component,
+                    "verdict": "UNKNOWN_BLOCK_ENFORCE",
+                    "reason": "classifier failed before runtime verification",
+                }
+                for component in RELEVANT_CUSTOM_COMPONENT_INPUTS
+            ],
+            "d9_gate_pass_fail_closed": False,
+            "enforce_blocked_by_unknown": True,
+        }
+
+
 async def _phase_pre_restart(hass: HomeAssistant) -> dict[str, Any]:
     hass.states.async_set(
         STATE_ONLY_ENTITY, "42", {"friendly_name": "Tessera State Only"}
@@ -1497,10 +1740,7 @@ async def _phase_post_restart(hass: HomeAssistant) -> dict[str, Any]:
         "d6_service_matrix": d6_services,
         "d7_leak_matrix": d7_leaks,
         "d8_headless_token": d8_llat,
-        "d9_custom_component_runtime": {
-            "runtime_custom_components_tested": False,
-            "static_host_scan_expected": True,
-        },
+        "d9_custom_component_runtime": await _classify_custom_components_safely(hass),
     }
     data["post_restart"] = result
     await _write_json(hass, RESULT_PATH, data)
@@ -1515,11 +1755,19 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
     async def run_spike(call: ServiceCall) -> dict[str, Any]:
         phase = call.data.get("phase", "pre_restart")
-        if phase == "pre_restart":
-            return await _phase_pre_restart(hass)
-        if phase == "post_restart":
-            return await _phase_post_restart(hass)
-        return {"error": f"unknown phase {phase}"}
+        try:
+            if phase == "pre_restart":
+                return await _phase_pre_restart(hass)
+            if phase == "post_restart":
+                return await _phase_post_restart(hass)
+            return {"error": f"unknown phase {phase}"}
+        except Exception as err:  # pragma: no cover - dev evidence path
+            return {
+                "error": "run_spike_failed",
+                "phase": phase,
+                "error_type": type(err).__name__,
+                "error_message": str(err)[:300],
+            }
 
     async def ensure_group(call: ServiceCall) -> dict[str, Any]:
         group = await _ensure_group(
