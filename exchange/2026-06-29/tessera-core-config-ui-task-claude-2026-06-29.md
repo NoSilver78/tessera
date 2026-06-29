@@ -24,5 +24,11 @@ Entity-Overrides-UI · Membership-by_group-UI · das visuelle Matrix-Panel (eige
 ## Tests
 Options-Flow setzt Mode · legt Rolle an/entfernt · legt Area-Grant an (read / read+control) → Store korrekt + schema-valid · ungültige Eingabe abgewiesen · **kein bare-True** im resultierenden policy.
 
+## NACHTRAG (Audit-Auflagen M2+M3 — hier mitnehmen, da `config_flow.py` betroffen)
+Quelle: `reports/core-audit-2026-06-29.md`.
+- **M2 — Single-Instance-Guard:** in `async_step_user` vor `async_create_entry` → `await self.async_set_unique_id(DOMAIN)` + `self._abort_if_unique_id_configured()` (alternativ `single_config_entry: true` in `manifest.json`). Grund: beide Stores nutzen feste Keys `tessera.config`/`tessera.policy` (nicht pro `entry_id`) — eine zweite Integration würde sie clobbern.
+- **M3 — Translations:** `custom_components/tessera/strings.json` (+ `translations/en.json`) mit `config.step.user.title`/`description` und `config.abort.already_configured`.
+- **Tests** (`test_config_flow.py`): zweiter Setup → Abort `already_configured`; erster Setup → `async_create_entry(title="Tessera")`; Options-Flow-Pfade (s.o.).
+
 ## Definition of Done
-Config-UI-Basics + Tests · **CI grün** · **PR** mit Bericht · keine Scope-Ausweitung · **kein nativer Write** (im Bericht bestätigen).
+Config-UI-Basics + **M2+M3** + Tests · **CI grün** · **PR** mit Bericht · keine Scope-Ausweitung · **kein nativer Write** (im Bericht bestätigen).
