@@ -1,0 +1,13 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "Tessera is already configured."
+    },
+    "step": {
+      "user": {
+        "description": "Set up Tessera RBAC for Home Assistant.",
+        "title": "Tessera"
+      }
+    }
+  }
+}

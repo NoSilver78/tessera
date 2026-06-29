@@ -173,6 +173,8 @@ class TesseraConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             A Home Assistant config-flow result.
         """
         if user_input is not None:
+            await self.async_set_unique_id(DOMAIN)
+            self._abort_if_unique_id_configured()
             return self.async_create_entry(title="Tessera", data={})
 
         return self.async_show_form(step_id="user", data_schema=STEP_USER_DATA_SCHEMA)

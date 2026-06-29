@@ -37,7 +37,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     domain_data = _domain_data(hass)
     domain_data[entry.entry_id] = {"store": TesseraStore(hass)}
     _register_recompile_service(hass)
-    await _compile_for_mode(hass, entry.entry_id, domain_data[entry.entry_id])
+    await _compile_for_mode_safely(hass, entry.entry_id, domain_data[entry.entry_id])
     return True
 
 
@@ -54,7 +54,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     Returns:
         ``True`` once unload succeeds.
     """
-    hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
+    domain_data = _domain_data(hass)
+    domain_data.pop(entry.entry_id, None)
+    if not _has_loaded_entries(domain_data):
+        hass.services.async_remove(DOMAIN, SERVICE_RECOMPILE)
+        domain_data.pop(DATA_SERVICE_REGISTERED, None)
     return True
 
 
@@ -70,10 +74,27 @@ def _register_recompile_service(hass: HomeAssistant) -> None:
         for key, entry_data in list(_domain_data(hass).items()):
             if key == DATA_SERVICE_REGISTERED or not isinstance(entry_data, dict):
                 continue
-            await _compile_for_mode(hass, key, entry_data)
+            await _compile_for_mode_safely(hass, key, entry_data)
 
     hass.services.async_register(DOMAIN, SERVICE_RECOMPILE, _handle_recompile)
     domain_data[DATA_SERVICE_REGISTERED] = True
+
+
+async def _compile_for_mode_safely(
+    hass: HomeAssistant, entry_id: str, entry_data: dict[str, Any]
+) -> None:
+    """Compile monitor previews, falling back to effective off on errors."""
+    try:
+        await _compile_for_mode(hass, entry_id, entry_data)
+    except Exception as err:
+        entry_data.pop("compiled", None)
+        entry_data.pop("preview", None)
+        LOGGER.error(
+            "Tessera compile failed for entry %s; falling back to effective off "
+            "mode (%s)",
+            entry_id,
+            err.__class__.__name__,
+        )
 
 
 async def _compile_for_mode(
@@ -105,3 +126,11 @@ async def _compile_for_mode(
 def _domain_data(hass: HomeAssistant) -> dict[str, Any]:
     """Return the mutable Tessera domain data bucket."""
     return cast(dict[str, Any], hass.data.setdefault(DOMAIN, {}))
+
+
+def _has_loaded_entries(domain_data: dict[str, Any]) -> bool:
+    """Return whether the domain bucket still contains entry data."""
+    return any(
+        key != DATA_SERVICE_REGISTERED and isinstance(value, dict)
+        for key, value in domain_data.items()
+    )

@@ -83,6 +83,27 @@ def test_all_false_entity_override_removes_area_grant_for_role() -> None:
     }
 
 
+def test_entity_override_removes_area_grant_only_for_that_role() -> None:
+    """An all-false override removes grants only for the referenced role."""
+    config = default_config_data()
+    config["roles"] = {"a": {"name": "A"}, "b": {"name": "B"}}
+    policy = default_policy_data()
+    policy["area_grants"] = {
+        "living": {
+            "a": {"read": True, "control": True},
+            "b": {"read": True, "control": True},
+        }
+    }
+    policy["entity_overrides"] = {"light.x": {"a": {"read": False, "control": False}}}
+
+    compiled = compile_policies(config, policy, FakeResolver({"living": ("light.x",)}))
+
+    assert compiled == {
+        "a": {"entities": {"entity_ids": {}}},
+        "b": {"entities": {"entity_ids": {"light.x": {"read": True, "control": True}}}},
+    }
+
+
 def test_all_false_entity_override_can_empty_role_policy() -> None:
     """Empty role projections stay explicit for later apply/drift logic."""
     config = default_config_data()
@@ -192,19 +213,22 @@ def test_output_never_contains_bare_true_shortcuts() -> None:
     config = default_config_data()
     config["roles"] = {"viewer": {"name": "Viewer"}}
     policy = default_policy_data()
-    policy["area_grants"] = {"living": {"viewer": {"read": True}}}
+    policy["area_grants"] = {"living": {"viewer": {"control": True}}}
 
     compiled = compile_policies(
         config, policy, FakeResolver({"living": ("light.sofa",)})
     )
 
     role_policy = compiled["viewer"]
-    assert role_policy["entities"] is not True
-    assert role_policy["entities"]["entity_ids"] is not True
+    entity_ids = role_policy["entities"]["entity_ids"]
+    assert not isinstance(role_policy["entities"], bool)
+    assert not isinstance(entity_ids, bool)
+    assert entity_ids
     assert all(
-        isinstance(leaf, dict)
-        for leaf in role_policy["entities"]["entity_ids"].values()
+        isinstance(leaf, dict) and not isinstance(leaf, bool)
+        for leaf in entity_ids.values()
     )
+    assert entity_ids == {"light.sofa": {"read": True, "control": True}}
 
 
 def test_policy_referencing_unknown_role_fails_closed() -> None:
@@ -216,3 +240,37 @@ def test_policy_referencing_unknown_role_fails_closed() -> None:
 
     with pytest.raises(TesseraSchemaError, match="unknown role"):
         compile_policies(config, policy, FakeResolver({"living": ("light.sofa",)}))
+
+
+def test_entity_override_referencing_unknown_role_fails_closed() -> None:
+    """Unknown roles fail closed even when referenced only by overrides."""
+    config = default_config_data()
+    config["roles"] = {"viewer": {"name": "Viewer"}}
+    policy = default_policy_data()
+    policy["entity_overrides"] = {"light.sofa": {"ghost": {"read": True}}}
+
+    with pytest.raises(TesseraSchemaError, match="unknown role"):
+        compile_policies(config, policy, FakeResolver({}))
+
+
+def test_all_false_area_grant_is_omitted() -> None:
+    """All-false area grants remain deny-by-omission."""
+    config = default_config_data()
+    config["roles"] = {"viewer": {"name": "Viewer"}}
+    policy = default_policy_data()
+    policy["area_grants"] = {"living": {"viewer": {"read": False, "control": False}}}
+
+    compiled = compile_policies(
+        config, policy, FakeResolver({"living": ("light.sofa",)})
+    )
+
+    assert compiled == {"viewer": {"entities": {"entity_ids": {}}}}
+
+
+def test_compile_rejects_invalid_config_mode() -> None:
+    """Invalid config modes fail before native policy output is emitted."""
+    config = default_config_data()
+    config["mode"] = "banana"
+
+    with pytest.raises(TesseraSchemaError, match=r"config\.mode"):
+        compile_policies(config, default_policy_data(), FakeResolver({}))
