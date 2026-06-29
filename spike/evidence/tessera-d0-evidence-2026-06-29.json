@@ -52,6 +52,12 @@
     "match_count": 0,
     "matches": []
   },
+  "d5_setup_exception_boot": {
+    "error_type": "RuntimeError",
+    "observed": true,
+    "rescue_independent_of_healthy_tessera": true,
+    "run_id": "b1a822d787a249038873b03b253b1d31"
+  },
   "exit_code": 0,
   "failure_redaction_check": {
     "auth_code_value_not_stored": true,
@@ -236,7 +242,7 @@
       "binds": [
         "ha-tessera-dev-config:/config"
       ],
-      "id_short": "e74e9aec05ea",
+      "id_short": "9087c49c1c2a",
       "image": "ghcr.io/home-assistant/home-assistant:2026.6.4",
       "mounts": [
         {
@@ -289,7 +295,7 @@
       "binds": [
         "ha-tessera-dev-config:/config"
       ],
-      "id_short": "8668f7c9ba01",
+      "id_short": "6e2591306fe0",
       "image": "ghcr.io/home-assistant/home-assistant:2026.6.4",
       "mounts": [
         {
@@ -333,13 +339,13 @@
     "device": {
       "area_id": "tessera_living",
       "config_entry_id_present": true,
-      "device_id": "445d24df865e5c62a69535b934f25e45"
+      "device_id": "fc6dda75fa8dfea6bf6c6f4603ec0008"
     },
     "entities": [
       {
         "area_id": null,
         "class": "device_area_allowed_light",
-        "device_id": "445d24df865e5c62a69535b934f25e45",
+        "device_id": "fc6dda75fa8dfea6bf6c6f4603ec0008",
         "disabled_by": null,
         "domain": "light",
         "entity_id": "light.tessera_seed_allowed_light",
@@ -357,7 +363,7 @@
       {
         "area_id": null,
         "class": "device_area_allowed_cover",
-        "device_id": "445d24df865e5c62a69535b934f25e45",
+        "device_id": "fc6dda75fa8dfea6bf6c6f4603ec0008",
         "disabled_by": null,
         "domain": "cover",
         "entity_id": "cover.tessera_seed_allowed_cover",
@@ -400,7 +406,8 @@
       }
     ]
   },
-  "started_at": "2026-06-29T14:18:10",
+  "setup_exception_boot_http_status": 401,
+  "started_at": "2026-06-29T17:43:06",
   "status": "GREEN",
   "target": {
     "container": "ha-tessera-dev",
