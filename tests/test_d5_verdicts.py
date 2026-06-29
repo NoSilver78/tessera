@@ -33,7 +33,6 @@ def d5_pass_result() -> dict[str, object]:
                 "requested": True,
                 "snapshot_present": True,
                 "run_id_matches": True,
-                "auth_store_corrupted": True,
                 "managed_group_replace_drift_injected": True,
                 "boot_rescue_corruption_tested": True,
                 "no_admin_lockout": True,
@@ -80,6 +79,19 @@ def test_d5_s2_observation_never_creates_pass() -> None:
         "auth_store_corruption_injected": True,
         "auth_store_restored_from_backup": True,
     }
+
+    verdicts = runner.verdicts_from_result(result, True)
+
+    assert verdicts["D5"]["verdict"] == "PARTIAL"
+
+
+def test_d5_legacy_auth_store_corrupted_flag_is_not_a_pass_guard() -> None:
+    """The old misnamed auth_store_corrupted flag is ignored by the D5 gate."""
+    runner = load_spike_runner()
+    result = d5_pass_result()
+    rescue = result["post_restart"]["d5_boot_rescue_after_restart"]
+    rescue["managed_group_replace_drift_injected"] = False
+    rescue["auth_store_corrupted"] = True
 
     verdicts = runner.verdicts_from_result(result, True)
 

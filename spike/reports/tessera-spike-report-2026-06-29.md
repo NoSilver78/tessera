@@ -1,6 +1,6 @@
 # Tessera Phase-0 Spike Report
 
-Stand: 2026-06-29T20:34:02
+Stand: 2026-06-29T20:46:21
 
 Modus: Dev-only gegen `ha-tessera-dev`; keine Secrets/Token/Auth-Codes ausgegeben. Live-/`/Volumes/config`-Scans sind im Standardlauf bewusst deaktiviert und brauchen ein eigenes Gate.
 
@@ -120,13 +120,13 @@ Gate-Results:
   "device": {
     "area_id": "tessera_living",
     "config_entry_id_present": true,
-    "device_id": "f786dfda04da844dd740fa5cba803a6a"
+    "device_id": "b56d2699cd35b0c851bae1f66ec6ddab"
   },
   "entities": [
     {
       "area_id": null,
       "class": "device_area_allowed_light",
-      "device_id": "f786dfda04da844dd740fa5cba803a6a",
+      "device_id": "b56d2699cd35b0c851bae1f66ec6ddab",
       "disabled_by": null,
       "domain": "light",
       "entity_id": "light.tessera_seed_allowed_light",
@@ -144,7 +144,7 @@ Gate-Results:
     {
       "area_id": null,
       "class": "device_area_allowed_cover",
-      "device_id": "f786dfda04da844dd740fa5cba803a6a",
+      "device_id": "b56d2699cd35b0c851bae1f66ec6ddab",
       "disabled_by": null,
       "domain": "cover",
       "entity_id": "cover.tessera_seed_allowed_cover",
@@ -361,7 +361,6 @@ Gate-Results:
     ]
   },
   "d5_boot_rescue_prepare": {
-    "auth_store_corrupted": true,
     "auth_store_path": "/config/.storage/auth",
     "boot_rescue_corruption_tested": null,
     "corrupt_tessera_store_path": "/config/.storage/tessera.config",
@@ -372,10 +371,11 @@ Gate-Results:
       "tessera:extra",
       "tessera:test"
     ],
+    "managed_group_replace_drift_injected": true,
     "no_admin_lockout": null,
     "partial_reason": "D5 requires post-restart rescue, setup-exception independence, reread, and owner/admin operate probes",
     "prepared": true,
-    "run_id": "de86cbe765fa4ec2b6f908247c5a6fe5",
+    "run_id": "d8fa8ea3b3624deb96028e9b7769250e",
     "setup_exception_trigger_path": "/config/tessera_spike_force_setup_exception.json",
     "snapshot_path": "/config/tessera_spike_rescue_snapshot.json",
     "trigger_path": "/config/tessera_spike_rescue_trigger.json",
@@ -510,7 +510,6 @@ Restart-Survival:
       "token_values_redacted": true,
       "user_name": "tessera-test-admin"
     },
-    "auth_store_corrupted": true,
     "boot_rescue_corruption_tested": true,
     "corrupt_tessera_store_error": "JSONDecodeError",
     "corrupt_tessera_store_parse_failed": true,
@@ -573,7 +572,7 @@ Restart-Survival:
         "name": "tessera-rescue-user"
       }
     ],
-    "run_id": "de86cbe765fa4ec2b6f908247c5a6fe5",
+    "run_id": "d8fa8ea3b3624deb96028e9b7769250e",
     "run_id_matches": true,
     "setup_exception_error_type": "RuntimeError",
     "setup_exception_requested": true,
@@ -584,7 +583,7 @@ Restart-Survival:
     "touched_user_names": [
       "tessera-rescue-user"
     ],
-    "trigger_run_id": "de86cbe765fa4ec2b6f908247c5a6fe5",
+    "trigger_run_id": "d8fa8ea3b3624deb96028e9b7769250e",
     "used_public_async_update_user": true,
     "verdict": "PASS"
   }
@@ -839,7 +838,7 @@ D5 S2 Auth-Store-Korruption, **observational only**:
       },
       {
         "allowed_entity_seen": false,
-        "baseline_present": false,
+        "baseline_present": true,
         "body": {
           "body_type": "list",
           "items": 0
@@ -850,7 +849,7 @@ D5 S2 Auth-Store-Korruption, **observational only**:
         "status": 200,
         "transport": "rest",
         "vector": "/api/logbook",
-        "verdict": "NOT_VERIFIABLE"
+        "verdict": "ALLOW"
       },
       {
         "allowed_entity_seen": false,
@@ -1038,21 +1037,6 @@ D5 S2 Auth-Store-Korruption, **observational only**:
       }
     ],
     "not_verifiable": [
-      {
-        "allowed_entity_seen": false,
-        "baseline_present": false,
-        "body": {
-          "body_type": "list",
-          "items": 0
-        },
-        "error": null,
-        "forbidden_entity_seen": false,
-        "leak_hint": false,
-        "status": 200,
-        "transport": "rest",
-        "vector": "/api/logbook",
-        "verdict": "NOT_VERIFIABLE"
-      },
       {
         "allowed_entity_seen": false,
         "baseline_present": false,

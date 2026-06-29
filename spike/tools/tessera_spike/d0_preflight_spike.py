@@ -40,6 +40,11 @@ IMAGE = "ghcr.io/home-assistant/home-assistant:2026.6.4"
 PORT = "8124"
 BASE = f"http://127.0.0.1:{PORT}"
 TODAY = dt.date.today().isoformat()
+ALLOWED_INPUT_BOOLEAN = "tessera_allowed_light"
+FORBIDDEN_INPUT_BOOLEAN = "tessera_forbidden_light"
+ALLOWED_ENTITY = f"input_boolean.{ALLOWED_INPUT_BOOLEAN}"
+FORBIDDEN_ENTITY = f"input_boolean.{FORBIDDEN_INPUT_BOOLEAN}"
+STATE_ONLY_ENTITY = "sensor.tessera_state_only"
 HARNESS_REQUIRED_SERVICES = {
     "boot_rescue_status",
     "ensure_group",
@@ -66,7 +71,7 @@ SENSITIVE_KEYS = {
 SECRET_VALUE_MARKERS = ("Bearer ", "eyJ")
 
 
-CONFIGURATION = r"""
+CONFIGURATION = f"""
 default_config:
 
 logger:
@@ -75,9 +80,9 @@ logger:
 tessera_spike:
 
 input_boolean:
-  tessera_allowed_light:
+  {ALLOWED_INPUT_BOOLEAN}:
     name: Tessera Allowed Light
-  tessera_forbidden_light:
+  {FORBIDDEN_INPUT_BOOLEAN}:
     name: Tessera Forbidden Light
 """
 
@@ -559,19 +564,19 @@ def fallback_incomplete_seed_inventory() -> dict[str, Any]:
         "fixture_version": 1,
         "entities": [
             {
-                "entity_id": "input_boolean.tessera_allowed_light",
+                "entity_id": ALLOWED_ENTITY,
                 "domain": "input_boolean",
                 "class": "allowed_control_entity",
                 "provided_by": "configuration.yaml",
             },
             {
-                "entity_id": "input_boolean.tessera_forbidden_light",
+                "entity_id": FORBIDDEN_ENTITY,
                 "domain": "input_boolean",
                 "class": "forbidden_entity",
                 "provided_by": "configuration.yaml",
             },
             {
-                "entity_id": "sensor.tessera_state_only",
+                "entity_id": STATE_ONLY_ENTITY,
                 "domain": "sensor",
                 "class": "state_only_without_registry",
                 "provided_by": "hass.states.async_set",
@@ -776,7 +781,6 @@ def verdicts_from_result(
         "requested",
         "snapshot_present",
         "run_id_matches",
-        "auth_store_corrupted",
         "managed_group_replace_drift_injected",
         "boot_rescue_corruption_tested",
         "no_admin_lockout",

@@ -765,9 +765,8 @@ async def _run_boot_rescue_if_requested(hass: HomeAssistant) -> dict[str, Any]:
     result["managed_group_replace_drift_injected"] = (
         snapshot.get("managed_replace_demotion_injected") is True
     )
-    result["auth_store_corrupted"] = result["managed_group_replace_drift_injected"]
     result["boot_rescue_corruption_tested"] = bool(
-        result["auth_store_corrupted"] and corrupt_store_parse_failed
+        result["managed_group_replace_drift_injected"] and corrupt_store_parse_failed
     )
     result["no_admin_lockout"] = None
     result["rescue_independent_of_healthy_tessera"] = False
@@ -1137,7 +1136,9 @@ async def _prepare_boot_rescue(hass: HomeAssistant) -> dict[str, Any]:
         "setup_exception_trigger_path": str(SETUP_EXCEPTION_TRIGGER_PATH),
         "corrupt_tessera_store_path": str(CORRUPT_TESSERA_CONFIG_PATH),
         "auth_store_path": str(AUTH_STORE_PATH),
-        "auth_store_corrupted": snapshot["managed_replace_demotion_injected"],
+        "managed_group_replace_drift_injected": snapshot[
+            "managed_replace_demotion_injected"
+        ],
         "boot_rescue_corruption_tested": None,
         "no_admin_lockout": None,
         "verdict": "PARTIAL",
@@ -1214,7 +1215,7 @@ async def _probe_d5_post_boot(
         rescue_result.get("requested") is True
         and rescue_result.get("snapshot_present") is True
         and rescue_result.get("run_id_matches") is True
-        and rescue_result.get("auth_store_corrupted") is True
+        and rescue_result.get("managed_group_replace_drift_injected") is True
         and rescue_result.get("boot_rescue_corruption_tested") is True
         and rescue_result.get("rescue_independent_of_healthy_tessera") is True
         and reread_ok
