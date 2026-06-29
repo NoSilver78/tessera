@@ -112,6 +112,26 @@ def _policy() -> dict[str, Any]:
     return policy
 
 
+def _conflict_config() -> dict[str, Any]:
+    config = _config()
+    config["membership"]["by_user"] = {"user-1": ["operator", "viewer"]}
+    return config
+
+
+def _conflict_policy() -> dict[str, Any]:
+    policy = default_policy_data()
+    policy["area_grants"] = {
+        "living": {
+            "operator": {"read": True, "control": True},
+            "viewer": {"read": True, "control": True},
+        }
+    }
+    policy["entity_overrides"] = {
+        "light.sofa": {"viewer": {"read": False, "control": False}}
+    }
+    return policy
+
+
 @pytest.fixture
 def matrix_hass(monkeypatch: pytest.MonkeyPatch) -> FakeHass:
     """Return a fake HA instance wired for matrix responses."""
@@ -154,6 +174,7 @@ async def test_matrix_get_returns_shape_and_preview(matrix_hass: FakeHass) -> No
     assert result["grants"]["living"]["viewer"] == {"read": True, "control": False}
     assert result["preview"]["read_total"] == 2
     assert result["preview"]["control_total"] == 0
+    assert result["lint"]["conflicts_total"] == 0
 
 
 @pytest.mark.asyncio
@@ -178,6 +199,7 @@ async def test_matrix_set_grant_writes_schema_valid_read_and_control(
         "control": True,
     }
     assert result["preview"]["control_total"] == 2
+    assert result["preview"]["lint"]["conflicts_total"] == 0
     assert store.saved_policies == [store.policy]
 
 
@@ -201,6 +223,36 @@ async def test_matrix_set_grant_all_false_removes_grant(
         "control": False,
     }
     assert result["preview"]["read_total"] == 0
+
+
+@pytest.mark.asyncio
+async def test_matrix_preview_includes_cross_role_lint_report(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Matrix preview exposes the E2 linter report without native auth writes."""
+    store = FakeStore(_conflict_config(), _conflict_policy())
+    hass = FakeHass(store)
+    monkeypatch.setattr(
+        "custom_components.tessera.websocket.ar.async_get",
+        lambda hass: FakeAreaRegistry([FakeArea("living", "Living Room")]),
+    )
+    monkeypatch.setattr(
+        "custom_components.tessera.websocket.AreaEntityResolver.from_hass",
+        classmethod(lambda cls, hass: FakeResolver()),
+    )
+
+    result = await async_get_matrix(hass)
+
+    assert result["lint"]["conflicts_total"] == 1
+    assert result["lint"] == result["preview"]["lint"]
+    assert result["lint"]["users"]["user-1"]["conflicts"][0] == {
+        "user_id": "user-1",
+        "entity_id": "light.sofa",
+        "exposing_roles": ["operator"],
+        "restricting_roles": ["viewer"],
+        "level": "control",
+        "severity": "error",
+    }
 
 
 @pytest.mark.asyncio
