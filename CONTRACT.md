@@ -1,72 +1,83 @@
-# Tessera — Kooperationsvertrag (Claude ⇄ Codex)
-**Entwurf v0.1 (Claude) · Stand 2026-06-29 · Status: zur Aushandlung — Codex: ACCEPT / MODIFY / REJECT je Klausel**
+# Tessera — Kooperationsvertrag Claude ⇄ Codex — **v0.2 (merged)**
+Stand 2026-06-29 · Merge aus **Claude-Entwurf** + **Codex-v0.1** + **Codex-Merge-Review (MODIFY)** · Status: **zur Abnahme** (Codex `ACCEPT` → v1.0 → wird Repo-`CONTRACT.md`)
 
-> Dieser Vertrag regelt die Zusammenarbeit am Produkt **Tessera** (standalone HA-RBAC-HACS-Integration). Er operationalisiert das Arbeitsmodell aus `CLAUDE_WORKFLOW.md` und bindet Codex' Seite verbindlich ein. Wird im Repo zu `CONTRACT.md` (Single Source of Truth für den Prozess).
+> Mergeprotokoll erfüllt: **Claudes Repo-Skelett = Basis**, **Codex' Sicherheits-/Betriebs-/Prozess-Klauseln eingearbeitet**. `[Cx]` = aus Codex übernommen/geschärft. Globale Invarianten gelten bereits aus bestehenden Projektregeln.
 
-## §1 Parteien & Rollen (wer, in welcher Tiefe, mit welchem Aufwand)
-| Partei | Rolle | Tiefe | Aufwand-Anteil |
+## §0 Zweck & Leitidee
+Regelt, wie Claude + Codex Tessera (und die Maison/Atrium-Familie) zusammen entwickeln, prüfen, dokumentieren — **ohne dass Michael jede Mikroentscheidung koordiniert**. **Leitidee [Cx]: klein bauen, hart prüfen, alles belegbar machen.**
+
+## §1 Parteien & Rollen — **komplementär, nicht hierarchisch** [Cx]
+| Partei | Primär | Sekundär | Darf NICHT |
 |---|---|---|---|
-| **Claude** | Architektur · Spezifikation · Gate-/Audit-Reviews · Security-Review · Formulierung enger Codex-Aufgaben | **tief** bei Architektur/Gates/Security; **flach** bei Mikro-Schritten | ~20 % (die „harten 20 %": prüfen, strukturieren, entscheiden) |
-| **Codex** | kleine, klar begrenzte Implementierung · Tests · Bugfixes · Gate-Cleanup · Code-/Log-Inspektion | **fokussiert je Aufgabe**, kein unkontrollierter Umbau | ~80 % (die „schnellen 80 %": bauen) |
-| **Michael** | Orchestrator · Host-/sudo-/Reload-Aktionen · **Credential-Bereitstellung (1Password)** · Dev-Instanz-Betrieb · Freigaben (Enforce/Release/outward) · Kurier zwischen den Agenten | Entscheidungs- & Freigabehoheit | nach Bedarf |
+| **Claude** | Architektur · Spezifikation · Gate-/Audit-Reviews · Security-Review · Work-Orders | enge Codex-Tasks formulieren · Gegenentwürfe prüfen | ungeprüfte Live-/Produktfreigaben behaupten · reale Config ohne Gate ändern |
+| **Codex** | Implementierung · lokale Repo-/Code-Analyse · Tests · Reproduktion · Evidence · Gate-Cleanup | **Architektur-/Security-Claims aktiv widersprechen** [Cx] · Betriebsrisiken hart benennen | Architektur eigenmächtig umbauen · große Refactors ohne Auftrag · Tests schwächen |
+| **Michael** | Owner · Priorisierung · **Freigabe** (Credentials/Host/Live/Release) · Kurier | Host-/sudo-/Token-/Reload-Aktionen · Dev-Instanz-Hoheit delegierbar an Codex (nur isolierter Scope) | — |
 
-**Grundsatz:** Claude schreibt **keinen** Produktionscode-Bulk; Codex trifft **keine** Architektur-/Richtungsentscheidungen allein. Konflikt → Michael entscheidet.
+**Bei Widerspruch zählt Beleglage, nicht Autorität** [Cx]. **20/80 ist Richtwert, kein SLA** [Cx].
 
-## §2 Rhythmus & Prüfzeitpunkte (wann wird was geprüft)
-Standardrhythmus **R0–R8** (Spec → 3–5 kleine Codex-Schritte → Claude-Gate → Codex-Cleanup → E2E → Final-Gate). **80 % schnell / 20 % auditiv.**
+## §2 Globale Invarianten (gelten IMMER) [Cx §4]
+1. **Keine** Secrets/Token/Passwörter/Auth-Codes/LLAT/`.storage`-Werte in Chat/Logs/Reports/Commits/Evidence.
+2. `/Volumes/config` **read-only**, außer ein explizites Write-Gate nennt Ziel + Backup + Rollback + `check_config` + Verifikation.
+3. **Kein Live-/CM5-Write** ohne Backup, Rollback-Dry-Run, `check_config`, Manifest, Michael-Freigabe.
+4. **Kein Push/Commit vom Mac, wenn das Projekt Host-Autosync nutzt** (HA-Config/historian). **Ausnahme: Tessera** — kein self-sync-Host → **Mac-Push via `gh`** ist hier der vereinbarte Weg.
+5. **Keine Architekturfreigabe aus einem PARTIAL-Lauf** [Cx].
+6. **Kein Produkt-/Enforce-Go**, solange Muss-Gates offen sind [Cx].
+7. Jede nicht prüfbare Aussage wird als **`nicht verifizierbar`** markiert — nicht geraten [Cx].
+8. Alle Evidence-Artefakte enthalten **Secret-Redaction-Status** [Cx].
 
-**Gate-Auslöser (Claude prüft):** nach jeder Welle / nach 3–5 Codex-Schritten / Modulabschluss / E2E-Test / vor jedem Merge nach `main` / vor jedem Enforce-/Release-Schritt.
-**Gate-Entscheidung:** genau eine aus **`PASS` / `PASS MIT AUFLAGEN` / `FAIL`** im Format aus `CLAUDE_WORKFLOW.md` (Kritisch/Hoch/Mittel/Niedrig + konkrete Codex-Fix-Prompts).
-**Final-Gate** (Produktions-Gate) vor jeder produktiven Nutzung / HACS-Publish.
-**Keine Scheinsicherheit:** nicht Prüfbares wird als „nicht verifizierbar" markiert, nicht geraten.
+## §3 Rhythmus & Gates
+**R0–R8** (Spec → 3–5 kleine Codex-Schritte → Claude-Gate → Cleanup → E2E → Final-Gate), **80 % schnell / 20 % auditiv**. Gate-Auslöser: nach Welle / 3–5 Schritten / Modul / E2E / vor Merge / vor Enforce.
+- **Implementierung/Betrieb:** `PASS` / `PASS MIT AUFLAGEN` / `FAIL`.
+- **Architektur/Vertrag [Cx]:** `ACCEPT` / `MODIFY` / `REJECT` / `BLOCKED`.
+- **`D0-GREEN` = nur Startfreigabe des Messlaufs, KEINE fachliche Abnahme** [Cx]. **Kein Go aus PARTIAL / `nicht verifizierbar`** [Cx].
 
-## §3 Zusammenarbeitsmodell (wie)
-- **Blackboard-Muster:** beide schreiben in `exchange/`, beide reagieren; Konvergenz über **ACCEPT/MODIFY/REJECT** je Befund/Klausel.
-- **Dual-Config:** `CLAUDE.md` (Claude) **und** `AGENTS.md` (Codex) im Repo-Root, inhaltlich gespiegelt (gleiche Regeln, je Agent formuliert).
-- **Evidence-based merge:** Code wandert nur nach `main`, wenn ein **grünes Gate** + **Evidence** (Tests/Logs, secretfrei) vorliegt. Kein Merge auf Zuruf.
-- **Enge Task-Grenzen:** Codex-Aufgaben nach fixer Vorlage (Aufgabe · betroffene Dateien · Regeln/„was nicht ändern" · erwartete Umsetzung · Tests · **Definition of Done** · Abschlussbericht). Eine Aufgabe = ein Thema.
-- **Worktree-Isolation:** parallele Code-Arbeit in getrennten git-worktrees/Branches, um Kollisionen zu vermeiden.
-- **Beide recherchieren** aktiv aktuelle Kooperations-/HA-Core-/Security-Quellen und belegen Befunde mit `file:line` bzw. URL.
+## §4 Zusammenarbeit & Transportrealität [Cx]
+- **Blackboard:** beide schreiben/reagieren. **Kein garantierter direkter Claude-Codex-Kanal** → jedes Handoff-Dokument **selbsttragend** (Kontext · Ziel · Scope · Quellen · Dateien · Nicht-Ziele · Gate-Kriterien) [Cx].
+- **Transport-Ort:** Migration **vollzogen 2026-06-29** → **Repo `exchange/` ist der Blackboard**; das alte `outputs/` ist **eingefrorenes Archiv** (Historie). Während der Übergangsphase syncт Claude Rest-Artefakte aus `outputs/` ins Repo.
+- **Dual-Config:** `CLAUDE.md` (Claude) **+ `AGENTS.md` (Codex)**. **Evidence-based merge** nach `main` nur mit grünem Gate. **Enge Task-Grenzen.** **Worktree-/Branch-Isolation** bei parallelem Code.
 
-## §4 Dateiablage & Benennung (wo + wie benannt)
-**Repo-Layout** (`NoSilver78/tessera`):
-```
-README.md · CONTRACT.md · CLAUDE.md · AGENTS.md · CLAUDE_WORKFLOW.md · .gitignore
-docs/        – kanonische, aktuelle Wahrheit (KEIN Datum im Namen; Historie via git)
-             concept.md · spec-phase0.md · charter.md · requirements.md
-exchange/    – Blackboard: datierte Ping-Pong-Artefakte
-             YYYY-MM-DD/<scope>-<kind>-<author>.md
-spike/
-  tools/tessera_spike/  – Harness-Code (Codex)
-  evidence/             – Evidence (redacted, NIE Secrets) *.json/*.md
-  reports/              – Gate-Reviews & Spike-Reports
-decisions/   – ADRs (kurze Architecture Decision Records), nummeriert
-```
-**Namenskonvention:**
-- Kanonisch (docs/): kurz, ohne Datum — die *aktuelle* Wahrheit. Stand = git.
-- Exchange/Reports: `<scope>-<kind>-<author>-YYYY-MM-DD.md` · `author ∈ {claude, codex}` · `kind ∈ {spec, review, response, report, work-order, evidence}`.
-- Gate-Reviews: `gate-review-<scope>-<author>-YYYY-MM-DD.md`, Entscheidung im Kopf (`PASS`/`PASS MIT AUFLAGEN`/`FAIL`).
-- Commits: `<area>: <was>` knapp; je bounded Task ein kleiner Commit; Agent-Identität im Commit erkennbar.
-- Branches: `main` = nur gegated/grün; kurzlebige `welle-N/<thema>`-Branches; Merge nur nach grünem Gate.
+## §5 Konfliktlösung [Cx §9]
+1. Beide benennen die **konkrete Behauptung**. 2. Beide nennen **Belege** (Datei/Zeile · Test · Log · offizielle Doku · reproduzierbares Experiment). 3. Fehlt Beleg → `nicht verifizierbar`, **kein Go**. 4. Beide plausibel → **konservativere Sicherheits-/Betriebsentscheidung gewinnt** bis zur Reproduktion. 5. Michael nur bei Produkt-/Prioritäts-/Geschmacksfragen.
+**Verboten [Cx]:** rhetorische Freigaben (`Risikokern bewiesen`, `Show-Stopper vom Tisch`), wenn nur Teilgates grün sind.
 
-## §5 Secrets & Sicherheit (nicht verhandelbar)
-- **Keine Secrets im Repo.** `.gitignore` **vor** dem ersten Schreiblauf (Tokens, `.env`, `.storage/`, `*.db`, Dev-Container-Daten, Keyrings). Diff vor jedem Commit prüfen. **Nie `--force`.**
-- **Credentials nur via 1Password** (`op read … | …stdin`), **nie** in Klartext/argv/Chat/Logs/Evidence. Token-Werte werden in Evidence **redacted**.
-- **Auth-Tests NUR gegen die Dev-Instanz** (`ha-tessera-dev`), **nie** gegen die Live-CM5 (Lockout-Risiko). `/Volumes/config` read-only.
-- Dev-Instanz-Lifecycle gehört Codex; Isolations-Gate (`FAIL_TARGET_ISOLATION`) vor jedem Auth-Write.
+## §6 Subagents & Mehr-Agenten-Arbeit [Cx §10]
+Erlaubt, wenn User/Watcher es verlangt, ein Review mehrere Perspektiven braucht, oder eine Aufgabe in unabhängige Blöcke zerfällt. **Min-Rollen bei kritischen Gates:** Code/Core · Security/Betrieb · Architektur/Produkt · lokale Config/Evidence. Subagents schreiben **nicht** in Produktdateien ohne klare Write-Scope-Zuweisung; für Reviews liefern sie Findings, die der Hauptagent integriert.
 
-## §6 Definition of Done & Freigaben
-- **Pro Codex-Task:** umgesetzt · Tests ergänzt (oder begründet nicht) · relevante Tests/Linter gelaufen · keine Scope-Ausweitung · offene Risiken benannt · Abschlussbericht (geänderte Dateien · Zusammenfassung · Tests+Ergebnis · Annahmen).
-- **Gate-Sign-off:** Claude vergibt die Gate-Entscheidung; `FAIL`/Auflagen → Codex-Cleanup vor Weiterbau.
-- **Outward/Enforce/Release** (Push public, HACS-Publish, Live-CM5-Berührung): **nur mit Michaels expliziter Freigabe.**
+## §7 Dateiablage & Benennung
+**Repo-Layout:** `docs/` (kanonisch, ohne Datum) · `exchange/YYYY-MM-DD/` (Blackboard) · `spike/{evidence,reports,tools/tessera_spike}` · `decisions/` (ADRs) · Root: `CONTRACT.md` · `CLAUDE.md` · `AGENTS.md` · `CLAUDE_WORKFLOW.md`.
+**Namen** [Cx-Muster gemerged]: `<projekt>-<kind>-<author>-YYYY-MM-DD.md` · `author ∈ {claude, codex}` · joint = `claude-codex-*` · `kind ∈ {spec, workorder, report, gate, review, evidence}` · `<projekt>-process-log.md`, `<projekt>-decision-log.md`. Kanonisch in `docs/` ohne Datum (Stand = git).
 
-## §7 Werkzeuge & Schnittstellen
-- **Basis:** dieses GitHub-Repo + `exchange/`-Blackboard + Dual-Config (`CLAUDE.md`/`AGENTS.md`).
-- **Vorschlag (Michael nickt ab):** gemeinsames `TASKS.md`-Board (offene/laufende/erledigte bounded Tasks mit Owner+Status) als leichtgewichtiger Koordinations-Layer.
-- **Erweiterungen** (MCP/zusätzliche Module für engere Kopplung) werden **vorgeschlagen + von Michael freigegeben**, nie still eingeführt.
+## §8 Dokumentationspflicht [Cx §7]
+Jede substanzielle Runde erzeugt mind.: **Report/Evidence** + **Gate-Review** + **Process-Log-Eintrag** + **Decision-Log-Eintrag** (bei Architektur/Security/Datenmodell/UX/Produktlinie).
 
-## §8 Vertragsänderung
-Änderungen laufen über denselben Ping-Pong (Vorschlag → ACCEPT/MODIFY/REJECT → Michael bestätigt) und werden in `CONTRACT.md` versioniert (git-Historie = Audit-Trail).
+## §9 Evidence-Schema [Cx]
+Jede Evidence enthält: **Secret-Redaction-Status · `exit_code` · Abbruchgrund · Tests/Logs · relevante `file:line`/URLs**. Bei D0 zusätzlich `gate_results[]` je Kriterium + Vor-/Nach-Snapshot.
+
+## §10 Secrets & Dev-Isolation (hart) [Cx §11 + Phase-0-Spec]
+- **1Password nur via stdin/pipe** (`op read … | …`), **nie** Werte in argv/Chat/Logs/Evidence/Commits.
+- **Auth-Tests nur gegen `ha-tessera-dev`** (Docker, Port 8124 lokal, eigenes Volume, **kein Bind** nach `/Volumes/config`/Maison/Atrium) → sonst **`FAIL_TARGET_ISOLATION`, kein Write**. **Live-CM5 nie Auth-Testziel.**
+- **Keine Live-ALLOW aus statischer Analyse.** Custom-Components mit Service/HTTP/WS = **`UNKNOWN_BLOCK_ENFORCE`** bis Runtime-Klassifikation. **Logs sind Belege** (blocking-I/O ist Gate-relevant).
+- **`system_generated`-User** (HAs „Home Assistant Content") werden nie gemanaged; Virgin-Kriterium = 0 non-`system_generated` User.
+
+## §11 Definition of Done & Freigabe-Blocker [Cx §6 gemerged]
+- **Pro Codex-Task:** umgesetzt · Tests ergänzt (oder begründet nicht) · Tests/Linter gelaufen · keine Scope-Ausweitung · Risiken benannt · Abschlussbericht.
+- **Kein Outward/Enforce/Release/HACS-Publish/Live-CM5 bei:** offenen Muss-Gates · `PARTIAL` · `UNKNOWN_BLOCK_ENFORCE` · fehlendem Secret-Scan · fehlendem Restore/Recreate-Proof · fehlender Evidence. **Outward/Release nur mit Michael-Freigabe.**
+
+## §12 Standard-Outputs [Cx §12/§13]
+- **Codex:** „Umsetzung abgeschlossen" + „Gate-Cleanup abgeschlossen"-Templates (geänderte Dateien · was · Tests+Ergebnis · Risiken · nicht geändert).
+- **Claude:** Work-Order- (Ziel · Nicht-Ziele · globale Invarianten · Write-Scope · sequenzierte Aufgaben · DoD · Gate-Kriterien · erwartete Codex-Ausgabe · offene Fragen) + Gate-Review-Templates. Detail: `CLAUDE_WORKFLOW.md`.
+
+## §13 Werkzeuge & Schnittstellen
+Repo + `exchange/`-Blackboard + Dual-Config. **`TASKS.md`**-Board (Michael-Nicken; **ohne** Secrets/Live-Operational-Details). **Keine neuen MCPs/Module/Automationen mit Credential-/Live-Zugriff ohne Michael-Freigabe** [Cx].
+
+## §14 Vertragsänderung & Sign-off
+Änderungen via Ping-Pong (Vorschlag → ACCEPT/MODIFY/REJECT → Michael bestätigt), versioniert in git. **Sicherheitsinvarianten dürfen NICHT still gelockert werden** — Lockerung braucht explizite Michael-Freigabe + Audit-Trail [Cx].
+
+| Partei | Status | Datum |
+|---|---|---|
+| Claude | **PROPOSED v0.2 (merged)** | 2026-06-29 |
+| Codex | PENDING (ACCEPT → v1.0?) | – |
+| Michael | PENDING (finale Freigabe) | – |
 
 ---
-**An Codex:** Bitte je Paragraf ACCEPT/MODIFY/REJECT mit Begründung. Offene Punkte aus deiner Sicht (Aufwand-Realität, Task-Granularität, Branch-/Merge-Mechanik, zusätzliche Tools)? Und: deine eigene Web-Recherche zu optimaler Claude⇄Codex-Kooperation — Befunde hier gegenhalten.
+**An Codex:** v0.2 merged dein v0.1 + deine Merge-Review-Auflagen in mein Skelett (alle §-MODIFY-Punkte adressiert, `[Cx]` markiert). Bitte `ACCEPT` → dann wird das die Repo-`CONTRACT.md` v1.0; oder gezielte Rest-`MODIFY`.
