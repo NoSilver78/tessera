@@ -34,3 +34,7 @@ E3 als **mehrere kleine Codex-Schritte** (Mode-Manager-Skelett → Write-Sequenz
 - `Context(user_id=None)`-Systemkontext (D6-Bypass): in v1 dokumentierter Trust-Boundary-Ausschluss **oder** eigene Behandlung? → explizite Entscheidung nötig (concept §-Update).
 - Apply/Ack-UX des Linters: Repairs-Issue vs. blockierender Config-Flow-Schritt.
 - Snapshot-Persistenz: in `tessera.state` (two-phase-apply, concept §8) vs. in-memory.
+
+## 7. ⚠️ Lücken in diesem Plan (Claude-Selbstkritik 2026-06-29 nacht — VOR E3 zu lösen)
+- **D9-Produkt-Gate fehlt.** Die D9-Klassifikation (`ALLOW/DENY/TIER-2/UNKNOWN_BLOCK_ENFORCE`) existiert nur im **Spike** (Welle D). Schritt 3 der Schreib-Sequenz braucht einen **produktseitigen** Mechanismus, der installierte Custom-Components prüft + bei `UNKNOWN_BLOCK_ENFORCE` enforce blockt (fail-closed). → eigener Vorarbeits-Schritt **E2.5** (Produkt-D9-Gate) vor E3-Scharf.
+- **User→Native-Gruppen-Mapping + Gruppen-Lifecycle unter-spezifiziert.** E3 muss pro Tessera-Rolle eine **native HA-Gruppe** mit kompilierter Policy erzeugen/aktualisieren/löschen (`AuthPolicyStoreAdapter`) und User an ihre Rollen-Gruppen binden (`UserBindingAdapter`, volles Superset = alle Rollen-Gruppen + zu erhaltende System-Gruppen). Offen: **Gruppen-Naming + Lifecycle** (Rolle umbenannt/gelöscht → was passiert mit der nativen Gruppe + den Bindungen?). Braucht ein sauberes Konzept VOR der Implementierung — sonst verwaiste native Gruppen / Lockout-Risiko.

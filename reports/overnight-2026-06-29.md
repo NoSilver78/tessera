@@ -25,3 +25,7 @@ Event-getrieben (Monitor `bknqcotob` auf PRs + Workflow-Completions) + Heartbeat
 
 - **Test-Hygiene-Task raus** (`enforce/e1-test-harden`): E1-Boundary-Test gegen `except Exception`-Swallow härten (Zugriffs-Registrierung statt Raise-Propagation) — die Dormant-Safety-Wache robust machen. Trivial-Gate.
 - **E3-Spec verfeinert** (`docs/spec-e3-enforce.md`): Mode-Manager + Schreib-Sequenz mit 7 harten Gates (Version→Compile→D9→Linter→Superset-Write→Cache→Snapshot), Restore, Invarianten, offene Design-Fragen für die D10/Morgen-Runde. **Kein Scharf-Merge** — wartet auf D10 + Human-Go.
+
+- **E1-Test-Härtung PASS+gemerged** (`#17`, 84 passed) — Dormant-Wache robust gegen `except`-Swallow.
+- **Reflexion + ehrlicher Status:** Die produktive **non-scharf-Queue ist erschöpft** (Core/Spike/E1/E2 + Härtung alle ✅+validiert). E3 ist **gesperrt** (D10 + Human-Go). E4/E5 sind E3-abhängig → nicht sinnvoll vor E3-Design baubar. **Best-practice = kein Busywork:** ich erfinde KEINE Low-Value-Arbeit, sondern idle in langen Heartbeats und warte auf (a) Codex-PRs, (b) D10, (c) Morgen.
+- **Selbstkritik an E3-Plan festgehalten** (`spec-e3-enforce.md` §7): D9-Produkt-Gate fehlt (nur im Spike) → Schritt **E2.5** nötig; User→Native-Gruppen-Mapping + Gruppen-Lifecycle unter-spezifiziert → Konzept VOR E3-Code. **Das sind die zwei konkreten Dinge, die wir morgen entscheiden/spezifizieren sollten, bevor E3 startet.**
