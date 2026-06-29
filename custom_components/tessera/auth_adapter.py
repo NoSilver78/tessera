@@ -200,15 +200,15 @@ class UserBindingAdapter:
         user: Any,
         full_group_ids: Collection[str],
         *,
-        expected_tessera_group_ids: Collection[str] | None = None,
+        expected_tessera_group_ids: Collection[str],
     ) -> None:
         """Bind a managed user to the full intended native group superset.
 
         Args:
             user: HA user or test double to update.
             full_group_ids: Complete replacement set for ``user.group_ids``.
-            expected_tessera_group_ids: Optional Tessera role groups that must be
-                present in ``full_group_ids``; this catches delta writes.
+            expected_tessera_group_ids: Tessera role groups that must be present in
+                ``full_group_ids``; this catches delta writes intrinsically.
         """
         self._assert_supported_version()
         sorted_group_ids = _validate_full_group_superset(
@@ -338,7 +338,7 @@ async def _async_persist_auth_store(store: AuthStoreLike) -> None:
 def _validate_full_group_superset(
     user: Any,
     full_group_ids: Collection[str],
-    expected_tessera_group_ids: Collection[str] | None,
+    expected_tessera_group_ids: Collection[str],
 ) -> list[str]:
     """Validate a complete replacement group set before binding a user."""
     _assert_managed_user(user)
@@ -347,14 +347,16 @@ def _validate_full_group_superset(
         raise IncompleteSuperset("full_group_ids must not be empty")
     for group_id in group_ids:
         _assert_allowed_binding_group_id(group_id)
-    if expected_tessera_group_ids is not None:
-        missing = set(expected_tessera_group_ids) - group_ids
-        if missing:
-            raise IncompleteSuperset(
-                f"full_group_ids missing expected Tessera groups: {sorted(missing)}"
-            )
-    if not any(group_id.startswith(TESSERA_GROUP_PREFIX) for group_id in group_ids):
-        raise IncompleteSuperset("full_group_ids must contain a Tessera role group")
+    expected_group_ids = set(expected_tessera_group_ids)
+    if not expected_group_ids:
+        raise IncompleteSuperset("expected_tessera_group_ids must not be empty")
+    for group_id in expected_group_ids:
+        _assert_tessera_group_id(group_id)
+    missing = expected_group_ids - group_ids
+    if missing:
+        raise IncompleteSuperset(
+            f"full_group_ids missing expected Tessera groups: {sorted(missing)}"
+        )
     current_group_ids = set(_user_group_ids(user))
     if GROUP_ID_ADMIN in current_group_ids and GROUP_ID_ADMIN not in group_ids:
         raise LockoutRisk("refusing to remove system-admin from an admin user")

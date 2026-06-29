@@ -9,6 +9,7 @@ import custom_components.tessera as tessera_init
 import pytest
 from custom_components.tessera.auth_adapter import (
     AuthPolicyStoreAdapter,
+    AuthRecoverySnapshot,
     IncompleteSuperset,
     LockoutRisk,
     PermissionProbeAdapter,
@@ -16,6 +17,7 @@ from custom_components.tessera.auth_adapter import (
     UnsafeAuthTarget,
     UnsupportedAuthVersion,
     UserBindingAdapter,
+    UserGroupSnapshot,
 )
 from custom_components.tessera.const import DOMAIN
 
@@ -267,6 +269,14 @@ async def test_user_binding_rejects_delta_and_forbidden_groups() -> None:
     user = FakeUser("user-1", ["tessera:old"])
     adapter = UserBindingAdapter(hass, ha_version="2026.6.4")
 
+    with pytest.raises(TypeError):
+        await adapter.async_bind_full_superset(user, ["tessera:viewer"])  # type: ignore[call-arg]
+    with pytest.raises(IncompleteSuperset):
+        await adapter.async_bind_full_superset(
+            user,
+            ["tessera:viewer"],
+            expected_tessera_group_ids=[],
+        )
     with pytest.raises(IncompleteSuperset):
         await adapter.async_bind_full_superset(
             user,
@@ -274,11 +284,50 @@ async def test_user_binding_rejects_delta_and_forbidden_groups() -> None:
             expected_tessera_group_ids=["tessera:viewer", "tessera:operator"],
         )
     with pytest.raises(UnsafeAuthTarget):
-        await adapter.async_bind_full_superset(user, ["system-users", "tessera:viewer"])
+        await adapter.async_bind_full_superset(
+            user,
+            ["system-users", "tessera:viewer"],
+            expected_tessera_group_ids=["tessera:viewer"],
+        )
     with pytest.raises(UnsafeAuthTarget):
-        await adapter.async_bind_full_superset(user, ["custom-group", "tessera:viewer"])
+        await adapter.async_bind_full_superset(
+            user,
+            ["custom-group", "tessera:viewer"],
+            expected_tessera_group_ids=["tessera:viewer"],
+        )
 
     assert hass.auth.update_calls == []
+
+
+@pytest.mark.asyncio
+async def test_system_generated_targets_are_rejected() -> None:
+    """System-generated groups and users are never managed by Tessera."""
+    hass = FakeHass()
+    policy = AuthPolicyStoreAdapter(
+        hass, ha_version="2026.6.4", group_factory=fake_group_factory
+    )
+    hass.auth._store._groups["tessera:generated"] = FakeGroup(
+        "tessera:generated",
+        "Generated",
+        {"entities": {"entity_ids": {}}},
+        system_generated=True,
+    )
+
+    with pytest.raises(UnsafeAuthTarget):
+        await policy.async_set_group_policy(
+            "tessera:generated", "Generated", {"entities": {"entity_ids": {}}}
+        )
+    with pytest.raises(UnsafeAuthTarget):
+        await policy.async_remove_group("tessera:generated")
+    with pytest.raises(UnsafeAuthTarget):
+        await UserBindingAdapter(hass, ha_version="2026.6.4").async_bind_full_superset(
+            FakeUser("generated-user", ["tessera:viewer"], system_generated=True),
+            ["tessera:viewer"],
+            expected_tessera_group_ids=["tessera:viewer"],
+        )
+
+    assert hass.auth.update_calls == []
+    assert hass.auth._store._store.saved_payloads == []
 
 
 @pytest.mark.asyncio
@@ -289,7 +338,11 @@ async def test_user_binding_version_guard_has_zero_write_calls() -> None:
     adapter = UserBindingAdapter(hass, ha_version="9999.0.0")
 
     with pytest.raises(UnsupportedAuthVersion):
-        await adapter.async_bind_full_superset(user, ["tessera:viewer"])
+        await adapter.async_bind_full_superset(
+            user,
+            ["tessera:viewer"],
+            expected_tessera_group_ids=["tessera:viewer"],
+        )
 
     assert hass.auth.update_calls == []
 
@@ -304,11 +357,13 @@ async def test_user_binding_refuses_owner_and_admin_demotion() -> None:
         await adapter.async_bind_full_superset(
             FakeUser("owner", ["system-admin"], is_owner=True),
             ["system-admin", "tessera:admin"],
+            expected_tessera_group_ids=["tessera:admin"],
         )
     with pytest.raises(LockoutRisk):
         await adapter.async_bind_full_superset(
             FakeUser("admin", ["system-admin", "tessera:admin"]),
             ["tessera:admin"],
+            expected_tessera_group_ids=["tessera:admin"],
         )
 
     assert hass.auth.update_calls == []
@@ -348,6 +403,41 @@ async def test_recovery_snapshot_restore_and_no_admin_lockout() -> None:
 
 
 @pytest.mark.asyncio
+async def test_recovery_restore_rejects_unsafe_groups_and_admin_demotion() -> None:
+    """Recovery restore keeps namespace and no-lockout guards fail-closed."""
+    hass = FakeHass()
+    recovery = RecoveryController(hass, UserBindingAdapter(hass, ha_version="2026.6.4"))
+
+    with pytest.raises(UnsafeAuthTarget):
+        await recovery.async_restore(
+            AuthRecoverySnapshot(
+                users=(
+                    UserGroupSnapshot("managed", ("system-users", "tessera:viewer")),
+                )
+            ),
+            {"managed": FakeUser("managed", ["tessera:viewer"])},
+        )
+    with pytest.raises(UnsafeAuthTarget):
+        await recovery.async_restore(
+            AuthRecoverySnapshot(
+                users=(
+                    UserGroupSnapshot("managed", ("foreign-group", "tessera:viewer")),
+                )
+            ),
+            {"managed": FakeUser("managed", ["tessera:viewer"])},
+        )
+    with pytest.raises(LockoutRisk):
+        await recovery.async_restore(
+            AuthRecoverySnapshot(
+                users=(UserGroupSnapshot("admin", ("tessera:admin",)),)
+            ),
+            {"admin": FakeUser("admin", ["system-admin", "tessera:admin"])},
+        )
+
+    assert hass.auth.update_calls == []
+
+
+@pytest.mark.asyncio
 async def test_recovery_detects_lockout_and_can_fail_safe_to_off() -> None:
     """Recovery fails closed on lockout and can persist mode off."""
     hass = FakeHass()
@@ -365,6 +455,7 @@ async def test_recovery_detects_lockout_and_can_fail_safe_to_off() -> None:
         "membership": {"by_user": {}, "by_group": {}},
     }
     assert store.saved[-1]["mode"] == "off"
+    assert hass.auth.update_calls == []
 
 
 @pytest.mark.asyncio
