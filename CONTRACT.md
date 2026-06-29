@@ -1,5 +1,5 @@
-# Tessera — Kooperationsvertrag Claude ⇄ Codex — **v0.2 (merged)**
-Stand 2026-06-29 · Merge aus **Claude-Entwurf** + **Codex-v0.1** + **Codex-Merge-Review (MODIFY)** · Status: **zur Abnahme** (Codex `ACCEPT` → v1.0 → wird Repo-`CONTRACT.md`)
+# Tessera — Kooperationsvertrag Claude ⇄ Codex — **v1.0 (current/verbindlich)**
+Stand 2026-06-29 · aus Claude-Entwurf + Codex-v0.1 + Merge-Review + **Codex-v0.2-Review (5 Redlines eingearbeitet)** · Status: **verbindlich** (Sign-off s. §14)
 
 > Mergeprotokoll erfüllt: **Claudes Repo-Skelett = Basis**, **Codex' Sicherheits-/Betriebs-/Prozess-Klauseln eingearbeitet**. `[Cx]` = aus Codex übernommen/geschärft. Globale Invarianten gelten bereits aus bestehenden Projektregeln.
 
@@ -19,7 +19,7 @@ Regelt, wie Claude + Codex Tessera (und die Maison/Atrium-Familie) zusammen entw
 1. **Keine** Secrets/Token/Passwörter/Auth-Codes/LLAT/`.storage`-Werte in Chat/Logs/Reports/Commits/Evidence.
 2. `/Volumes/config` **read-only**, außer ein explizites Write-Gate nennt Ziel + Backup + Rollback + `check_config` + Verifikation.
 3. **Kein Live-/CM5-Write** ohne Backup, Rollback-Dry-Run, `check_config`, Manifest, Michael-Freigabe.
-4. **Kein Push/Commit vom Mac, wenn das Projekt Host-Autosync nutzt** (HA-Config/historian). **Ausnahme: Tessera** — kein self-sync-Host → **Mac-Push via `gh`** ist hier der vereinbarte Weg.
+4. **Kein Push/Commit vom Mac, wenn das Projekt Host-Autosync nutzt** (HA-Config/historian). **Ausnahme: Tessera** (kein self-sync-Host) → **Mac-Push via `gh` nur:** ins **private** Repo · von **Task-Branch/Worktree** (nie direkte `main`-Arbeit) · **kein `--force`** · **vor jedem Push `git status` + Secret-/Artefakt-Check** · Merge nach `main` **nur mit grünem Gate + CI**. Public/outward/HACS-Publish/Live **nur mit Michael-Freigabe**.
 5. **Keine Architekturfreigabe aus einem PARTIAL-Lauf** [Cx].
 6. **Kein Produkt-/Enforce-Go**, solange Muss-Gates offen sind [Cx].
 7. Jede nicht prüfbare Aussage wird als **`nicht verifizierbar`** markiert — nicht geraten [Cx].
@@ -33,7 +33,7 @@ Regelt, wie Claude + Codex Tessera (und die Maison/Atrium-Familie) zusammen entw
 
 ## §4 Zusammenarbeit & Transportrealität [Cx]
 - **Blackboard:** beide schreiben/reagieren. **Kein garantierter direkter Claude-Codex-Kanal** → jedes Handoff-Dokument **selbsttragend** (Kontext · Ziel · Scope · Quellen · Dateien · Nicht-Ziele · Gate-Kriterien) [Cx].
-- **Transport-Ort:** Migration **vollzogen 2026-06-29** → **Repo `exchange/` ist der Blackboard**; das alte `outputs/` ist **eingefrorenes Archiv** (Historie). Während der Übergangsphase syncт Claude Rest-Artefakte aus `outputs/` ins Repo.
+- **Transport-Ort:** Ab der Migration (2026-06-29) ist **`~/tessera/exchange/` der kanonische Blackboard-Ort.** Das alte `…/outputs/` ist **reines Archiv — kein Schreibpfad mehr**; ein etwaiger Rest-Sync ist eine **einmalige Archivmigration**, keine laufende Quelle.
 - **Dual-Config:** `CLAUDE.md` (Claude) **+ `AGENTS.md` (Codex)**. **Evidence-based merge** nach `main` nur mit grünem Gate. **Enge Task-Grenzen.** **Worktree-/Branch-Isolation** bei parallelem Code.
 
 ## §5 Konfliktlösung [Cx §9]
@@ -45,10 +45,10 @@ Erlaubt, wenn User/Watcher es verlangt, ein Review mehrere Perspektiven braucht,
 
 ## §7 Dateiablage & Benennung
 **Repo-Layout:** `docs/` (kanonisch, ohne Datum) · `exchange/YYYY-MM-DD/` (Blackboard) · `spike/{evidence,reports,tools/tessera_spike}` · `decisions/` (ADRs) · Root: `CONTRACT.md` · `CLAUDE.md` · `AGENTS.md` · `CLAUDE_WORKFLOW.md`.
-**Namen** [Cx-Muster gemerged]: `<projekt>-<kind>-<author>-YYYY-MM-DD.md` · `author ∈ {claude, codex}` · joint = `claude-codex-*` · `kind ∈ {spec, workorder, report, gate, review, evidence}` · `<projekt>-process-log.md`, `<projekt>-decision-log.md`. Kanonisch in `docs/` ohne Datum (Stand = git).
+**Namen** [Cx-Muster gemerged]: `<projekt>-<kind>-<author>-YYYY-MM-DD.md` · `author ∈ {claude, codex}` · joint = `claude-codex-*` · `kind ∈ {spec, workorder, task, report, gate, review, evidence, contract, contract-merge}` · `<projekt>-process-log.md`, `<projekt>-decision-log.md`. Kanonisch in `docs/` ohne Datum (Stand = git). Historie wird **nicht** rückwirkend umbenannt.
 
 ## §8 Dokumentationspflicht [Cx §7]
-Jede substanzielle Runde erzeugt mind.: **Report/Evidence** + **Gate-Review** + **Process-Log-Eintrag** + **Decision-Log-Eintrag** (bei Architektur/Security/Datenmodell/UX/Produktlinie).
+**Substanzielle Runde** = Codeänderung · Gate · Architektur-/Security-/Datenmodell-Entscheidung · Dev-/Live-Operation · Cross-Agent-Handoff. Jede erzeugt mind.: **Report/Evidence** (bei Code = PR-Body) + **Gate-Review** + **Decision-Log-Eintrag** (bei Architektur/Security/Datenmodell/UX/Produktlinie). Triviales (Tippfix, Formatierung) braucht keinen Log-Eintrag.
 
 ## §9 Evidence-Schema [Cx]
 Jede Evidence enthält: **Secret-Redaction-Status · `exit_code` · Abbruchgrund · Tests/Logs · relevante `file:line`/URLs**. Bei D0 zusätzlich `gate_results[]` je Kriterium + Vor-/Nach-Snapshot.
@@ -75,9 +75,9 @@ Repo + `exchange/`-Blackboard + Dual-Config. **`TASKS.md`**-Board (Michael-Nicke
 
 | Partei | Status | Datum |
 |---|---|---|
-| Claude | **PROPOSED v0.2 (merged)** | 2026-06-29 |
-| Codex | PENDING (ACCEPT → v1.0?) | – |
-| Michael | PENDING (finale Freigabe) | – |
+| Claude | **FINALIZED v1.0** | 2026-06-29 |
+| Codex | **ACCEPT** (v0.2-Review MODIFY → 5 Redlines eingearbeitet) | 2026-06-29 |
+| Michael | **Kernpunkte abgenickt** (OIDC-v1-Pflicht ergänzt) | 2026-06-29 |
 
 ---
-**An Codex:** v0.2 merged dein v0.1 + deine Merge-Review-Auflagen in mein Skelett (alle §-MODIFY-Punkte adressiert, `[Cx]` markiert). Bitte `ACCEPT` → dann wird das die Repo-`CONTRACT.md` v1.0; oder gezielte Rest-`MODIFY`.
+**v1.0** = v0.2 + Codex' 5 v0.2-Review-Redlines (Status · Transport · Push-Regel · Naming · Doku-Scope) eingearbeitet. Künftige Änderungen via §14 (Ping-Pong + Michael-Bestätigung; Sicherheitsinvarianten nie still gelockert).
