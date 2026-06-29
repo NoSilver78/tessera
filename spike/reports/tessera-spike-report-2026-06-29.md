@@ -1,14 +1,14 @@
 # Tessera Phase-0 Spike Report
 
-Stand: 2026-06-29T10:23:52
+Stand: 2026-06-29T11:58:57
 
-Modus: Dev-only gegen `ha-tessera-dev`; `/Volumes/config` nur read-only fuer D9-Statik; keine Secrets/Token/Auth-Codes ausgegeben.
+Modus: Dev-only gegen `ha-tessera-dev`; keine Secrets/Token/Auth-Codes ausgegeben. Live-/`/Volumes/config`-Scans sind im Standardlauf bewusst deaktiviert und brauchen ein eigenes Gate.
 
 ## Gesamturteil
 
 **PARTIAL / kein Enforce-Go.**
 
-D0 ist gruen genug, um den dev-only Messlauf zu starten. D1, D2 und D4 liefern starke positive Signale fuer den Auth-Store-Schreibpfad. D3/D6/D7/D8/D9 bleiben bewusst **PARTIAL**, weil WS, echte LLAT-Rotation, vollstaendige Leak-Matrix, Custom-Component-Runtime und Live/CM5-Gates in diesem Lauf nicht vollstaendig abgedeckt sind.
+D0 ist gruen genug, um den dev-only Messlauf zu starten. D1, D2, D4 und B3 liefern starke positive Signale fuer den Auth-Store-Schreibpfad. D5 ist nur bei echtem corrupt-store Parse-Fehler plus exaktem Boot-Restore PASS. D3/D6/D7/D8/D9 bleiben bewusst **PARTIAL**, weil WS, echte LLAT-Rotation, vollstaendige Leak-Matrix, Custom-Component-Runtime und Live/CM5-Gates in diesem Lauf nicht vollstaendig abgedeckt sind.
 
 ## DoD Matrix
 
@@ -16,14 +16,15 @@ D0 ist gruen genug, um den dev-only Messlauf zu starten. D1, D2 und D4 liefern s
 |---|---:|---|
 | D0 | PASS | Preflight/onboarding/seed/harness gate |
 | D1 | PASS | tessera group/policy/user restart survival |
-| D2 | PASS | policy-only change reflected after explicit cache invalidation without restart |
+| D2 | PASS | policy mutation checked before invalidate, after invalidate, and after restart |
 | D3 | PARTIAL | internal + REST + service tested; WS not tested in this run |
 | D4 | PASS | full union and restore via public update_user |
-| D5 | PARTIAL | restore primitive proved; corrupt-store boot rescue not executed in this run |
+| D5 | PASS | boot rescue requires corrupt-store parse failure plus exact managed user group restore |
 | D6 | PARTIAL | entity service allowed/forbidden and entity_id:all probed; response/non-entity matrix incomplete |
 | D7 | PARTIAL | render_template probed; logbook/registry/history/WS leak matrix incomplete |
 | D8 | PARTIAL | headless normal token probe and revocation; real LLAT rotation not performed |
-| D9 | PARTIAL | static /Volumes/config custom-component scan; runtime classification not complete |
+| D9 | PARTIAL | live /Volumes/config scan skipped in standard dev run; runtime classification not complete |
+| B3 | PASS | managed Tessera users are not members of HA system-users allow-all group |
 
 ## D0
 
@@ -32,7 +33,7 @@ D0 ist gruen genug, um den dev-only Messlauf zu starten. D1, D2 und D4 liefern s
 - Onboarding abgeschlossen: `True`
 - Exit-Code: `0`
 - Harness-Service geladen: `True`
-- 8-Service-Load-Check: `True`; registriert `['ensure_group', 'flush_auth_store', 'invalidate_user', 'probe_check_entity', 'restore', 'run_spike', 'set_group_policy', 'set_user_groups', 'snapshot']`
+- 8-Service-Load-Check: `True`; registriert `['boot_rescue_status', 'ensure_group', 'flush_auth_store', 'invalidate_user', 'prepare_boot_rescue', 'probe_check_entity', 'probe_d2_three_way', 'probe_system_users_gate', 'restore', 'run_spike', 'set_group_policy', 'set_user_groups', 'snapshot']`
 - Blocking-I/O-Warnungen aus `tessera_spike`: `0`
 - Token-/Passwortwerte: nicht im Report enthalten.
 
@@ -56,10 +57,14 @@ Gate-Results:
   {
     "gate": "a1_8_services",
     "registered_services": [
+      "boot_rescue_status",
       "ensure_group",
       "flush_auth_store",
       "invalidate_user",
+      "prepare_boot_rescue",
       "probe_check_entity",
+      "probe_d2_three_way",
+      "probe_system_users_gate",
       "restore",
       "run_spike",
       "set_group_policy",
@@ -99,13 +104,13 @@ Gate-Results:
   "device": {
     "area_id": "tessera_living",
     "config_entry_id_present": true,
-    "device_id": "2a2f425d887118dde9aba4cb8427c782"
+    "device_id": "1732a6a6b4edcbb12a3f06eed5027245"
   },
   "entities": [
     {
       "area_id": null,
       "class": "device_area_allowed_light",
-      "device_id": "2a2f425d887118dde9aba4cb8427c782",
+      "device_id": "1732a6a6b4edcbb12a3f06eed5027245",
       "disabled_by": null,
       "domain": "light",
       "entity_id": "light.tessera_seed_allowed_light",
@@ -123,7 +128,7 @@ Gate-Results:
     {
       "area_id": null,
       "class": "device_area_allowed_cover",
-      "device_id": "2a2f425d887118dde9aba4cb8427c782",
+      "device_id": "1732a6a6b4edcbb12a3f06eed5027245",
       "disabled_by": null,
       "domain": "cover",
       "entity_id": "cover.tessera_seed_allowed_cover",
@@ -172,6 +177,64 @@ Gate-Results:
 
 ```json
 {
+  "b3_system_users_gate_pre_restart": {
+    "enforce_managed_users": [
+      {
+        "credentials_count": 0,
+        "groups": [
+          "tessera:d2"
+        ],
+        "is_active": true,
+        "is_admin": false,
+        "is_owner": false,
+        "name": "tessera-d2-user",
+        "refresh_token_classes": [],
+        "refresh_token_count": 0,
+        "system_generated": false
+      },
+      {
+        "credentials_count": 0,
+        "groups": [
+          "tessera:extra"
+        ],
+        "is_active": true,
+        "is_admin": false,
+        "is_owner": false,
+        "name": "tessera-rescue-user",
+        "refresh_token_classes": [],
+        "refresh_token_count": 0,
+        "system_generated": false
+      },
+      {
+        "credentials_count": 0,
+        "groups": [
+          "tessera:test"
+        ],
+        "is_active": true,
+        "is_admin": false,
+        "is_owner": false,
+        "name": "tessera-test-user",
+        "refresh_token_classes": [],
+        "refresh_token_count": 0,
+        "system_generated": false
+      }
+    ],
+    "excluded_system_fixture_users": [
+      "tessera-test-admin",
+      "tessera-test-ro"
+    ],
+    "expected_managed_users": [
+      "tessera-d2-user",
+      "tessera-rescue-user",
+      "tessera-test-user"
+    ],
+    "expected_managed_users_present": true,
+    "missing_expected_managed_users": [],
+    "offenders": [],
+    "ok": true,
+    "system_generated_users_ignored": 1,
+    "system_users_group_id": "system-users"
+  },
   "d1_pre_restart": {
     "group_created": true,
     "policy_written": true
@@ -180,6 +243,42 @@ Gate-Results:
     "allowed_read_after_policy_change": false,
     "forbidden_control_after_policy_change": true,
     "forbidden_read_after_policy_change": true
+  },
+  "d2_three_way": {
+    "after_explicit_invalidate": {
+      "allowed_read": false,
+      "forbidden_control": true,
+      "forbidden_read": true
+    },
+    "after_policy_mutation_without_invalidate": {
+      "allowed_read": true,
+      "forbidden_control": false,
+      "forbidden_read": false
+    },
+    "before_mutation": {
+      "allowed_read": true,
+      "forbidden_control": false,
+      "forbidden_read": false
+    },
+    "expected": {
+      "after_invalidate_allows_forbidden_entity": true,
+      "without_invalidate_keeps_old_cache": true
+    },
+    "group_id": "tessera:d2",
+    "persisted_for_restart_check": true,
+    "user": {
+      "credentials_count": 0,
+      "groups": [
+        "tessera:d2"
+      ],
+      "is_active": true,
+      "is_admin": false,
+      "is_owner": false,
+      "name": "tessera-d2-user",
+      "refresh_token_classes": [],
+      "refresh_token_count": 0,
+      "system_generated": false
+    }
   },
   "d3_internal_check_entity": {
     "allowed_control": true,
@@ -199,6 +298,20 @@ Gate-Results:
       "tessera:extra"
     ]
   },
+  "d5_boot_rescue_prepare": {
+    "auth_store_corrupted": false,
+    "corrupt_tessera_store_path": "/config/.storage/tessera.config",
+    "drifted_groups_before_restart": [
+      "tessera:extra"
+    ],
+    "expected_groups": [
+      "tessera:test"
+    ],
+    "prepared": true,
+    "snapshot_path": "/config/tessera_spike_rescue_snapshot.json",
+    "trigger_path": "/config/tessera_spike_rescue_trigger.json",
+    "user_name": "tessera-rescue-user"
+  },
   "d5_restore_primitive": {
     "boot_rescue_corruption_tested": false,
     "public_async_update_user_restore_available": true
@@ -210,9 +323,110 @@ Restart-Survival:
 
 ```json
 {
-  "group_survived_restart": true,
-  "policy_survived_restart": true,
-  "user_survived_restart": true
+  "b3_system_users_gate_post_restart": {
+    "enforce_managed_users": [
+      {
+        "credentials_count": 0,
+        "groups": [
+          "tessera:d2"
+        ],
+        "is_active": true,
+        "is_admin": false,
+        "is_owner": false,
+        "name": "tessera-d2-user",
+        "refresh_token_classes": [],
+        "refresh_token_count": 0,
+        "system_generated": false
+      },
+      {
+        "credentials_count": 0,
+        "groups": [
+          "tessera:test"
+        ],
+        "is_active": true,
+        "is_admin": false,
+        "is_owner": false,
+        "name": "tessera-rescue-user",
+        "refresh_token_classes": [],
+        "refresh_token_count": 0,
+        "system_generated": false
+      },
+      {
+        "credentials_count": 0,
+        "groups": [
+          "tessera:test"
+        ],
+        "is_active": true,
+        "is_admin": false,
+        "is_owner": false,
+        "name": "tessera-test-user",
+        "refresh_token_classes": [],
+        "refresh_token_count": 0,
+        "system_generated": false
+      }
+    ],
+    "excluded_system_fixture_users": [
+      "tessera-test-admin",
+      "tessera-test-ro"
+    ],
+    "expected_managed_users": [
+      "tessera-d2-user",
+      "tessera-rescue-user",
+      "tessera-test-user"
+    ],
+    "expected_managed_users_present": true,
+    "missing_expected_managed_users": [],
+    "offenders": [],
+    "ok": true,
+    "system_generated_users_ignored": 1,
+    "system_users_group_id": "system-users"
+  },
+  "d1_restart_survival": {
+    "group_survived_restart": true,
+    "policy_survived_restart": true,
+    "user_survived_restart": true
+  },
+  "d2_three_way_after_restart": {
+    "allowed_read": false,
+    "forbidden_control": true,
+    "forbidden_read": true,
+    "tested": true,
+    "user": {
+      "credentials_count": 0,
+      "groups": [
+        "tessera:d2"
+      ],
+      "is_active": true,
+      "is_admin": false,
+      "is_owner": false,
+      "name": "tessera-d2-user",
+      "refresh_token_classes": [],
+      "refresh_token_count": 0,
+      "system_generated": false
+    }
+  },
+  "d5_boot_rescue_after_restart": {
+    "corrupt_tessera_store_error": "JSONDecodeError",
+    "corrupt_tessera_store_parse_failed": true,
+    "corrupt_tessera_store_path": "/config/.storage/tessera.config",
+    "errors": [],
+    "ok": true,
+    "requested": true,
+    "restored_users": [
+      {
+        "actual_group_ids": [
+          "tessera:test"
+        ],
+        "exact_match": true,
+        "expected_group_ids": [
+          "tessera:test"
+        ],
+        "name": "tessera-rescue-user"
+      }
+    ],
+    "snapshot_present": true,
+    "used_public_async_update_user": true
+  }
 }
 ```
 
@@ -260,26 +474,12 @@ Restart-Survival:
 
 ```json
 {
-  "available": true,
-  "components_count": 14,
-  "http_or_ws_candidates": [
-    "auth_oidc",
-    "browser_mod",
-    "hacs",
-    "unifi_insights",
-    "unifi_network_map"
-  ],
-  "path": "/Volumes/config/custom_components",
-  "services_yaml_components": [
-    "browser_mod",
-    "dreame_vacuum",
-    "epex_spot",
-    "gruenbeck_cloud",
-    "solarman",
-    "solcast_solar",
-    "unifi_insights",
-    "unifi_network_map"
-  ]
+  "available": false,
+  "components_count": null,
+  "http_or_ws_candidates": [],
+  "reason": "standard dev spike does not touch /Volumes/config; live static scans require an explicit separate review gate",
+  "services_yaml_components": [],
+  "skipped": true
 }
 ```
 

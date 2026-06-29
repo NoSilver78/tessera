@@ -78,10 +78,14 @@
     {
       "gate": "a1_8_services",
       "registered_services": [
+        "boot_rescue_status",
         "ensure_group",
         "flush_auth_store",
         "invalidate_user",
+        "prepare_boot_rescue",
         "probe_check_entity",
+        "probe_d2_three_way",
+        "probe_system_users_gate",
         "restore",
         "run_spike",
         "set_group_policy",
@@ -105,10 +109,14 @@
     "loaded": true,
     "missing_required_services": [],
     "registered_services": [
+      "boot_rescue_status",
       "ensure_group",
       "flush_auth_store",
       "invalidate_user",
+      "prepare_boot_rescue",
       "probe_check_entity",
+      "probe_d2_three_way",
+      "probe_system_users_gate",
       "restore",
       "run_spike",
       "set_group_policy",
@@ -190,8 +198,11 @@
   "post_restart_service": {
     "keys": [
       "auth",
+      "b3_system_users_gate_post_restart",
       "d1_restart_survival",
+      "d2_three_way_after_restart",
       "d3_rest_ws_service",
+      "d5_boot_rescue_after_restart",
       "d6_service_matrix",
       "d7_leak_matrix",
       "d8_headless_token",
@@ -207,7 +218,7 @@
       "binds": [
         "ha-tessera-dev-config:/config"
       ],
-      "id_short": "e116877388fe",
+      "id_short": "6daf94b0b511",
       "image": "ghcr.io/home-assistant/home-assistant:2026.6.4",
       "mounts": [
         {
@@ -238,11 +249,14 @@
   "pre_restart_service": {
     "keys": [
       "after",
+      "b3_system_users_gate_pre_restart",
       "before",
       "d1_pre_restart",
       "d2_policy_change_no_restart",
+      "d2_three_way",
       "d3_internal_check_entity",
       "d4_union_restore",
+      "d5_boot_rescue_prepare",
       "d5_restore_primitive",
       "phase",
       "seed_fixture"
@@ -255,7 +269,7 @@
       "binds": [
         "ha-tessera-dev-config:/config"
       ],
-      "id_short": "84a933f32291",
+      "id_short": "a59a9c8dede0",
       "image": "ghcr.io/home-assistant/home-assistant:2026.6.4",
       "mounts": [
         {
@@ -299,13 +313,13 @@
     "device": {
       "area_id": "tessera_living",
       "config_entry_id_present": true,
-      "device_id": "2a2f425d887118dde9aba4cb8427c782"
+      "device_id": "1732a6a6b4edcbb12a3f06eed5027245"
     },
     "entities": [
       {
         "area_id": null,
         "class": "device_area_allowed_light",
-        "device_id": "2a2f425d887118dde9aba4cb8427c782",
+        "device_id": "1732a6a6b4edcbb12a3f06eed5027245",
         "disabled_by": null,
         "domain": "light",
         "entity_id": "light.tessera_seed_allowed_light",
@@ -323,7 +337,7 @@
       {
         "area_id": null,
         "class": "device_area_allowed_cover",
-        "device_id": "2a2f425d887118dde9aba4cb8427c782",
+        "device_id": "1732a6a6b4edcbb12a3f06eed5027245",
         "disabled_by": null,
         "domain": "cover",
         "entity_id": "cover.tessera_seed_allowed_cover",
@@ -366,7 +380,7 @@
       }
     ]
   },
-  "started_at": "2026-06-29T10:23:33",
+  "started_at": "2026-06-29T11:58:38",
   "status": "GREEN",
   "target": {
     "container": "ha-tessera-dev",

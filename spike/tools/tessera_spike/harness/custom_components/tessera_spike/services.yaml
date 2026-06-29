@@ -78,6 +78,22 @@ snapshot:
   name: Snapshot auth
   description: Return a sanitized auth snapshot without token values.
 
+probe_d2_three_way:
+  name: Probe D2 three way
+  description: Probe policy mutation before invalidation, after invalidation, and after persistence.
+
+prepare_boot_rescue:
+  name: Prepare boot rescue
+  description: Prepare a managed-user rescue snapshot and corrupt Tessera store state for restart proof.
+
+probe_system_users_gate:
+  name: Probe system-users gate
+  description: Verify managed Tessera users are not members of HA's allow-all system-users group.
+
+boot_rescue_status:
+  name: Boot rescue status
+  description: Return the startup rescue result captured during HA boot.
+
 restore:
   name: Restore user groups
   description: Restore one dev-only user's full group union; this is not a full auth snapshot restore.

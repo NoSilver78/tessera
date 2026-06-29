@@ -1,7 +1,7 @@
 # Tessera D0 Evidence
 
-Stand: 2026-06-29T10:23:52
-Modus: ha-tessera-dev only; /Volumes/config read-only; no token/password/auth-code values emitted.
+Stand: 2026-06-29T11:58:57
+Modus: ha-tessera-dev only; no /Volumes/config scan in the standard run; no token/password/auth-code values emitted.
 
 Overall D0: **PASS**
 
@@ -12,7 +12,7 @@ Overall D0: **PASS**
 - Onboarding user status: `200`
 - Token exchange status: `200` (values redacted)
 - Harness installed/loaded: `True`
-- Harness services: `['ensure_group', 'flush_auth_store', 'invalidate_user', 'probe_check_entity', 'restore', 'run_spike', 'set_group_policy', 'set_user_groups', 'snapshot']`
+- Harness services: `['boot_rescue_status', 'ensure_group', 'flush_auth_store', 'invalidate_user', 'prepare_boot_rescue', 'probe_check_entity', 'probe_d2_three_way', 'probe_system_users_gate', 'restore', 'run_spike', 'set_group_policy', 'set_user_groups', 'snapshot']`
 - Blocking-I/O matches: `0`
 - Exit code: `0`
 - Recreate proof: Docker container and volume were recreated after target-isolation check.
@@ -37,10 +37,14 @@ Overall D0: **PASS**
   {
     "gate": "a1_8_services",
     "registered_services": [
+      "boot_rescue_status",
       "ensure_group",
       "flush_auth_store",
       "invalidate_user",
+      "prepare_boot_rescue",
       "probe_check_entity",
+      "probe_d2_three_way",
+      "probe_system_users_gate",
       "restore",
       "run_spike",
       "set_group_policy",
