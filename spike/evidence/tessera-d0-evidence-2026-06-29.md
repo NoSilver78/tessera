@@ -1,6 +1,6 @@
 # Tessera D0 Evidence
 
-Stand: 2026-06-29T16:11:35
+Stand: 2026-06-29T20:34:02
 Modus: ha-tessera-dev only; no /Volumes/config scan in the standard run; no token/password/auth-code values emitted.
 
 Overall D0: **PASS**

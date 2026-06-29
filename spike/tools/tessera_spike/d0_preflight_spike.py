@@ -642,6 +642,89 @@ def read_container_json(path: str) -> Any:
     return json.loads(proc.stdout)
 
 
+def read_container_json_optional(path: str) -> Any:
+    """Read JSON from the dev container if present."""
+    proc = run(["docker", "exec", CONTAINER, "cat", path], check=False)
+    if proc.returncode != 0 or not proc.stdout.strip():
+        return {}
+    return json.loads(proc.stdout)
+
+
+def observe_d5_auth_store_corruption() -> dict[str, Any]:
+    """Run the S2 auth-store corruption observation; it is never a D5 PASS lever."""
+    info = inspect_container()
+    isolation_ok, isolation_errors = assert_target_isolation(info)
+    if not isolation_ok:
+        raise RuntimeError(
+            "S2 target isolation failed before auth-store manipulation: "
+            f"{isolation_errors}"
+        )
+    setup = docker_exec_json(r"""
+import json, pathlib, shutil
+auth = pathlib.Path("/config/.storage/auth")
+backup = pathlib.Path("/config/.storage/auth.tessera_spike_backup")
+result = {
+    "tested": True,
+    "s2_observational_only": True,
+    "auth_store_path": str(auth),
+    "backup_path": str(backup),
+    "auth_store_backup_created": False,
+    "auth_store_corruption_injected": False,
+}
+if auth.exists():
+    shutil.copy2(auth, backup)
+    result["auth_store_backup_created"] = True
+    result["auth_store_size_before"] = auth.stat().st_size
+    auth.write_text("{\"intentionally_corrupt\": ")
+    result["auth_store_corruption_injected"] = True
+print(json.dumps(result, sort_keys=True))
+""")
+    setup["pre_manipulation_target_isolation_ok"] = isolation_ok
+    setup["pre_manipulation_target_isolation_errors"] = isolation_errors
+    run(["docker", "restart", CONTAINER], check=False)
+    try:
+        status: int | str = wait_http_status("/api/", {200, 401}, timeout=45)
+        boot_error = None
+    except RuntimeError as exc:
+        status = "timeout"
+        boot_error = redact_text(str(exc))
+
+    restore = docker_exec_json(r"""
+import json, pathlib, shutil
+auth = pathlib.Path("/config/.storage/auth")
+backup = pathlib.Path("/config/.storage/auth.tessera_spike_backup")
+result = {
+    "auth_store_restored_from_backup": False,
+    "backup_removed": False,
+}
+if backup.exists():
+    shutil.copy2(backup, auth)
+    result["auth_store_restored_from_backup"] = True
+    backup.unlink()
+    result["backup_removed"] = True
+print(json.dumps(result, sort_keys=True))
+""")
+    run(["docker", "restart", CONTAINER], check=False)
+    try:
+        restore_status: int | str = wait_http_status("/api/", {200, 401}, timeout=180)
+        restore_error = None
+    except RuntimeError as exc:
+        restore_status = "timeout"
+        restore_error = redact_text(str(exc))
+
+    return {
+        **setup,
+        "ha_boot_after_auth_corruption": status in {200, 401},
+        "ha_boot_after_auth_corruption_status": status,
+        "ha_boot_after_auth_corruption_error": boot_error,
+        **restore,
+        "ha_boot_after_auth_restore": restore_status in {200, 401},
+        "ha_boot_after_auth_restore_status": restore_status,
+        "ha_boot_after_auth_restore_error": restore_error,
+        "d5_pass_lever": False,
+    }
+
+
 def static_d9_scan() -> dict[str, Any]:
     return {
         "available": True,
@@ -689,6 +772,27 @@ def verdicts_from_result(
     a3_guard = pre.get("a3_rescue_namespace_guard", {})
     b3_pre = pre.get("b3_system_users_gate_pre_restart", {})
     b3_post = post.get("b3_system_users_gate_post_restart", {})
+    d5_required_true = (
+        "requested",
+        "snapshot_present",
+        "run_id_matches",
+        "auth_store_corrupted",
+        "managed_group_replace_drift_injected",
+        "boot_rescue_corruption_tested",
+        "no_admin_lockout",
+        "rescue_independent_of_healthy_tessera",
+        "reread_state_matches_intended",
+        "owner_system_unmanaged_never_touched",
+        "rescue_restore_namespace_guarded",
+        "post_boot_measured",
+    )
+    d5_pass = (
+        all(d5_rescue.get(key) is True for key in d5_required_true)
+        and d5_rescue.get("errors") == []
+        and d5_rescue.get("verdict") == "PASS"
+        and result.get("d5_authstore_corruption_observation", {}).get("d5_pass_lever")
+        is False
+    )
 
     return {
         "D0": {
@@ -750,14 +854,8 @@ def verdicts_from_result(
             "summary": "caller restores by supplying the full group set; HA group_ids writes are replace semantics",
         },
         "D5": {
-            "verdict": (
-                "PASS"
-                if d5_rescue.get("auth_store_corrupted")
-                and d5_rescue.get("boot_rescue_corruption_tested")
-                and d5_rescue.get("no_admin_lockout")
-                else "PARTIAL"
-            ),
-            "summary": "real /config/.storage/auth corruption rescue is not proven in this run; no false PASS",
+            "verdict": ("PASS" if d5_pass else "PARTIAL"),
+            "summary": "managed REPLACE demotion boot-rescue requires measured restore, setup-exception independence, and no-admin-lockout",
         },
         "D6": {
             "verdict": (
@@ -1009,7 +1107,7 @@ Modus: Dev-only gegen `ha-tessera-dev`; keine Secrets/Token/Auth-Codes ausgegebe
 
 **PARTIAL / kein Enforce-Go.**
 
-D0 ist gruen genug, um den dev-only Messlauf zu starten. D1, D2, D3, D4, D6, D8, D9, D11, D13, D15, A2, A3 und B3 liefern belastbare Dev-Signale. D7 liefert eine ehrliche Leak-Matrix, bleibt aber wegen nicht verifizierbarer Registry-/History-/Logbook-Baselines **PARTIAL**. D5 bleibt bewusst **PARTIAL**, weil kein echter `/config/.storage/auth`-Korruptions-/No-Admin-Lockout-Rescue bewiesen ist. D12 bleibt **BLOCKED**. Welle D nimmt D9 nur als **fail-closed Klassifikationsmatrix** ab; Welle E nimmt Lifecycle-Gates nur fuer `ha-tessera-dev` ab. Weiter kein Enforce/Product-Go.
+D0 ist gruen genug, um den dev-only Messlauf zu starten. D1, D2, D3, D4, D6, D8, D9, D11, D13, D15, A2, A3 und B3 liefern belastbare Dev-Signale. D5 bewertet das gemessene S1/S1b-Recovery-Gate gegen managed REPLACE-Demotion, Setup-Exception-Unabhaengigkeit, Re-Read und Owner/Admin-Operate-Probe; S2 `/config/.storage/auth`-Korruption bleibt bewusst **observational only** und kein PASS-Hebel. D7 liefert eine ehrliche Leak-Matrix, bleibt aber wegen nicht verifizierbarer Registry-/History-/Logbook-Baselines **PARTIAL**. D12 bleibt **BLOCKED**. Welle D nimmt D9 nur als **fail-closed Klassifikationsmatrix** ab; Welle E nimmt Lifecycle-Gates nur fuer `ha-tessera-dev` ab. Weiter kein Enforce/Product-Go.
 
 ## DoD Matrix
 
@@ -1050,6 +1148,12 @@ Restart-Survival:
 
 ```json
 {json.dumps({k: spike.get('post_restart', {}).get(k) for k in ['d1_restart_survival', 'd2_three_way_after_restart', 'd5_boot_rescue_after_restart', 'b3_system_users_gate_post_restart']}, indent=2, sort_keys=True)}
+```
+
+D5 S2 Auth-Store-Korruption, **observational only**:
+
+```json
+{json.dumps(spike.get('d5_authstore_corruption_observation', {}), indent=2, sort_keys=True)}
 ```
 
 ## D3/D6/D7/D8 Runtime Probes
@@ -1093,7 +1197,7 @@ Lifecycle-Lesart: `D11` belegt im Dev-Spike den fail-closed Version-Gate-Pfad pe
 
 - **Go fuer weitere Phase-0-Haertung:** ja.
 - **Go fuer Tessera-Enforce/Product:** nein.
-- **Naechste Pflicht:** Boot-Rescue mit absichtlich korruptem Tessera-Store, echte HACS-/Upgrade-Probe ausserhalb der Simulation, D10/CM5-Benchmark und D12/OIDC gesondert.
+- **Naechste Pflicht:** echte HACS-/Upgrade-Probe ausserhalb der Simulation, D10/CM5-Benchmark, D12/OIDC und Produkt-/Release-Gates gesondert; kein Enforce/Product-Go aus diesem Spike.
 
 ## Artefakte
 
@@ -1187,15 +1291,38 @@ def main() -> int:
             raise RuntimeError("seed fixture incomplete for Welle A")
 
         run(["docker", "restart", CONTAINER])
-        evidence["post_restart_http_status"] = wait_http_status(
+        evidence["setup_exception_boot_http_status"] = wait_http_status(
             "/api/", {200, 401}, timeout=180
         )
+        setup_exception_boot = read_container_json_optional(
+            "/config/tessera_spike_rescue_result.json"
+        )
+        evidence["d5_setup_exception_boot"] = {
+            "observed": setup_exception_boot.get("setup_exception_simulated") is True,
+            "rescue_independent_of_healthy_tessera": setup_exception_boot.get(
+                "rescue_independent_of_healthy_tessera"
+            ),
+            "run_id": setup_exception_boot.get("run_id"),
+            "error_type": setup_exception_boot.get("setup_exception_error_type"),
+        }
+        if evidence["d5_setup_exception_boot"]["observed"]:
+            run(["docker", "restart", CONTAINER])
+            evidence["post_restart_http_status"] = wait_http_status(
+                "/api/", {200, 401}, timeout=180
+            )
+        else:
+            evidence["post_restart_http_status"] = evidence[
+                "setup_exception_boot_http_status"
+            ]
         # Existing access token may be invalid after restart? It should remain valid briefly, but get a new one via refresh would need secret.
         # Call post_restart using the same access token first; if rejected, record failure.
         post = call_service(owner_token, "post_restart")
         evidence["post_restart_service"] = {"ok": True, "keys": sorted(post.keys())}
 
         spike = read_container_json("/config/tessera_spike_result.json")
+        spike["d5_authstore_corruption_observation"] = (
+            observe_d5_auth_store_corruption()
+        )
         spike["d9_static_scan"] = static_d9_scan()
         evidence["blocking_io_log_check"] = blocking_io_log_check()
         evidence["failure_redaction_check"] = measure_failure_redaction(evidence)

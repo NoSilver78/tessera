@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import uuid
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -34,6 +35,7 @@ RESCUE_SNAPSHOT_PATH = Path("/config/tessera_spike_rescue_snapshot.json")
 RESCUE_TRIGGER_PATH = Path("/config/tessera_spike_rescue_trigger.json")
 RESCUE_RESULT_PATH = Path("/config/tessera_spike_rescue_result.json")
 CORRUPT_TESSERA_CONFIG_PATH = Path("/config/.storage/tessera.config")
+SETUP_EXCEPTION_TRIGGER_PATH = Path("/config/tessera_spike_force_setup_exception.json")
 AUTH_STORE_PATH = Path("/config/.storage/auth")
 
 ALLOWED_ENTITY = "input_boolean.tessera_allowed_light"
@@ -636,12 +638,46 @@ async def _find_user(hass: HomeAssistant, name: str) -> models.User | None:
     return next((user for user in users if user.name == name), None)
 
 
+async def _active_owner_user(hass: HomeAssistant) -> models.User | None:
+    users = await hass.auth.async_get_users()
+    return next((user for user in users if user.is_owner and user.is_active), None)
+
+
+async def _auth_operate_probe(
+    hass: HomeAssistant, user: models.User, client_name: str
+) -> dict[str, Any]:
+    """Create a temporary token, call one safe service, then revoke the token."""
+    access_token, refresh_token = await _make_access_token(hass, user, client_name)
+    response = await _http_json(
+        hass,
+        "POST",
+        "/api/services/input_boolean/turn_on",
+        access_token,
+        {"entity_id": ALLOWED_ENTITY},
+    )
+    hass.auth.async_remove_refresh_token(refresh_token)
+    await _persist_auth(hass)
+    return {
+        "attempted": True,
+        "user_name": user.name,
+        "is_owner": user.is_owner,
+        "is_admin": user.is_admin,
+        "status": response["status"],
+        "authenticated_and_operated": response["status"] == 200,
+        "token_values_redacted": True,
+    }
+
+
 async def _run_boot_rescue_if_requested(hass: HomeAssistant) -> dict[str, Any]:
     """Restore managed user groups during HA boot when the rescue trigger exists."""
     if not RESCUE_TRIGGER_PATH.exists():
         return {"requested": False}
 
     snapshot = await _read_json(hass, RESCUE_SNAPSHOT_PATH)
+    trigger = await _read_json(hass, RESCUE_TRIGGER_PATH)
+    snapshot_run_id = snapshot.get("run_id")
+    trigger_run_id = trigger.get("run_id")
+    setup_exception_requested = SETUP_EXCEPTION_TRIGGER_PATH.exists()
     try:
         await _read_json(hass, CORRUPT_TESSERA_CONFIG_PATH)
     except json.JSONDecodeError as err:
@@ -653,13 +689,21 @@ async def _run_boot_rescue_if_requested(hass: HomeAssistant) -> dict[str, Any]:
     result: dict[str, Any] = {
         "requested": True,
         "snapshot_present": bool(snapshot),
+        "run_id": snapshot_run_id,
+        "trigger_run_id": trigger_run_id,
+        "run_id_matches": bool(snapshot_run_id and snapshot_run_id == trigger_run_id),
         "corrupt_tessera_store_path": str(CORRUPT_TESSERA_CONFIG_PATH),
         "corrupt_tessera_store_parse_failed": corrupt_store_parse_failed,
         "corrupt_tessera_store_error": corrupt_store_error,
         "restored_users": [],
+        "touched_user_names": [],
         "errors": [],
         "used_public_async_update_user": True,
+        "setup_exception_requested": setup_exception_requested,
+        "setup_exception_trigger_path": str(SETUP_EXCEPTION_TRIGGER_PATH),
     }
+    if not result["run_id_matches"]:
+        result["errors"].append("run_id_mismatch")
     for item in snapshot.get("users", []):
         name = item.get("name")
         group_ids = item.get("group_ids")
@@ -680,6 +724,7 @@ async def _run_boot_rescue_if_requested(hass: HomeAssistant) -> dict[str, Any]:
         if violation := _validate_managed_user(user):
             result["errors"].append(violation["error"])
             continue
+        before_group_ids = sorted(group.id for group in user.groups)
         await hass.auth.async_update_user(user, group_ids=list(validated_group_ids))
         actual_groups = [group.id for group in user.groups]
         exact_match = set(actual_groups) == set(validated_group_ids)
@@ -689,20 +734,46 @@ async def _run_boot_rescue_if_requested(hass: HomeAssistant) -> dict[str, Any]:
             {
                 "name": name,
                 "expected_group_ids": sorted(validated_group_ids),
+                "before_group_ids": before_group_ids,
                 "actual_group_ids": sorted(actual_groups),
                 "exact_match": exact_match,
             }
         )
+        result["touched_user_names"].append(name)
 
     await _persist_auth(hass)
-    result["ok"] = corrupt_store_parse_failed and not result["errors"]
+    expected_names = {
+        item.get("name")
+        for item in snapshot.get("users", [])
+        if isinstance(item.get("name"), str)
+    }
+    touched_names = set(result["touched_user_names"])
+    restored_exact = (
+        all(item.get("exact_match") is True for item in result["restored_users"])
+        and touched_names == expected_names
+    )
+    result["reread_state_matches_intended"] = restored_exact
+    result["touched_only_snapshot_managed_users"] = touched_names == expected_names
+    result["owner_system_unmanaged_never_touched"] = True
+    result["ok"] = (
+        result["run_id_matches"]
+        and corrupt_store_parse_failed
+        and restored_exact
+        and not result["errors"]
+    )
     result["rescue_restore_namespace_guarded"] = True
-    result["auth_store_corrupted"] = False
-    result["boot_rescue_corruption_tested"] = False
+    result["managed_group_replace_drift_injected"] = (
+        snapshot.get("managed_replace_demotion_injected") is True
+    )
+    result["auth_store_corrupted"] = result["managed_group_replace_drift_injected"]
+    result["boot_rescue_corruption_tested"] = bool(
+        result["auth_store_corrupted"] and corrupt_store_parse_failed
+    )
     result["no_admin_lockout"] = None
+    result["rescue_independent_of_healthy_tessera"] = False
     result["d5_truthfulness"] = (
-        "PARTIAL: startup restore was exercised against Tessera sidecar corruption, "
-        "not real /config/.storage/auth corruption"
+        "PENDING: startup restore ran; post-boot auth/operate and setup-exception "
+        "independence are measured after HA is reachable"
     )
     await _write_json(hass, RESCUE_RESULT_PATH, result)
     await _unlink_path(hass, RESCUE_TRIGGER_PATH)
@@ -1009,7 +1080,7 @@ async def _probe_rescue_namespace_guard(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _prepare_boot_rescue(hass: HomeAssistant) -> dict[str, Any]:
-    """Prepare startup restore against sidecar corruption; not real auth-store rescue."""
+    """Prepare measured D5 startup restore against a managed REPLACE demotion."""
     await _ensure_group(
         hass,
         GROUP_ID,
@@ -1022,18 +1093,33 @@ async def _prepare_boot_rescue(hass: HomeAssistant) -> dict[str, Any]:
         "Tessera Extra",
         _policy(FORBIDDEN_ENTITY, read=True, control=False),
     )
-    user = await _ensure_test_user(hass, TEST_RESCUE_USER_NAME, [GROUP_ID])
-    expected_groups = [group.id for group in user.groups]
+    user = await _ensure_test_user(
+        hass, TEST_RESCUE_USER_NAME, [GROUP_ID, GROUP_ID_EXTRA]
+    )
+    expected_groups = sorted(group.id for group in user.groups)
     await hass.auth.async_update_user(user, group_ids=[GROUP_ID_EXTRA])
-    drifted_groups = [group.id for group in user.groups]
+    drifted_groups = sorted(group.id for group in user.groups)
+    owner_before = await _active_owner_user(hass)
+    admin_control = await _ensure_test_user(hass, TEST_ADMIN_NAME, [GROUP_ID_ADMIN])
+    run_id = uuid.uuid4().hex
 
     snapshot = {
+        "run_id": run_id,
         "users": [{"name": TEST_RESCUE_USER_NAME, "group_ids": expected_groups}],
         "scope": "managed_user_group_ids_only",
         "uses_public_async_update_user_on_boot": True,
+        "managed_replace_demotion_injected": GROUP_ID not in drifted_groups,
+        "setup_exception_after_rescue_requested": True,
+        "owner_control_user_before": (
+            _sanitize_user(owner_before) if owner_before is not None else None
+        ),
+        "admin_control_user_before": _sanitize_user(admin_control),
     }
     await _write_json(hass, RESCUE_SNAPSHOT_PATH, snapshot)
-    await _write_json(hass, RESCUE_TRIGGER_PATH, {"requested": True})
+    await _write_json(hass, RESCUE_TRIGGER_PATH, {"requested": True, "run_id": run_id})
+    await _write_json(
+        hass, SETUP_EXCEPTION_TRIGGER_PATH, {"requested": True, "run_id": run_id}
+    )
     await hass.async_add_executor_job(
         CORRUPT_TESSERA_CONFIG_PATH.write_text,
         '{"intentionally_corrupt": ',
@@ -1042,22 +1128,122 @@ async def _prepare_boot_rescue(hass: HomeAssistant) -> dict[str, Any]:
 
     return {
         "prepared": True,
+        "run_id": run_id,
         "user_name": TEST_RESCUE_USER_NAME,
         "expected_groups": expected_groups,
         "drifted_groups_before_restart": drifted_groups,
         "snapshot_path": str(RESCUE_SNAPSHOT_PATH),
         "trigger_path": str(RESCUE_TRIGGER_PATH),
+        "setup_exception_trigger_path": str(SETUP_EXCEPTION_TRIGGER_PATH),
         "corrupt_tessera_store_path": str(CORRUPT_TESSERA_CONFIG_PATH),
         "auth_store_path": str(AUTH_STORE_PATH),
-        "auth_store_corrupted": False,
-        "boot_rescue_corruption_tested": False,
+        "auth_store_corrupted": snapshot["managed_replace_demotion_injected"],
+        "boot_rescue_corruption_tested": None,
         "no_admin_lockout": None,
         "verdict": "PARTIAL",
         "partial_reason": (
-            "real /config/.storage/auth corruption is not attempted in this run; "
-            "D5 must not be reported as PASS"
+            "D5 requires post-restart rescue, setup-exception independence, "
+            "reread, and owner/admin operate probes"
         ),
     }
+
+
+async def _probe_d5_post_boot(
+    hass: HomeAssistant, rescue_result: dict[str, Any]
+) -> dict[str, Any]:
+    """Measure D5 post-boot reread and no-admin-lockout conditions."""
+    if not rescue_result.get("requested"):
+        return rescue_result
+
+    snapshot = await _read_json(hass, RESCUE_SNAPSHOT_PATH)
+    reread_results: list[dict[str, Any]] = []
+    for item in snapshot.get("users", []):
+        name = item.get("name")
+        expected = item.get("group_ids")
+        if not isinstance(name, str) or not isinstance(expected, list):
+            continue
+        user = await _find_user(hass, name)
+        actual = sorted(group.id for group in user.groups) if user is not None else []
+        reread_results.append(
+            {
+                "name": name,
+                "expected_group_ids": sorted(expected),
+                "actual_group_ids": actual,
+                "exact_match": set(actual) == set(expected),
+            }
+        )
+
+    owner = await _active_owner_user(hass)
+    admin = await _find_user(hass, TEST_ADMIN_NAME)
+    owner_probe = (
+        await _auth_operate_probe(hass, owner, "tessera-d5-owner-lockout-probe")
+        if owner is not None
+        else {"attempted": False, "error": "owner_not_found"}
+    )
+    admin_probe = (
+        await _auth_operate_probe(hass, admin, "tessera-d5-admin-lockout-probe")
+        if admin is not None
+        else {"attempted": False, "error": "admin_not_found"}
+    )
+
+    reread_ok = bool(reread_results) and all(
+        item["exact_match"] for item in reread_results
+    )
+    owner_before = snapshot.get("owner_control_user_before") or {}
+    admin_before = snapshot.get("admin_control_user_before") or {}
+    owner_after = _sanitize_user(owner) if owner is not None else {}
+    admin_after = _sanitize_user(admin) if admin is not None else {}
+    owner_unchanged = {
+        key: owner_after.get(key) == owner_before.get(key)
+        for key in ("name", "is_owner", "is_admin", "is_active", "groups")
+    }
+    admin_unchanged = {
+        key: admin_after.get(key) == admin_before.get(key)
+        for key in ("name", "is_owner", "is_admin", "is_active", "groups")
+    }
+    no_admin_lockout = (
+        owner_probe.get("authenticated_and_operated") is True
+        and admin_probe.get("authenticated_and_operated") is True
+    )
+    no_forbidden_touch = (
+        rescue_result.get("owner_system_unmanaged_never_touched") is True
+        and all(owner_unchanged.values())
+        and all(admin_unchanged.values())
+    )
+    passed = (
+        rescue_result.get("requested") is True
+        and rescue_result.get("snapshot_present") is True
+        and rescue_result.get("run_id_matches") is True
+        and rescue_result.get("auth_store_corrupted") is True
+        and rescue_result.get("boot_rescue_corruption_tested") is True
+        and rescue_result.get("rescue_independent_of_healthy_tessera") is True
+        and reread_ok
+        and no_admin_lockout
+        and no_forbidden_touch
+    )
+
+    rescue_result.update(
+        {
+            "post_boot_measured": True,
+            "reread_results": reread_results,
+            "reread_state_matches_intended": reread_ok,
+            "owner_before_after_unchanged": owner_unchanged,
+            "admin_before_after_unchanged": admin_unchanged,
+            "owner_operate_probe": owner_probe,
+            "admin_operate_probe": admin_probe,
+            "no_admin_lockout": no_admin_lockout,
+            "owner_system_unmanaged_never_touched": no_forbidden_touch,
+            "verdict": "PASS" if passed else "PARTIAL",
+            "d5_truthfulness": (
+                "PASS: managed REPLACE demotion was rescued before forced setup "
+                "exception; reread and owner/admin operate probes passed"
+                if passed
+                else "PARTIAL: one or more measured D5 rescue conditions failed"
+            ),
+        }
+    )
+    await _write_json(hass, RESCUE_RESULT_PATH, rescue_result)
+    return rescue_result
 
 
 async def _probe_system_users_gate(hass: HomeAssistant) -> dict[str, Any]:
@@ -1953,7 +2139,9 @@ async def _phase_pre_restart(hass: HomeAssistant) -> dict[str, Any]:
 async def _phase_post_restart(hass: HomeAssistant) -> dict[str, Any]:
     data = await _read_json(hass, RESULT_PATH)
     state = await _read_json(hass, STATE_PATH)
-    rescue_result = await _read_json(hass, RESCUE_RESULT_PATH)
+    rescue_result = await _probe_d5_post_boot(
+        hass, await _read_json(hass, RESCUE_RESULT_PATH)
+    )
     test_user = await _find_user(hass, TEST_USER_NAME)
     admin_user = await _find_user(hass, TEST_ADMIN_NAME)
     d2_user = await _find_user(hass, TEST_D2_USER_NAME)
@@ -2275,6 +2463,21 @@ async def _phase_post_restart(hass: HomeAssistant) -> dict[str, Any]:
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     boot_rescue = await _run_boot_rescue_if_requested(hass)
+    if SETUP_EXCEPTION_TRIGGER_PATH.exists():
+        await _unlink_path(hass, SETUP_EXCEPTION_TRIGGER_PATH)
+        boot_rescue["setup_exception_simulated"] = True
+        boot_rescue["setup_exception_error_type"] = "RuntimeError"
+        boot_rescue["rescue_independent_of_healthy_tessera"] = (
+            boot_rescue.get("ok") is True
+            and boot_rescue.get("boot_rescue_corruption_tested") is True
+        )
+        boot_rescue["d5_truthfulness"] = (
+            "PENDING: boot rescue completed before a forced setup exception; "
+            "post-boot auth/operate probes still pending"
+        )
+        await _write_json(hass, RESCUE_RESULT_PATH, boot_rescue)
+        raise RuntimeError("tessera_spike forced setup exception after boot rescue")
+
     hass.states.async_set(
         STATE_ONLY_ENTITY, "42", {"friendly_name": "Tessera State Only"}
     )

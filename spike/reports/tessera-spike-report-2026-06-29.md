@@ -1,6 +1,6 @@
 # Tessera Phase-0 Spike Report
 
-Stand: 2026-06-29T16:11:35
+Stand: 2026-06-29T20:34:02
 
 Modus: Dev-only gegen `ha-tessera-dev`; keine Secrets/Token/Auth-Codes ausgegeben. Live-/`/Volumes/config`-Scans sind im Standardlauf bewusst deaktiviert und brauchen ein eigenes Gate.
 
@@ -8,7 +8,7 @@ Modus: Dev-only gegen `ha-tessera-dev`; keine Secrets/Token/Auth-Codes ausgegebe
 
 **PARTIAL / kein Enforce-Go.**
 
-D0 ist gruen genug, um den dev-only Messlauf zu starten. D1, D2, D3, D4, D6, D8, D9, D11, D13, D15, A2, A3 und B3 liefern belastbare Dev-Signale. D7 liefert eine ehrliche Leak-Matrix, bleibt aber wegen nicht verifizierbarer Registry-/History-/Logbook-Baselines **PARTIAL**. D5 bleibt bewusst **PARTIAL**, weil kein echter `/config/.storage/auth`-Korruptions-/No-Admin-Lockout-Rescue bewiesen ist. D12 bleibt **BLOCKED**. Welle D nimmt D9 nur als **fail-closed Klassifikationsmatrix** ab; Welle E nimmt Lifecycle-Gates nur fuer `ha-tessera-dev` ab. Weiter kein Enforce/Product-Go.
+D0 ist gruen genug, um den dev-only Messlauf zu starten. D1, D2, D3, D4, D6, D8, D9, D11, D13, D15, A2, A3 und B3 liefern belastbare Dev-Signale. D5 bewertet das gemessene S1/S1b-Recovery-Gate gegen managed REPLACE-Demotion, Setup-Exception-Unabhaengigkeit, Re-Read und Owner/Admin-Operate-Probe; S2 `/config/.storage/auth`-Korruption bleibt bewusst **observational only** und kein PASS-Hebel. D7 liefert eine ehrliche Leak-Matrix, bleibt aber wegen nicht verifizierbarer Registry-/History-/Logbook-Baselines **PARTIAL**. D12 bleibt **BLOCKED**. Welle D nimmt D9 nur als **fail-closed Klassifikationsmatrix** ab; Welle E nimmt Lifecycle-Gates nur fuer `ha-tessera-dev` ab. Weiter kein Enforce/Product-Go.
 
 ## DoD Matrix
 
@@ -19,7 +19,7 @@ D0 ist gruen genug, um den dev-only Messlauf zu starten. D1, D2, D3, D4, D6, D8,
 | D2 | PASS | policy mutation checked before invalidate, after invalidate, and after restart |
 | D3 | PASS | internal + REST + WS + service entity-targeted consistency measured |
 | D4 | PASS | caller restores by supplying the full group set; HA group_ids writes are replace semantics |
-| D5 | PARTIAL | real /config/.storage/auth corruption rescue is not proven in this run; no false PASS |
+| D5 | PASS | managed REPLACE demotion boot-rescue requires measured restore, setup-exception independence, and no-admin-lockout |
 | D6 | PASS | service matrix measured; entity-targeted path can pass while non-entity/system gaps stay documented |
 | D7 | PARTIAL | full REST+WS leak matrix documented; leaks bound view-scope, not operate/control |
 | D8 | PASS | real long-lived token lifecycle measured without storing token values |
@@ -120,13 +120,13 @@ Gate-Results:
   "device": {
     "area_id": "tessera_living",
     "config_entry_id_present": true,
-    "device_id": "73ae1df3362594367ff4c9f369e62ee5"
+    "device_id": "f786dfda04da844dd740fa5cba803a6a"
   },
   "entities": [
     {
       "area_id": null,
       "class": "device_area_allowed_light",
-      "device_id": "73ae1df3362594367ff4c9f369e62ee5",
+      "device_id": "f786dfda04da844dd740fa5cba803a6a",
       "disabled_by": null,
       "domain": "light",
       "entity_id": "light.tessera_seed_allowed_light",
@@ -144,7 +144,7 @@ Gate-Results:
     {
       "area_id": null,
       "class": "device_area_allowed_cover",
-      "device_id": "73ae1df3362594367ff4c9f369e62ee5",
+      "device_id": "f786dfda04da844dd740fa5cba803a6a",
       "disabled_by": null,
       "domain": "cover",
       "entity_id": "cover.tessera_seed_allowed_cover",
@@ -361,19 +361,22 @@ Gate-Results:
     ]
   },
   "d5_boot_rescue_prepare": {
-    "auth_store_corrupted": false,
+    "auth_store_corrupted": true,
     "auth_store_path": "/config/.storage/auth",
-    "boot_rescue_corruption_tested": false,
+    "boot_rescue_corruption_tested": null,
     "corrupt_tessera_store_path": "/config/.storage/tessera.config",
     "drifted_groups_before_restart": [
       "tessera:extra"
     ],
     "expected_groups": [
+      "tessera:extra",
       "tessera:test"
     ],
     "no_admin_lockout": null,
-    "partial_reason": "real /config/.storage/auth corruption is not attempted in this run; D5 must not be reported as PASS",
+    "partial_reason": "D5 requires post-restart rescue, setup-exception independence, reread, and owner/admin operate probes",
     "prepared": true,
+    "run_id": "de86cbe765fa4ec2b6f908247c5a6fe5",
+    "setup_exception_trigger_path": "/config/tessera_spike_force_setup_exception.json",
     "snapshot_path": "/config/tessera_spike_rescue_snapshot.json",
     "trigger_path": "/config/tessera_spike_rescue_trigger.json",
     "user_name": "tessera-rescue-user",
@@ -424,6 +427,7 @@ Restart-Survival:
       {
         "credentials_count": 0,
         "groups": [
+          "tessera:extra",
           "tessera:test"
         ],
         "is_active": true,
@@ -490,32 +494,125 @@ Restart-Survival:
     }
   },
   "d5_boot_rescue_after_restart": {
-    "auth_store_corrupted": false,
-    "boot_rescue_corruption_tested": false,
+    "admin_before_after_unchanged": {
+      "groups": true,
+      "is_active": true,
+      "is_admin": true,
+      "is_owner": true,
+      "name": true
+    },
+    "admin_operate_probe": {
+      "attempted": true,
+      "authenticated_and_operated": true,
+      "is_admin": true,
+      "is_owner": false,
+      "status": 200,
+      "token_values_redacted": true,
+      "user_name": "tessera-test-admin"
+    },
+    "auth_store_corrupted": true,
+    "boot_rescue_corruption_tested": true,
     "corrupt_tessera_store_error": "JSONDecodeError",
     "corrupt_tessera_store_parse_failed": true,
     "corrupt_tessera_store_path": "/config/.storage/tessera.config",
-    "d5_truthfulness": "PARTIAL: startup restore was exercised against Tessera sidecar corruption, not real /config/.storage/auth corruption",
+    "d5_truthfulness": "PASS: managed REPLACE demotion was rescued before forced setup exception; reread and owner/admin operate probes passed",
     "errors": [],
-    "no_admin_lockout": null,
+    "managed_group_replace_drift_injected": true,
+    "no_admin_lockout": true,
     "ok": true,
+    "owner_before_after_unchanged": {
+      "groups": true,
+      "is_active": true,
+      "is_admin": true,
+      "is_owner": true,
+      "name": true
+    },
+    "owner_operate_probe": {
+      "attempted": true,
+      "authenticated_and_operated": true,
+      "is_admin": true,
+      "is_owner": true,
+      "status": 200,
+      "token_values_redacted": true,
+      "user_name": "test-owner"
+    },
+    "owner_system_unmanaged_never_touched": true,
+    "post_boot_measured": true,
     "requested": true,
-    "rescue_restore_namespace_guarded": true,
-    "restored_users": [
+    "reread_results": [
       {
         "actual_group_ids": [
+          "tessera:extra",
           "tessera:test"
         ],
         "exact_match": true,
         "expected_group_ids": [
+          "tessera:extra",
           "tessera:test"
         ],
         "name": "tessera-rescue-user"
       }
     ],
+    "reread_state_matches_intended": true,
+    "rescue_independent_of_healthy_tessera": true,
+    "rescue_restore_namespace_guarded": true,
+    "restored_users": [
+      {
+        "actual_group_ids": [
+          "tessera:extra",
+          "tessera:test"
+        ],
+        "before_group_ids": [
+          "tessera:extra"
+        ],
+        "exact_match": true,
+        "expected_group_ids": [
+          "tessera:extra",
+          "tessera:test"
+        ],
+        "name": "tessera-rescue-user"
+      }
+    ],
+    "run_id": "de86cbe765fa4ec2b6f908247c5a6fe5",
+    "run_id_matches": true,
+    "setup_exception_error_type": "RuntimeError",
+    "setup_exception_requested": true,
+    "setup_exception_simulated": true,
+    "setup_exception_trigger_path": "/config/tessera_spike_force_setup_exception.json",
     "snapshot_present": true,
-    "used_public_async_update_user": true
+    "touched_only_snapshot_managed_users": true,
+    "touched_user_names": [
+      "tessera-rescue-user"
+    ],
+    "trigger_run_id": "de86cbe765fa4ec2b6f908247c5a6fe5",
+    "used_public_async_update_user": true,
+    "verdict": "PASS"
   }
+}
+```
+
+D5 S2 Auth-Store-Korruption, **observational only**:
+
+```json
+{
+  "auth_store_backup_created": true,
+  "auth_store_corruption_injected": true,
+  "auth_store_path": "/config/.storage/auth",
+  "auth_store_restored_from_backup": true,
+  "auth_store_size_before": 5570,
+  "backup_path": "/config/.storage/auth.tessera_spike_backup",
+  "backup_removed": true,
+  "d5_pass_lever": false,
+  "ha_boot_after_auth_corruption": true,
+  "ha_boot_after_auth_corruption_error": null,
+  "ha_boot_after_auth_corruption_status": 401,
+  "ha_boot_after_auth_restore": true,
+  "ha_boot_after_auth_restore_error": null,
+  "ha_boot_after_auth_restore_status": 401,
+  "pre_manipulation_target_isolation_errors": [],
+  "pre_manipulation_target_isolation_ok": true,
+  "s2_observational_only": true,
+  "tested": true
 }
 ```
 
@@ -742,7 +839,7 @@ Restart-Survival:
       },
       {
         "allowed_entity_seen": false,
-        "baseline_present": true,
+        "baseline_present": false,
         "body": {
           "body_type": "list",
           "items": 0
@@ -753,7 +850,7 @@ Restart-Survival:
         "status": 200,
         "transport": "rest",
         "vector": "/api/logbook",
-        "verdict": "ALLOW"
+        "verdict": "NOT_VERIFIABLE"
       },
       {
         "allowed_entity_seen": false,
@@ -941,6 +1038,21 @@ Restart-Survival:
       }
     ],
     "not_verifiable": [
+      {
+        "allowed_entity_seen": false,
+        "baseline_present": false,
+        "body": {
+          "body_type": "list",
+          "items": 0
+        },
+        "error": null,
+        "forbidden_entity_seen": false,
+        "leak_hint": false,
+        "status": 200,
+        "transport": "rest",
+        "vector": "/api/logbook",
+        "verdict": "NOT_VERIFIABLE"
+      },
       {
         "allowed_entity_seen": false,
         "baseline_present": false,
@@ -1474,7 +1586,7 @@ Lifecycle-Lesart: `D11` belegt im Dev-Spike den fail-closed Version-Gate-Pfad pe
 
 - **Go fuer weitere Phase-0-Haertung:** ja.
 - **Go fuer Tessera-Enforce/Product:** nein.
-- **Naechste Pflicht:** Boot-Rescue mit absichtlich korruptem Tessera-Store, echte HACS-/Upgrade-Probe ausserhalb der Simulation, D10/CM5-Benchmark und D12/OIDC gesondert.
+- **Naechste Pflicht:** echte HACS-/Upgrade-Probe ausserhalb der Simulation, D10/CM5-Benchmark, D12/OIDC und Produkt-/Release-Gates gesondert; kein Enforce/Product-Go aus diesem Spike.
 
 ## Artefakte
 
