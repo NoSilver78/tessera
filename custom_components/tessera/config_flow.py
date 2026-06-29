@@ -4,12 +4,17 @@ from __future__ import annotations
 
 from typing import Any
 
+import voluptuous as vol
 from homeassistant import config_entries
 
 from .const import DOMAIN
 
+STEP_USER_DATA_SCHEMA = vol.Schema({})
 
-class TesseraConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+
+class TesseraConfigFlow(
+    config_entries.ConfigFlow, domain=DOMAIN  # type: ignore[misc, call-arg]
+):
     """Minimal config flow for Tessera phase-1 setup."""
 
     VERSION = 1
@@ -28,4 +33,4 @@ class TesseraConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             return self.async_create_entry(title="Tessera", data={})
 
-        return self.async_show_form(step_id="user", data_schema=None)
+        return self.async_show_form(step_id="user", data_schema=STEP_USER_DATA_SCHEMA)

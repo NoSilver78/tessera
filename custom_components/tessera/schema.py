@@ -223,7 +223,7 @@ def _validate_permission_leaf(data: object, path: str) -> PermissionLeaf:
             value = leaf[key]
             if not isinstance(value, bool):
                 raise TesseraSchemaError(f"{path}.{key} must be boolean")
-            result[cast(PermissionKey, key)] = value
+            result[key] = value
     return result
 
 

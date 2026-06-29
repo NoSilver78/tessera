@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, Protocol, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from .const import CONFIG_STORAGE_KEY, POLICY_STORAGE_KEY, STORAGE_VERSION
 from .schema import (
@@ -14,6 +14,9 @@ from .schema import (
     validate_config_data,
     validate_policy_data,
 )
+
+if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
 
 
 class StoreLike(Protocol):
@@ -34,7 +37,9 @@ StoreFactory = Callable[[Any, int, str], StoreLike]
 class TesseraStore:
     """Load and save Tessera's config and policy stores via HA storage."""
 
-    def __init__(self, hass: Any, store_factory: StoreFactory | None = None) -> None:
+    def __init__(
+        self, hass: HomeAssistant, store_factory: StoreFactory | None = None
+    ) -> None:
         """Initialize the Tessera storage adapter.
 
         Args:
@@ -60,7 +65,9 @@ class TesseraStore:
         Args:
             data: Configuration payload to persist.
         """
-        await self._config_store.async_save(validate_config_data(data))
+        await self._config_store.async_save(
+            cast(dict[str, Any], validate_config_data(data))
+        )
 
     async def async_load_policy(self) -> TesseraPolicyData:
         """Load Tessera policy, returning defaults when absent.
@@ -77,10 +84,14 @@ class TesseraStore:
         Args:
             data: Policy payload to persist.
         """
-        await self._policy_store.async_save(validate_policy_data(data))
+        await self._policy_store.async_save(
+            cast(dict[str, Any], validate_policy_data(data))
+        )
 
 
-def _homeassistant_store_factory(hass: Any, version: int, key: str) -> StoreLike:
+def _homeassistant_store_factory(
+    hass: HomeAssistant, version: int, key: str
+) -> StoreLike:
     """Create a Home Assistant storage helper lazily.
 
     Args:

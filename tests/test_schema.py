@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any, cast
 
 import pytest
-
 from custom_components.tessera.schema import (
     TesseraSchemaError,
     default_config_data,
@@ -46,9 +45,7 @@ def test_policy_schema_accepts_read_control_leafs() -> None:
 def test_policy_schema_rejects_unsafe_leaf_shapes(bad_leaf: object) -> None:
     """Policy schema rejects bare booleans and unsupported HA shortcuts."""
     policy = default_policy_data()
-    policy["area_grants"] = {
-        "living_room": {"viewer": cast(Any, bad_leaf)}
-    }
+    policy["area_grants"] = {"living_room": {"viewer": cast(Any, bad_leaf)}}
 
     with pytest.raises(TesseraSchemaError):
         validate_policy_data(policy)
