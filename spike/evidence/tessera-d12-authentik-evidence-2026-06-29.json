@@ -1,0 +1,18 @@
+{
+  "d12": {
+    "abort_reason": "OP_NOT_SIGNED_IN",
+    "attempted": true,
+    "claim_goal": "Prove Authentik emits a groups claim for tessera-test-user and that Tessera can map authentik:tessera-test-eg to role eg.",
+    "probe_script": "spike/tools/tessera_spike/d12_authentik_probe.py",
+    "ready_file": "exchange/2026-06-29/tessera-d12-authentik-ready-claude-2026-06-29.md",
+    "secret_redaction_status": "PASS",
+    "secrets_read": false,
+    "status": "BLOCKED",
+    "verdict": "BLOCKED"
+  },
+  "op_status": {
+    "command": "op whoami",
+    "exit_code": 1,
+    "stderr_class": "account_not_signed_in"
+  }
+}

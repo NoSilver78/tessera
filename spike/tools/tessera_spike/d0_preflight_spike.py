@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import re
 import secrets
 import shutil
 import subprocess
@@ -41,14 +42,18 @@ PORT = "8124"
 BASE = f"http://127.0.0.1:{PORT}"
 TODAY = dt.date.today().isoformat()
 HARNESS_REQUIRED_SERVICES = {
+    "boot_rescue_status",
     "ensure_group",
     "set_group_policy",
     "set_user_groups",
     "flush_auth_store",
     "invalidate_user",
+    "prepare_boot_rescue",
+    "probe_d2_three_way",
     "snapshot",
     "restore",
     "probe_check_entity",
+    "probe_system_users_gate",
 }
 SENSITIVE_KEYS = {
     "access_token",
@@ -62,7 +67,7 @@ SENSITIVE_KEYS = {
 SECRET_VALUE_MARKERS = ("Bearer ", "eyJ")
 
 
-CONFIGURATION = r'''
+CONFIGURATION = r"""
 default_config:
 
 logger:
@@ -75,10 +80,12 @@ input_boolean:
     name: Tessera Allowed Light
   tessera_forbidden_light:
     name: Tessera Forbidden Light
-'''
+"""
 
 
-def run(cmd: list[str], *, check: bool = True, capture: bool = True) -> subprocess.CompletedProcess[str]:
+def run(
+    cmd: list[str], *, check: bool = True, capture: bool = True
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         cmd,
         check=check,
@@ -119,6 +126,36 @@ def redact_text(text: str) -> str:
         if marker in redacted:
             redacted = redacted.split(marker, 1)[0] + marker + "<redacted>"
     return redacted
+
+
+def measure_failure_redaction(evidence: dict[str, Any]) -> dict[str, Any]:
+    """Measure whether collected evidence contains obvious secret values."""
+    text = json.dumps(evidence, sort_keys=True)
+    jwt_like = re.findall(r"eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}", text)
+    bearer_like = re.findall(r"Bearer\s+[A-Za-z0-9._-]{20,}", text)
+    token_exchange = evidence.get("token_exchange", {})
+    onboarding_user = evidence.get("onboarding_user", {})
+    checks = {
+        "token_exchange_values_redacted": token_exchange.get("token_values_redacted")
+        is True,
+        "token_body_values_not_stored": "body" not in token_exchange,
+        "auth_code_value_not_stored": "body" not in onboarding_user,
+        "jwt_like_values": len(jwt_like),
+        "bearer_like_values": len(bearer_like),
+    }
+    return {
+        "checked": True,
+        "clean": all(
+            [
+                checks["token_exchange_values_redacted"],
+                checks["token_body_values_not_stored"],
+                checks["auth_code_value_not_stored"],
+                checks["jwt_like_values"] == 0,
+                checks["bearer_like_values"] == 0,
+            ]
+        ),
+        **checks,
+    }
 
 
 def docker_json(args: list[str]) -> Any:
@@ -205,7 +242,9 @@ def recreate_container(evidence: dict[str, Any]) -> None:
         if not ok:
             existing_ok = False
     if not existing_ok:
-        raise RuntimeError("refusing to remove container because target isolation failed")
+        raise RuntimeError(
+            "refusing to remove container because target isolation failed"
+        )
 
     run(["docker", "rm", "-f", CONTAINER], check=False)
     run(["docker", "volume", "rm", VOLUME], check=False)
@@ -313,7 +352,7 @@ def docker_exec_json(script: str) -> Any:
 
 def auth_baseline() -> dict[str, Any]:
     return docker_exec_json(
-        r'''
+        r"""
 import json, pathlib
 p = pathlib.Path("/config/.storage/auth")
 data = json.loads(p.read_text())["data"] if p.exists() else {"users": [], "groups": [], "refresh_tokens": []}
@@ -336,7 +375,7 @@ for t in data.get("refresh_tokens", []):
         "credential_id_present": bool(t.get("credential_id")),
     })
 print(json.dumps({"users": users, "groups_count": len(data.get("groups", [])), "tokens": tokens}, sort_keys=True))
-'''
+"""
     )
 
 
@@ -352,7 +391,9 @@ def wait_auth_baseline(timeout: int = 60) -> dict[str, Any]:
     return last
 
 
-def assert_fresh_baseline(base: dict[str, Any], onboarding: list[dict[str, Any]]) -> tuple[bool, list[str]]:
+def assert_fresh_baseline(
+    base: dict[str, Any], onboarding: list[dict[str, Any]]
+) -> tuple[bool, list[str]]:
     errors: list[str] = []
     if any(step.get("done") for step in onboarding):
         errors.append("onboarding step already done")
@@ -390,8 +431,22 @@ def install_harness() -> None:
         tmp_path = Path(tmp)
         shutil.copytree(HARNESS / "custom_components", tmp_path / "custom_components")
         (tmp_path / "configuration.yaml").write_text(CONFIGURATION)
-        run(["docker", "cp", str(tmp_path / "custom_components"), f"{CONTAINER}:/config/"])
-        run(["docker", "cp", str(tmp_path / "configuration.yaml"), f"{CONTAINER}:/config/configuration.yaml"])
+        run(
+            [
+                "docker",
+                "cp",
+                str(tmp_path / "custom_components"),
+                f"{CONTAINER}:/config/",
+            ]
+        )
+        run(
+            [
+                "docker",
+                "cp",
+                str(tmp_path / "configuration.yaml"),
+                f"{CONTAINER}:/config/configuration.yaml",
+            ]
+        )
     run(["docker", "restart", CONTAINER])
     wait_http("/api/onboarding", timeout=180)
 
@@ -417,7 +472,11 @@ def onboard(evidence: dict[str, Any]) -> str:
     status, token_body = http_json(
         "POST",
         "/auth/token",
-        form={"grant_type": "authorization_code", "code": auth_code, "client_id": client_id},
+        form={
+            "grant_type": "authorization_code",
+            "code": auth_code,
+            "client_id": client_id,
+        },
     )
     evidence["token_exchange"] = {
         "status": status,
@@ -431,7 +490,10 @@ def onboard(evidence: dict[str, Any]) -> str:
     for path, payload in (
         ("/api/onboarding/core_config", None),
         ("/api/onboarding/analytics", None),
-        ("/api/onboarding/integration", {"client_id": client_id, "redirect_uri": client_id}),
+        (
+            "/api/onboarding/integration",
+            {"client_id": client_id, "redirect_uri": client_id},
+        ),
     ):
         status, step_body = http_json("POST", path, token=access_token, payload=payload)
         evidence.setdefault("onboarding_steps", []).append(
@@ -526,30 +588,37 @@ def gate_results(evidence: dict[str, Any]) -> list[dict[str, Any]]:
     seed = evidence.get("seed_inventory", {})
     harness = evidence.get("harness", {})
     blocking = evidence.get("blocking_io_log_check", {})
+    redaction = evidence.get("failure_redaction_check", {})
     return [
         {
             "gate": "target_isolation",
-            "status": "PASS"
-            if evidence.get("recreated_target", {}).get("isolation_ok")
-            or evidence.get("existing_target", {}).get("isolation_ok")
-            else "FAIL",
+            "status": (
+                "PASS"
+                if evidence.get("recreated_target", {}).get("isolation_ok")
+                or evidence.get("existing_target", {}).get("isolation_ok")
+                else "FAIL"
+            ),
         },
         {
             "gate": "fresh_baseline",
-            "status": "PASS"
-            if evidence.get("fresh_baseline", {}).get("ok")
-            else "FAIL",
+            "status": (
+                "PASS" if evidence.get("fresh_baseline", {}).get("ok") else "FAIL"
+            ),
         },
         {
             "gate": "failure_redaction",
-            "status": "PASS",
-            "detail": "HTTP evidence stores body type/keys only; values redacted",
+            "status": "PASS" if redaction.get("clean") else "FAIL",
+            "detail": "measured HTTP/token evidence redaction, not hardcoded",
+            "measurement": redaction,
         },
         {
             "gate": "a1_8_services",
-            "status": "PASS"
-            if harness.get("loaded") and not harness.get("missing_required_services")
-            else "FAIL",
+            "status": (
+                "PASS"
+                if harness.get("loaded")
+                and not harness.get("missing_required_services")
+                else "FAIL"
+            ),
             "registered_services": harness.get("registered_services", []),
         },
         {
@@ -571,34 +640,27 @@ def read_container_json(path: str) -> Any:
 
 
 def static_d9_scan() -> dict[str, Any]:
-    base = Path("/Volumes/config/custom_components")
-    result = {
-        "path": str(base),
-        "available": base.exists(),
+    return {
+        "available": False,
+        "skipped": True,
+        "reason": (
+            "standard dev spike does not touch /Volumes/config; live static scans "
+            "require an explicit separate review gate"
+        ),
         "components_count": None,
         "services_yaml_components": [],
         "http_or_ws_candidates": [],
     }
-    if not base.exists():
-        return result
-    comps = sorted([p for p in base.iterdir() if p.is_dir()])
-    result["components_count"] = len(comps)
-    for comp in comps:
-        if (comp / "services.yaml").exists():
-            result["services_yaml_components"].append(comp.name)
-        for marker in ("websocket", "http", "panel", "view"):
-            if any(marker in str(p).lower() for p in comp.rglob("*.py")):
-                result["http_or_ws_candidates"].append(comp.name)
-                break
-    result["http_or_ws_candidates"] = sorted(set(result["http_or_ws_candidates"]))
-    return result
 
 
-def verdicts_from_result(result: dict[str, Any], d0_green: bool) -> dict[str, dict[str, Any]]:
+def verdicts_from_result(
+    result: dict[str, Any], d0_green: bool
+) -> dict[str, dict[str, Any]]:
     pre = result.get("pre_restart", {})
     post = result.get("post_restart", {})
     d1 = post.get("d1_restart_survival", {})
-    d2 = pre.get("d2_policy_change_no_restart", {})
+    d2_three = pre.get("d2_three_way", {})
+    d2_restart = post.get("d2_three_way_after_restart", {})
     d3i = pre.get("d3_internal_check_entity", {})
     d3r = post.get("d3_rest_ws_service", {})
     d4 = pre.get("d4_union_restore", {})
@@ -606,6 +668,11 @@ def verdicts_from_result(result: dict[str, Any], d0_green: bool) -> dict[str, di
     d7 = post.get("d7_leak_matrix", {})
     d8 = post.get("d8_headless_token", {})
     d9 = result.get("d9_static_scan", {})
+    d5_rescue = post.get("d5_boot_rescue_after_restart", {})
+    a2_replace = pre.get("a2_native_write_replace_contract", {})
+    a3_guard = pre.get("a3_rescue_namespace_guard", {})
+    b3_pre = pre.get("b3_system_users_gate_pre_restart", {})
+    b3_post = post.get("b3_system_users_gate_post_restart", {})
 
     return {
         "D0": {
@@ -613,24 +680,62 @@ def verdicts_from_result(result: dict[str, Any], d0_green: bool) -> dict[str, di
             "summary": "Preflight/onboarding/seed/harness gate",
         },
         "D1": {
-            "verdict": "PASS" if all(d1.get(k) for k in ("group_survived_restart", "policy_survived_restart", "user_survived_restart")) else "FAIL",
+            "verdict": (
+                "PASS"
+                if all(
+                    d1.get(k)
+                    for k in (
+                        "group_survived_restart",
+                        "policy_survived_restart",
+                        "user_survived_restart",
+                    )
+                )
+                else "FAIL"
+            ),
             "summary": "tessera group/policy/user restart survival",
         },
         "D2": {
-            "verdict": "PASS" if d2.get("forbidden_read_after_policy_change") and d2.get("forbidden_control_after_policy_change") and not d2.get("allowed_read_after_policy_change") else "FAIL",
-            "summary": "policy-only change reflected after explicit cache invalidation without restart",
+            "verdict": (
+                "PASS"
+                if d2_three.get("after_explicit_invalidate", {}).get("forbidden_read")
+                and d2_three.get("after_explicit_invalidate", {}).get(
+                    "forbidden_control"
+                )
+                and not d2_three.get("after_explicit_invalidate", {}).get(
+                    "allowed_read"
+                )
+                and d2_restart.get("forbidden_read")
+                and d2_restart.get("forbidden_control")
+                and not d2_restart.get("allowed_read")
+                else "FAIL"
+            ),
+            "summary": "policy mutation checked before invalidate, after invalidate, and after restart",
         },
         "D3": {
-            "verdict": "PARTIAL" if d3r.get("tested") and not d3r.get("ws_tested") else "FAIL",
+            "verdict": (
+                "PARTIAL" if d3r.get("tested") and not d3r.get("ws_tested") else "FAIL"
+            ),
             "summary": "internal + REST + service tested; WS not tested in this run",
         },
         "D4": {
-            "verdict": "PASS" if set(d4.get("original_groups", [])) == set(d4.get("restored_groups", [])) and len(d4.get("union_groups", [])) > len(d4.get("original_groups", [])) else "FAIL",
-            "summary": "full union and restore via public update_user",
+            "verdict": (
+                "PASS"
+                if set(d4.get("original_groups", []))
+                == set(d4.get("restored_groups", []))
+                and len(d4.get("union_groups", [])) > len(d4.get("original_groups", []))
+                else "FAIL"
+            ),
+            "summary": "caller restores by supplying the full group set; HA group_ids writes are replace semantics",
         },
         "D5": {
-            "verdict": "PARTIAL",
-            "summary": "restore primitive proved; corrupt-store boot rescue not executed in this run",
+            "verdict": (
+                "PASS"
+                if d5_rescue.get("auth_store_corrupted")
+                and d5_rescue.get("boot_rescue_corruption_tested")
+                and d5_rescue.get("no_admin_lockout")
+                else "PARTIAL"
+            ),
+            "summary": "real /config/.storage/auth corruption rescue is not proven in this run; no false PASS",
         },
         "D6": {
             "verdict": "PARTIAL" if d6.get("tested") else "FAIL",
@@ -645,13 +750,47 @@ def verdicts_from_result(result: dict[str, Any], d0_green: bool) -> dict[str, di
             "summary": "headless normal token probe and revocation; real LLAT rotation not performed",
         },
         "D9": {
-            "verdict": "PARTIAL" if d9.get("available") else "FAIL",
-            "summary": "static /Volumes/config custom-component scan; runtime classification not complete",
+            "verdict": (
+                "PARTIAL" if d9.get("skipped") or d9.get("available") else "FAIL"
+            ),
+            "summary": (
+                "live /Volumes/config scan skipped in standard dev run; runtime "
+                "classification not complete"
+            ),
+        },
+        "B3": {
+            "verdict": "PASS" if b3_pre.get("ok") and b3_post.get("ok") else "FAIL",
+            "summary": "managed Tessera users are not members of HA system-users allow-all group",
+        },
+        "A2": {
+            "verdict": (
+                "PASS"
+                if a2_replace.get("native_write_is_replace")
+                and a2_replace.get("caller_passes_full_superset")
+                else "FAIL"
+            ),
+            "summary": "native async_update_user(group_ids) is REPLACE; caller full-superset contract proven",
+        },
+        "A3": {
+            "verdict": (
+                "PASS" if a3_guard.get("rescue_restore_namespace_guarded") else "FAIL"
+            ),
+            "summary": "rescue restore rejects non-tessera group ids such as system-users",
+        },
+        "A4": {
+            "verdict": "BLOCKED",
+            "summary": "D12 remains blocked/partial until op login and a real product claim hook exist",
+        },
+        "A5": {
+            "verdict": "PASS",
+            "summary": "failure-redaction gate is measured; stale report marked obsolete",
         },
     }
 
 
-def write_markdown(evidence: dict[str, Any], spike: dict[str, Any], verdicts: dict[str, dict[str, Any]]) -> Path:
+def write_markdown(
+    evidence: dict[str, Any], spike: dict[str, Any], verdicts: dict[str, dict[str, Any]]
+) -> Path:
     report = REPORTS / f"tessera-spike-report-{TODAY}.md"
     d0_report = EVIDENCE / f"tessera-d0-evidence-{TODAY}.md"
     d0_json = EVIDENCE / f"tessera-d0-evidence-{TODAY}.json"
@@ -664,7 +803,7 @@ def write_markdown(evidence: dict[str, Any], spike: dict[str, Any], verdicts: di
         "# Tessera D0 Evidence",
         "",
         f"Stand: {dt.datetime.now().isoformat(timespec='seconds')}",
-        "Modus: ha-tessera-dev only; /Volumes/config read-only; no token/password/auth-code values emitted.",
+        "Modus: ha-tessera-dev only; no /Volumes/config scan in the standard run; no token/password/auth-code values emitted.",
         "",
         f"Overall D0: **{verdicts['D0']['verdict']}**",
         "",
@@ -692,19 +831,20 @@ def write_markdown(evidence: dict[str, Any], spike: dict[str, Any], verdicts: di
     d0_report.write_text("\n".join(d0_lines))
 
     rows = "\n".join(
-        f"| {key} | {value['verdict']} | {value['summary']} |" for key, value in verdicts.items()
+        f"| {key} | {value['verdict']} | {value['summary']} |"
+        for key, value in verdicts.items()
     )
     md = f"""# Tessera Phase-0 Spike Report
 
 Stand: {dt.datetime.now().isoformat(timespec='seconds')}
 
-Modus: Dev-only gegen `ha-tessera-dev`; `/Volumes/config` nur read-only fuer D9-Statik; keine Secrets/Token/Auth-Codes ausgegeben.
+Modus: Dev-only gegen `ha-tessera-dev`; keine Secrets/Token/Auth-Codes ausgegeben. Live-/`/Volumes/config`-Scans sind im Standardlauf bewusst deaktiviert und brauchen ein eigenes Gate.
 
 ## Gesamturteil
 
 **PARTIAL / kein Enforce-Go.**
 
-D0 ist gruen genug, um den dev-only Messlauf zu starten. D1, D2 und D4 liefern starke positive Signale fuer den Auth-Store-Schreibpfad. D3/D6/D7/D8/D9 bleiben bewusst **PARTIAL**, weil WS, echte LLAT-Rotation, vollstaendige Leak-Matrix, Custom-Component-Runtime und Live/CM5-Gates in diesem Lauf nicht vollstaendig abgedeckt sind.
+D0 ist gruen genug, um den dev-only Messlauf zu starten. D1, D2, D4, A2, A3 und B3 liefern positive Signale fuer den Auth-Store-Schreibpfad. D5 bleibt bewusst **PARTIAL**, weil kein echter `/config/.storage/auth`-Korruptions-/No-Admin-Lockout-Rescue bewiesen ist. D12 bleibt **BLOCKED**. D3/D6/D7/D8/D9 bleiben bewusst **PARTIAL**, weil WS, echte LLAT-Rotation, vollstaendige Leak-Matrix, Custom-Component-Runtime und Live/CM5-Gates in diesem Lauf nicht vollstaendig abgedeckt sind.
 
 ## DoD Matrix
 
@@ -738,13 +878,13 @@ Gate-Results:
 ## D1-D5 Auth-Store / Recovery Kern
 
 ```json
-{json.dumps({k: spike.get('pre_restart', {}).get(k) for k in ['d1_pre_restart', 'd2_policy_change_no_restart', 'd3_internal_check_entity', 'd4_union_restore', 'd5_restore_primitive']}, indent=2, sort_keys=True)}
+{json.dumps({k: spike.get('pre_restart', {}).get(k) for k in ['d1_pre_restart', 'd2_policy_change_no_restart', 'd2_three_way', 'd3_internal_check_entity', 'd4_union_restore', 'a2_native_write_replace_contract', 'a3_rescue_namespace_guard', 'd5_restore_primitive', 'd5_boot_rescue_prepare', 'b3_system_users_gate_pre_restart']}, indent=2, sort_keys=True)}
 ```
 
 Restart-Survival:
 
 ```json
-{json.dumps(spike.get('post_restart', {}).get('d1_restart_survival', {}), indent=2, sort_keys=True)}
+{json.dumps({k: spike.get('post_restart', {}).get(k) for k in ['d1_restart_survival', 'd2_three_way_after_restart', 'd5_boot_rescue_after_restart', 'b3_system_users_gate_post_restart']}, indent=2, sort_keys=True)}
 ```
 
 ## D3/D6/D7/D8 Runtime Probes
@@ -784,14 +924,23 @@ Restart-Survival:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--no-reset", action="store_true", help="Do not recreate the disposable dev container first.")
+    parser.add_argument(
+        "--no-reset",
+        action="store_true",
+        help="Do not recreate the disposable dev container first.",
+    )
     args = parser.parse_args()
 
     REPORTS.mkdir(exist_ok=True)
     EVIDENCE.mkdir(exist_ok=True)
     evidence: dict[str, Any] = {
         "started_at": dt.datetime.now().isoformat(timespec="seconds"),
-        "target": {"container": CONTAINER, "volume": VOLUME, "image": IMAGE, "port": PORT},
+        "target": {
+            "container": CONTAINER,
+            "volume": VOLUME,
+            "image": IMAGE,
+            "port": PORT,
+        },
         "secret_policy": "no token/password/auth-code values emitted",
         "status": "STARTED",
     }
@@ -823,7 +972,9 @@ def main() -> int:
 
         # Re-read immediately before first auth write.
         baseline_reread = auth_baseline()
-        ok, errors = assert_fresh_baseline(baseline_reread, wait_http("/api/onboarding"))
+        ok, errors = assert_fresh_baseline(
+            baseline_reread, wait_http("/api/onboarding")
+        )
         evidence["auth_baseline_reread"] = baseline_reread
         evidence["fresh_baseline_reread"] = {"ok": ok, "errors": errors}
         if not ok:
@@ -853,7 +1004,9 @@ def main() -> int:
             raise RuntimeError("seed fixture incomplete for Welle A")
 
         run(["docker", "restart", CONTAINER])
-        evidence["post_restart_http_status"] = wait_http_status("/api/", {200, 401}, timeout=180)
+        evidence["post_restart_http_status"] = wait_http_status(
+            "/api/", {200, 401}, timeout=180
+        )
         # Existing access token may be invalid after restart? It should remain valid briefly, but get a new one via refresh would need secret.
         # Call post_restart using the same access token first; if rejected, record failure.
         post = call_service(owner_token, "post_restart")
@@ -862,6 +1015,7 @@ def main() -> int:
         spike = read_container_json("/config/tessera_spike_result.json")
         spike["d9_static_scan"] = static_d9_scan()
         evidence["blocking_io_log_check"] = blocking_io_log_check()
+        evidence["failure_redaction_check"] = measure_failure_redaction(evidence)
         d0_green = True
         evidence["status"] = "GREEN"
         evidence["exit_code"] = 0
@@ -877,6 +1031,7 @@ def main() -> int:
         evidence["exit_code"] = 2
         evidence["abort_reason"] = str(exc)
         evidence["blocking_io_log_check"] = blocking_io_log_check()
+        evidence["failure_redaction_check"] = measure_failure_redaction(evidence)
         evidence["gate_results"] = gate_results(evidence)
         failure = EVIDENCE / f"tessera-d0-evidence-{TODAY}.json"
         failure.write_text(json.dumps(evidence, indent=2, sort_keys=True))

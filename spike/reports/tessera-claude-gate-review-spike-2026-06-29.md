@@ -1,4 +1,10 @@
 # Gate Review — Tessera Phase-0 Spike (D1–D9)
+
+> **OBSOLETE / ersetzt:** Dieses frühe Claude-Gate wurde durch
+> `reports/welle-b-gate-2026-06-29.md` und den anschließenden Welle-B-Fix
+> überholt. Aussagen zu D5, D4/No-Lockout, D12 und Enforce-Go sind nicht mehr
+> als aktueller Gate-Stand zu verwenden.
+
 Stand 2026-06-29 · Modus: **Gate-/Auditmodus** · Geprüft: `tessera-spike-report-2026-06-29.md` (+ D0-Evidence) gegen Spec + Go/No-Go-Rubrik
 
 ## Entscheidung

@@ -1,5 +1,10 @@
 # Gate Review
 
+> **OBSOLETE / ersetzt:** Dieses frühe Gate wurde durch
+> `reports/welle-b-gate-2026-06-29.md` und den anschließenden Welle-B-Fix
+> überholt. Für D5, Native-Write-REPLACE, D12 und Enforce-Go gilt der spätere
+> Gate-Stand. Dieses Dokument bleibt nur als Historie erhalten.
+
 ## Entscheidung
 
 PASS MIT AUFLAGEN
