@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 from custom_components.tessera.config_flow import (
+    TesseraConfigFlow,
     _compile_preview,
     add_area_grant,
     add_role,
@@ -20,6 +21,7 @@ from custom_components.tessera.schema import (
     default_policy_data,
     validate_policy_data,
 )
+from homeassistant import data_entry_flow
 
 
 class FakeStore:
@@ -53,6 +55,62 @@ class FakeHass:
     def auth(self) -> object:
         """Fail if config-flow basics touch native auth."""
         raise AssertionError("config UI must not touch hass.auth")
+
+
+@pytest.mark.asyncio
+async def test_config_flow_user_step_sets_single_instance_unique_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The initial flow stores a singleton unique id before creating the entry."""
+    calls: list[str] = []
+    flow = TesseraConfigFlow()
+
+    async def fake_set_unique_id(self: TesseraConfigFlow, unique_id: str) -> None:
+        """Record the requested unique id."""
+        calls.append(unique_id)
+
+    def fake_abort_if_unique_id_configured(self: TesseraConfigFlow) -> None:
+        """Record the guard call."""
+        calls.append("abort_guard")
+
+    monkeypatch.setattr(TesseraConfigFlow, "async_set_unique_id", fake_set_unique_id)
+    monkeypatch.setattr(
+        TesseraConfigFlow,
+        "_abort_if_unique_id_configured",
+        fake_abort_if_unique_id_configured,
+    )
+
+    result = await flow.async_step_user({})
+
+    assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+    assert result["title"] == "Tessera"
+    assert calls == [DOMAIN, "abort_guard"]
+
+
+@pytest.mark.asyncio
+async def test_config_flow_second_user_step_aborts_when_already_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A second config flow aborts before it can create another fixed-store entry."""
+    flow = TesseraConfigFlow()
+
+    async def fake_set_unique_id(self: TesseraConfigFlow, unique_id: str) -> None:
+        """Accept the configured singleton id."""
+        assert unique_id == DOMAIN
+
+    def fake_abort_if_unique_id_configured(self: TesseraConfigFlow) -> None:
+        """Simulate Home Assistant's duplicate unique-id abort."""
+        raise data_entry_flow.AbortFlow("already_configured")
+
+    monkeypatch.setattr(TesseraConfigFlow, "async_set_unique_id", fake_set_unique_id)
+    monkeypatch.setattr(
+        TesseraConfigFlow,
+        "_abort_if_unique_id_configured",
+        fake_abort_if_unique_id_configured,
+    )
+
+    with pytest.raises(data_entry_flow.AbortFlow, match="already_configured"):
+        await flow.async_step_user({})
 
 
 def test_set_mode_persists_schema_valid_mode() -> None:
