@@ -1,0 +1,36 @@
+# === Secrets — NIEMALS committen ===
+.env
+.env.*
+*.env
+secrets.yaml
+*secret*
+*.token
+*token*.txt
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+op-*.json
+
+# === Runtime / Dev-Container-Daten (enthalten Auth-Stores) ===
+**/.storage/
+*.db
+*.sqlite
+*.sqlite3
+ha-tessera-dev-config/
+config/.storage/
+
+# === Python ===
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# === OS / Editor ===
+.DS_Store
+.vscode/
+.idea/
+*.swp

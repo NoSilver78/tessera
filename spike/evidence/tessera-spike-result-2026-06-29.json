@@ -1,0 +1,416 @@
+{
+  "d9_static_scan": {
+    "available": true,
+    "components_count": 14,
+    "http_or_ws_candidates": [
+      "auth_oidc",
+      "browser_mod",
+      "hacs",
+      "unifi_insights",
+      "unifi_network_map"
+    ],
+    "path": "/Volumes/config/custom_components",
+    "services_yaml_components": [
+      "browser_mod",
+      "dreame_vacuum",
+      "epex_spot",
+      "gruenbeck_cloud",
+      "solarman",
+      "solcast_solar",
+      "unifi_insights",
+      "unifi_network_map"
+    ]
+  },
+  "post_restart": {
+    "auth": {
+      "groups": [
+        {
+          "has_policy": true,
+          "id": "system-admin",
+          "name": "Administrators",
+          "policy_keys": [
+            "entities"
+          ],
+          "system_generated": true
+        },
+        {
+          "has_policy": true,
+          "id": "system-users",
+          "name": "Users",
+          "policy_keys": [
+            "entities"
+          ],
+          "system_generated": true
+        },
+        {
+          "has_policy": true,
+          "id": "system-read-only",
+          "name": "Read Only",
+          "policy_keys": [
+            "entities"
+          ],
+          "system_generated": true
+        },
+        {
+          "has_policy": true,
+          "id": "tessera:test",
+          "name": "Tessera Test",
+          "policy_keys": [
+            "entities"
+          ],
+          "system_generated": false
+        },
+        {
+          "has_policy": true,
+          "id": "tessera:extra",
+          "name": "Tessera Extra",
+          "policy_keys": [
+            "entities"
+          ],
+          "system_generated": false
+        }
+      ],
+      "users": [
+        {
+          "credentials_count": 0,
+          "groups": [
+            "system-read-only"
+          ],
+          "is_active": true,
+          "is_admin": false,
+          "is_owner": false,
+          "name": "Home Assistant Content",
+          "refresh_token_classes": [
+            "system"
+          ],
+          "refresh_token_count": 1,
+          "system_generated": true
+        },
+        {
+          "credentials_count": 1,
+          "groups": [
+            "system-admin"
+          ],
+          "is_active": true,
+          "is_admin": true,
+          "is_owner": true,
+          "name": "test-owner",
+          "refresh_token_classes": [
+            "normal"
+          ],
+          "refresh_token_count": 1,
+          "system_generated": false
+        },
+        {
+          "credentials_count": 0,
+          "groups": [
+            "tessera:test"
+          ],
+          "is_active": true,
+          "is_admin": false,
+          "is_owner": false,
+          "name": "tessera-test-user",
+          "refresh_token_classes": [],
+          "refresh_token_count": 0,
+          "system_generated": false
+        },
+        {
+          "credentials_count": 0,
+          "groups": [
+            "system-admin"
+          ],
+          "is_active": true,
+          "is_admin": true,
+          "is_owner": false,
+          "name": "tessera-test-admin",
+          "refresh_token_classes": [],
+          "refresh_token_count": 0,
+          "system_generated": false
+        },
+        {
+          "credentials_count": 0,
+          "groups": [
+            "system-read-only"
+          ],
+          "is_active": true,
+          "is_admin": false,
+          "is_owner": false,
+          "name": "tessera-test-ro",
+          "refresh_token_classes": [],
+          "refresh_token_count": 0,
+          "system_generated": false
+        }
+      ]
+    },
+    "d1_restart_survival": {
+      "group_survived_restart": true,
+      "policy_survived_restart": true,
+      "user_survived_restart": true
+    },
+    "d3_rest_ws_service": {
+      "allowed_in_state_list": true,
+      "allowed_single_status": 200,
+      "forbidden_in_state_list": false,
+      "forbidden_single_status": 401,
+      "service_allowed_status": 200,
+      "service_forbidden_status": 401,
+      "state_list_status": 200,
+      "tested": true,
+      "ws_tested": false
+    },
+    "d6_service_matrix": {
+      "entity_id_all_status": 200,
+      "entity_service_allowed_status": 200,
+      "entity_service_forbidden_status": 401,
+      "non_entity_service_tested": false,
+      "return_response_changed_states_tested": false,
+      "tested": true
+    },
+    "d7_leak_matrix": {
+      "history_tested": false,
+      "logbook_rest_tested": false,
+      "registry_ws_tested": false,
+      "render_template_body_type": "dict",
+      "render_template_status": 401,
+      "tested": true
+    },
+    "d8_headless_token": {
+      "llat_created": false,
+      "normal_headless_access_token_probe": true,
+      "refresh_token_revoked_after_probe": true,
+      "tested": true
+    },
+    "d9_custom_component_runtime": {
+      "runtime_custom_components_tested": false,
+      "static_host_scan_expected": true
+    },
+    "phase": "post_restart",
+    "state_file": {
+      "group_id": "tessera:test",
+      "group_id_extra": "tessera:extra",
+      "original_groups": [
+        "tessera:test"
+      ],
+      "test_admin_name": "tessera-test-admin",
+      "test_ro_name": "tessera-test-ro",
+      "test_user_name": "tessera-test-user"
+    }
+  },
+  "pre_restart": {
+    "after": {
+      "groups": [
+        {
+          "has_policy": true,
+          "id": "system-admin",
+          "name": "Administrators",
+          "policy_keys": [
+            "entities"
+          ],
+          "system_generated": true
+        },
+        {
+          "has_policy": true,
+          "id": "system-users",
+          "name": "Users",
+          "policy_keys": [
+            "entities"
+          ],
+          "system_generated": true
+        },
+        {
+          "has_policy": true,
+          "id": "system-read-only",
+          "name": "Read Only",
+          "policy_keys": [
+            "entities"
+          ],
+          "system_generated": true
+        },
+        {
+          "has_policy": true,
+          "id": "tessera:test",
+          "name": "Tessera Test",
+          "policy_keys": [
+            "entities"
+          ],
+          "system_generated": false
+        },
+        {
+          "has_policy": true,
+          "id": "tessera:extra",
+          "name": "Tessera Extra",
+          "policy_keys": [
+            "entities"
+          ],
+          "system_generated": false
+        }
+      ],
+      "users": [
+        {
+          "credentials_count": 0,
+          "groups": [
+            "system-read-only"
+          ],
+          "is_active": true,
+          "is_admin": false,
+          "is_owner": false,
+          "name": "Home Assistant Content",
+          "refresh_token_classes": [
+            "system"
+          ],
+          "refresh_token_count": 1,
+          "system_generated": true
+        },
+        {
+          "credentials_count": 1,
+          "groups": [
+            "system-admin"
+          ],
+          "is_active": true,
+          "is_admin": true,
+          "is_owner": true,
+          "name": "test-owner",
+          "refresh_token_classes": [
+            "normal"
+          ],
+          "refresh_token_count": 1,
+          "system_generated": false
+        },
+        {
+          "credentials_count": 0,
+          "groups": [
+            "tessera:test"
+          ],
+          "is_active": true,
+          "is_admin": false,
+          "is_owner": false,
+          "name": "tessera-test-user",
+          "refresh_token_classes": [],
+          "refresh_token_count": 0,
+          "system_generated": false
+        },
+        {
+          "credentials_count": 0,
+          "groups": [
+            "system-admin"
+          ],
+          "is_active": true,
+          "is_admin": true,
+          "is_owner": false,
+          "name": "tessera-test-admin",
+          "refresh_token_classes": [],
+          "refresh_token_count": 0,
+          "system_generated": false
+        },
+        {
+          "credentials_count": 0,
+          "groups": [
+            "system-read-only"
+          ],
+          "is_active": true,
+          "is_admin": false,
+          "is_owner": false,
+          "name": "tessera-test-ro",
+          "refresh_token_classes": [],
+          "refresh_token_count": 0,
+          "system_generated": false
+        }
+      ]
+    },
+    "before": {
+      "groups": [
+        {
+          "has_policy": true,
+          "id": "system-admin",
+          "name": "Administrators",
+          "policy_keys": [
+            "entities"
+          ],
+          "system_generated": true
+        },
+        {
+          "has_policy": true,
+          "id": "system-users",
+          "name": "Users",
+          "policy_keys": [
+            "entities"
+          ],
+          "system_generated": true
+        },
+        {
+          "has_policy": true,
+          "id": "system-read-only",
+          "name": "Read Only",
+          "policy_keys": [
+            "entities"
+          ],
+          "system_generated": true
+        }
+      ],
+      "users": [
+        {
+          "credentials_count": 0,
+          "groups": [
+            "system-read-only"
+          ],
+          "is_active": true,
+          "is_admin": false,
+          "is_owner": false,
+          "name": "Home Assistant Content",
+          "refresh_token_classes": [
+            "system"
+          ],
+          "refresh_token_count": 1,
+          "system_generated": true
+        },
+        {
+          "credentials_count": 1,
+          "groups": [
+            "system-admin"
+          ],
+          "is_active": true,
+          "is_admin": true,
+          "is_owner": true,
+          "name": "test-owner",
+          "refresh_token_classes": [
+            "normal"
+          ],
+          "refresh_token_count": 1,
+          "system_generated": false
+        }
+      ]
+    },
+    "d1_pre_restart": {
+      "group_created": true,
+      "policy_written": true
+    },
+    "d2_policy_change_no_restart": {
+      "allowed_read_after_policy_change": false,
+      "forbidden_control_after_policy_change": true,
+      "forbidden_read_after_policy_change": true
+    },
+    "d3_internal_check_entity": {
+      "allowed_control": true,
+      "allowed_read": true,
+      "forbidden_control": false,
+      "forbidden_read": false
+    },
+    "d4_union_restore": {
+      "original_groups": [
+        "tessera:test"
+      ],
+      "restored_groups": [
+        "tessera:test"
+      ],
+      "union_groups": [
+        "tessera:test",
+        "tessera:extra"
+      ]
+    },
+    "d5_restore_primitive": {
+      "boot_rescue_corruption_tested": false,
+      "public_async_update_user_restore_available": true
+    },
+    "phase": "pre_restart"
+  }
+}

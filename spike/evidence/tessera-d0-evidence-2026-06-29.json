@@ -1,0 +1,237 @@
+{
+  "auth_baseline": {
+    "groups_count": 3,
+    "tokens": [
+      {
+        "client_id_present": false,
+        "client_name": null,
+        "credential_id_present": false,
+        "token_type": "system"
+      }
+    ],
+    "users": [
+      {
+        "credentials_count": 0,
+        "group_ids": [
+          "system-read-only"
+        ],
+        "is_active": true,
+        "is_owner": false,
+        "name": "Home Assistant Content",
+        "system_generated": true
+      }
+    ]
+  },
+  "auth_baseline_reread": {
+    "groups_count": 3,
+    "tokens": [
+      {
+        "client_id_present": false,
+        "client_name": null,
+        "credential_id_present": false,
+        "token_type": "system"
+      }
+    ],
+    "users": [
+      {
+        "credentials_count": 0,
+        "group_ids": [
+          "system-read-only"
+        ],
+        "is_active": true,
+        "is_owner": false,
+        "name": "Home Assistant Content",
+        "system_generated": true
+      }
+    ]
+  },
+  "fresh_baseline": {
+    "errors": [],
+    "ok": true
+  },
+  "fresh_baseline_reread": {
+    "errors": [],
+    "ok": true
+  },
+  "harness": {
+    "loaded": true,
+    "services_status": 200
+  },
+  "onboarding_after": [
+    {
+      "done": true,
+      "step": "user"
+    },
+    {
+      "done": true,
+      "step": "core_config"
+    },
+    {
+      "done": true,
+      "step": "analytics"
+    },
+    {
+      "done": true,
+      "step": "integration"
+    }
+  ],
+  "onboarding_before": [
+    {
+      "done": false,
+      "step": "user"
+    },
+    {
+      "done": false,
+      "step": "core_config"
+    },
+    {
+      "done": false,
+      "step": "analytics"
+    },
+    {
+      "done": false,
+      "step": "integration"
+    }
+  ],
+  "onboarding_steps": [
+    {
+      "body_keys": [],
+      "path": "/api/onboarding/core_config",
+      "status": 200
+    },
+    {
+      "body_keys": [],
+      "path": "/api/onboarding/analytics",
+      "status": 200
+    },
+    {
+      "body_keys": [
+        "auth_code"
+      ],
+      "path": "/api/onboarding/integration",
+      "status": 200
+    }
+  ],
+  "onboarding_user": {
+    "body_keys": [
+      "auth_code"
+    ],
+    "status": 200
+  },
+  "post_restart_http_status": 401,
+  "post_restart_service": {
+    "keys": [
+      "auth",
+      "d1_restart_survival",
+      "d3_rest_ws_service",
+      "d6_service_matrix",
+      "d7_leak_matrix",
+      "d8_headless_token",
+      "d9_custom_component_runtime",
+      "phase",
+      "state_file"
+    ],
+    "ok": true
+  },
+  "pre_existing_target": {
+    "errors": [],
+    "inspect": {
+      "binds": [
+        "ha-tessera-dev-config:/config"
+      ],
+      "id_short": "ff4219821761",
+      "image": "ghcr.io/home-assistant/home-assistant:2026.6.4",
+      "mounts": [
+        {
+          "Destination": "/config",
+          "Driver": "local",
+          "Mode": "z",
+          "Name": "ha-tessera-dev-config",
+          "RW": true,
+          "Type": "volume"
+        }
+      ],
+      "name": "ha-tessera-dev",
+      "ports": {
+        "8123/tcp": [
+          {
+            "HostIp": "0.0.0.0",
+            "HostPort": "8124"
+          },
+          {
+            "HostIp": "::",
+            "HostPort": "8124"
+          }
+        ]
+      }
+    },
+    "isolation_ok": true
+  },
+  "pre_restart_service": {
+    "keys": [
+      "after",
+      "before",
+      "d1_pre_restart",
+      "d2_policy_change_no_restart",
+      "d3_internal_check_entity",
+      "d4_union_restore",
+      "d5_restore_primitive",
+      "phase"
+    ],
+    "ok": true
+  },
+  "recreated_target": {
+    "errors": [],
+    "inspect": {
+      "binds": [
+        "ha-tessera-dev-config:/config"
+      ],
+      "id_short": "864dc4538f18",
+      "image": "ghcr.io/home-assistant/home-assistant:2026.6.4",
+      "mounts": [
+        {
+          "Destination": "/config",
+          "Driver": "local",
+          "Mode": "z",
+          "Name": "ha-tessera-dev-config",
+          "RW": true,
+          "Type": "volume"
+        }
+      ],
+      "name": "ha-tessera-dev",
+      "ports": {
+        "8123/tcp": [
+          {
+            "HostIp": "0.0.0.0",
+            "HostPort": "8124"
+          },
+          {
+            "HostIp": "::",
+            "HostPort": "8124"
+          }
+        ]
+      }
+    },
+    "isolation_ok": true
+  },
+  "secret_policy": "no token/password/auth-code values emitted",
+  "started_at": "2026-06-29T06:55:16",
+  "status": "GREEN",
+  "target": {
+    "container": "ha-tessera-dev",
+    "image": "ghcr.io/home-assistant/home-assistant:2026.6.4",
+    "port": "8124",
+    "volume": "ha-tessera-dev-config"
+  },
+  "token_exchange": {
+    "body_keys": [
+      "access_token",
+      "expires_in",
+      "ha_auth_provider",
+      "refresh_token",
+      "token_type"
+    ],
+    "status": 200,
+    "token_values_redacted": true
+  }
+}
