@@ -9,11 +9,11 @@ from __future__ import annotations
 from collections.abc import Collection, Mapping
 from typing import Any, Literal, Protocol, TypedDict
 
-from ._user_helpers import _is_unmanaged_user, _user_group_ids
+from ._user_helpers import _is_unmanaged_user
 from .auth_adapter import (
-    GROUP_ID_ADMIN,
     AuthRecoverySnapshot,
     LockoutRisk,
+    _assert_owner_or_admin_survives_in,
 )
 
 RestoreStatus = Literal["restored", "failed"]
@@ -113,17 +113,11 @@ def _assert_restore_owner_or_admin_survives(
         user_snapshot.user_id: set(user_snapshot.group_ids)
         for user_snapshot in snapshot.users
     }
-    for user_id, user in users_by_id.items():
-        if not getattr(user, "is_active", True):
-            continue
-        if getattr(user, "system_generated", False):
-            continue
-        if getattr(user, "is_owner", False):
-            return
-        group_ids = target_group_ids_by_user.get(user_id, set(_user_group_ids(user)))
-        if GROUP_ID_ADMIN in group_ids:
-            return
-    raise LockoutRisk("restore would remove the last owner/admin recovery path")
+    _assert_owner_or_admin_survives_in(
+        target_group_ids_by_user,
+        users_by_id,
+        message="restore would remove the last owner/admin recovery path",
+    )
 
 
 def _redacted_error_detail(error: Exception) -> list[str]:

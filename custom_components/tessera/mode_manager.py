@@ -15,6 +15,7 @@ from .auth_adapter import (
     LockoutRisk,
     UnsupportedAuthVersion,
     _assert_allow_only_policy,
+    _assert_owner_or_admin_survives_in,
     _assert_supported_auth_version,
     _homeassistant_version,
 )
@@ -344,17 +345,9 @@ def _assert_owner_or_admin_survives(
         binding["user_id"]: set(binding["target_group_ids"])
         for binding in plan["bindings"]
     }
-    for user_id, user in users_by_id.items():
-        if getattr(user, "is_active", True) is False:
-            continue
-        if getattr(user, "system_generated", False):
-            continue
-        if getattr(user, "is_owner", False):
-            return
-        group_ids = target_group_ids_by_user.get(user_id, set(_user_group_ids(user)))
-        if GROUP_ID_ADMIN in group_ids:
-            return
-    raise LockoutRisk("lockout")
+    _assert_owner_or_admin_survives_in(
+        target_group_ids_by_user, users_by_id, message="lockout"
+    )
 
 
 def _redacted_error_detail(error: Exception) -> list[str]:
