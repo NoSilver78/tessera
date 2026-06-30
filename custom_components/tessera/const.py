@@ -11,6 +11,7 @@ STORAGE_VERSION: Final = 1
 # Persistent ``.storage/`` keys, versioned by STORAGE_VERSION.
 CONFIG_STORAGE_KEY: Final = "tessera.config"
 POLICY_STORAGE_KEY: Final = "tessera.policy"
+STATE_STORAGE_KEY: Final = "tessera.state"
 
 # Operating modes. These are the only accepted values; they are validated via
 # ``schema.MODES``. ``enforce`` is inert in phase 1 (monitor-preview only, no

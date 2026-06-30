@@ -5,13 +5,22 @@ from __future__ import annotations
 from typing import Any, ClassVar, cast
 
 import pytest
-from custom_components.tessera.const import CONFIG_STORAGE_KEY, POLICY_STORAGE_KEY
+from custom_components.tessera.auth_adapter import (
+    AuthRecoverySnapshot,
+    UserGroupSnapshot,
+)
+from custom_components.tessera.const import (
+    CONFIG_STORAGE_KEY,
+    POLICY_STORAGE_KEY,
+    STATE_STORAGE_KEY,
+)
 from custom_components.tessera.schema import (
     TesseraPolicyData,
     TesseraSchemaError,
     default_config_data,
     default_policy_data,
 )
+from custom_components.tessera.state import TesseraStateError, decide_startup_recovery
 from custom_components.tessera.store import TesseraStore
 
 
@@ -108,3 +117,56 @@ async def test_store_rejects_contradictory_policy_on_load() -> None:
 
     with pytest.raises(TesseraSchemaError, match="control implies read"):
         await store.async_load_policy()
+
+
+@pytest.mark.asyncio
+async def test_store_persists_immutable_pre_install_snapshot_once() -> None:
+    """Pre-install recovery snapshots are secret-free and immutable."""
+    store = TesseraStore(hass=object(), store_factory=MemoryStore)
+    snapshot = AuthRecoverySnapshot(
+        users=(UserGroupSnapshot("user-1", ("system-read-only",)),)
+    )
+
+    state = await store.async_set_pre_install_snapshot(snapshot)
+
+    assert state == {
+        "pre_install_snapshot": {
+            "users": [{"user_id": "user-1", "group_ids": ["system-read-only"]}]
+        },
+        "apply_in_progress": False,
+    }
+    assert MemoryStore.buckets[STATE_STORAGE_KEY] == state
+    assert "name" not in str(state)
+    assert "token" not in str(state)
+    with pytest.raises(TesseraStateError, match="immutable"):
+        await store.async_set_pre_install_snapshot(
+            AuthRecoverySnapshot(
+                users=(UserGroupSnapshot("user-1", ("tessera:viewer",)),)
+            )
+        )
+
+
+@pytest.mark.asyncio
+async def test_store_apply_journal_sets_and_clears_without_overwriting_snapshot() -> (
+    None
+):
+    """Two-phase journal opens with the immutable snapshot and can be cleared."""
+    store = TesseraStore(hass=object(), store_factory=MemoryStore)
+    original = AuthRecoverySnapshot(
+        users=(UserGroupSnapshot("user-1", ("system-read-only",)),)
+    )
+    replacement = AuthRecoverySnapshot(
+        users=(UserGroupSnapshot("user-1", ("tessera:viewer",)),)
+    )
+
+    open_state = await store.async_mark_apply_in_progress(original)
+    second_open = await store.async_mark_apply_in_progress(replacement)
+    cleared = await store.async_clear_apply_in_progress()
+
+    assert open_state["apply_in_progress"] is True
+    assert second_open["pre_install_snapshot"] == {
+        "users": [{"user_id": "user-1", "group_ids": ["system-read-only"]}]
+    }
+    assert decide_startup_recovery(second_open) == "rollback"
+    assert cleared["apply_in_progress"] is False
+    assert decide_startup_recovery(cleared) == "none"

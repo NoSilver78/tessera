@@ -5,7 +5,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
-from .const import CONFIG_STORAGE_KEY, POLICY_STORAGE_KEY, STORAGE_VERSION
+from .const import (
+    CONFIG_STORAGE_KEY,
+    POLICY_STORAGE_KEY,
+    STATE_STORAGE_KEY,
+    STORAGE_VERSION,
+)
 from .schema import (
     TesseraConfigData,
     TesseraPolicyData,
@@ -14,9 +19,18 @@ from .schema import (
     validate_config_data,
     validate_policy_data,
 )
+from .state import (
+    TesseraStateData,
+    TesseraStateError,
+    default_state_data,
+    snapshot_to_state_data,
+    validate_state_data,
+)
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
+
+    from .auth_adapter import AuthRecoverySnapshot
 
 
 class StoreLike(Protocol):
@@ -49,6 +63,7 @@ class TesseraStore:
         factory = store_factory or _homeassistant_store_factory
         self._config_store = factory(hass, STORAGE_VERSION, CONFIG_STORAGE_KEY)
         self._policy_store = factory(hass, STORAGE_VERSION, POLICY_STORAGE_KEY)
+        self._state_store = factory(hass, STORAGE_VERSION, STATE_STORAGE_KEY)
 
     async def async_load_config(self) -> TesseraConfigData:
         """Load Tessera configuration, returning defaults when absent.
@@ -87,6 +102,48 @@ class TesseraStore:
         await self._policy_store.async_save(
             cast(dict[str, Any], validate_policy_data(data))
         )
+
+    async def async_load_state(self) -> TesseraStateData:
+        """Load secret-free recovery state, returning defaults when absent."""
+        data = await self._state_store.async_load()
+        return validate_state_data(
+            cast(dict[str, Any], default_state_data()) if data is None else data
+        )
+
+    async def async_save_state(self, data: TesseraStateData) -> None:
+        """Validate and save secret-free recovery state."""
+        await self._state_store.async_save(
+            cast(dict[str, Any], validate_state_data(cast(dict[str, Any], data)))
+        )
+
+    async def async_set_pre_install_snapshot(
+        self, snapshot: AuthRecoverySnapshot
+    ) -> TesseraStateData:
+        """Persist the immutable pre-install snapshot exactly once."""
+        state = await self.async_load_state()
+        if state["pre_install_snapshot"] is not None:
+            raise TesseraStateError("pre_install_snapshot is immutable")
+        state["pre_install_snapshot"] = snapshot_to_state_data(snapshot)
+        await self.async_save_state(state)
+        return state
+
+    async def async_mark_apply_in_progress(
+        self, snapshot: AuthRecoverySnapshot
+    ) -> TesseraStateData:
+        """Open the two-phase apply journal, setting the snapshot if absent."""
+        state = await self.async_load_state()
+        if state["pre_install_snapshot"] is None:
+            state["pre_install_snapshot"] = snapshot_to_state_data(snapshot)
+        state["apply_in_progress"] = True
+        await self.async_save_state(state)
+        return state
+
+    async def async_clear_apply_in_progress(self) -> TesseraStateData:
+        """Clear the two-phase apply journal after a successful apply."""
+        state = await self.async_load_state()
+        state["apply_in_progress"] = False
+        await self.async_save_state(state)
+        return state
 
 
 def _homeassistant_store_factory(

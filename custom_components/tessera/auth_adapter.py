@@ -154,6 +154,16 @@ class AuthPolicyStoreAdapter:
             return None
         return deepcopy(group.policy)
 
+    async def async_list_tessera_group_ids(self) -> list[str]:
+        """Return all current Tessera-managed native group ids."""
+        store = self._hass.auth._store
+        await store.async_get_groups()
+        return sorted(
+            group_id
+            for group_id in store._groups
+            if group_id.startswith(TESSERA_GROUP_PREFIX)
+        )
+
     async def async_set_group_policy(
         self, group_id: str, name: str, policy: Mapping[str, Any]
     ) -> None:
@@ -236,12 +246,34 @@ class UserBindingAdapter:
         if callable(invalidate_cache):
             invalidate_cache()
 
+    async def async_restore_exact_groups(
+        self, user: Any, group_ids: Collection[str]
+    ) -> None:
+        """Restore one managed user to an exact pre-install group set.
+
+        Unlike enforce binding, restore must be allowed to drop current
+        ``tessera:*`` groups. It still rejects owner/system-generated users,
+        forbidden group ids, and admin demotion.
+        """
+        self._assert_supported_version()
+        sorted_group_ids = _validate_exact_restore_binding(user, group_ids)
+        await self._hass.auth.async_update_user(user, group_ids=sorted_group_ids)
+        invalidate_cache = getattr(user, "invalidate_cache", None)
+        if callable(invalidate_cache):
+            invalidate_cache()
+
     def snapshot_user_groups(self, users: Iterable[Any]) -> AuthRecoverySnapshot:
         """Capture namespace-guarded group bindings for managed Tessera users."""
+        return self.snapshot_managed_user_groups(users, include_without_tessera=False)
+
+    def snapshot_managed_user_groups(
+        self, users: Iterable[Any], *, include_without_tessera: bool
+    ) -> AuthRecoverySnapshot:
+        """Capture namespace-guarded group bindings for managed users."""
         snapshots: list[UserGroupSnapshot] = []
         for user in users:
             group_ids = _user_group_ids(user)
-            if not any(
+            if not include_without_tessera and not any(
                 group_id.startswith(TESSERA_GROUP_PREFIX) for group_id in group_ids
             ):
                 continue
@@ -282,7 +314,10 @@ class RecoveryController:
         self._binding = binding
 
     async def async_snapshot(
-        self, users: Iterable[Any] | None = None
+        self,
+        users: Iterable[Any] | None = None,
+        *,
+        include_without_tessera: bool = False,
     ) -> AuthRecoverySnapshot:
         """Return a namespace-guarded managed-user group snapshot."""
         source_users = (
@@ -290,7 +325,9 @@ class RecoveryController:
             if users is not None
             else await self._hass.auth.async_get_users()
         )
-        return self._binding.snapshot_user_groups(source_users)
+        return self._binding.snapshot_managed_user_groups(
+            source_users, include_without_tessera=include_without_tessera
+        )
 
     async def async_restore(
         self, snapshot: AuthRecoverySnapshot, users_by_id: Mapping[str, Any]
@@ -304,11 +341,16 @@ class RecoveryController:
                 for group_id in user_snapshot.group_ids
                 if group_id.startswith(TESSERA_GROUP_PREFIX)
             ]
-            await self._binding.async_bind_full_superset(
-                user,
-                user_snapshot.group_ids,
-                expected_tessera_group_ids=tessera_groups,
-            )
+            if tessera_groups:
+                await self._binding.async_bind_full_superset(
+                    user,
+                    user_snapshot.group_ids,
+                    expected_tessera_group_ids=tessera_groups,
+                )
+            else:
+                await self._binding.async_restore_exact_groups(
+                    user, user_snapshot.group_ids
+                )
             restored.append(user_snapshot.user_id)
         return AuthRestoreResult(restored_user_ids=tuple(restored))
 
@@ -396,6 +438,18 @@ def _validate_restore_group_ids(user: Any) -> list[str]:
     for group_id in group_ids:
         _assert_allowed_binding_group_id(group_id)
     return sorted(group_ids)
+
+
+def _validate_exact_restore_binding(user: Any, group_ids: Collection[str]) -> list[str]:
+    """Validate an exact restore replacement group set."""
+    _assert_managed_user(user)
+    target_group_ids = set(group_ids)
+    for group_id in target_group_ids:
+        _assert_allowed_binding_group_id(group_id)
+    current_group_ids = set(_user_group_ids(user))
+    if GROUP_ID_ADMIN in current_group_ids and GROUP_ID_ADMIN not in target_group_ids:
+        raise LockoutRisk("refusing to remove system-admin from an admin user")
+    return sorted(target_group_ids)
 
 
 def _assert_supported_auth_version(ha_version: str) -> None:

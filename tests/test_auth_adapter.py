@@ -252,6 +252,31 @@ async def test_policy_store_writes_only_tessera_namespaced_groups() -> None:
 
 
 @pytest.mark.asyncio
+async def test_policy_store_lists_only_tessera_groups_for_restore() -> None:
+    """Restore group enumeration exposes only Tessera-managed groups."""
+    hass = FakeHass()
+    hass.auth._store._groups = {
+        "system-admin": FakeGroup(
+            "system-admin", "Admin", {"entities": {"entity_ids": {}}}
+        ),
+        "tessera:admin": FakeGroup(
+            "tessera:admin", "Admin", {"entities": {"entity_ids": {}}}
+        ),
+        "tessera:viewer": FakeGroup(
+            "tessera:viewer", "Viewer", {"entities": {"entity_ids": {}}}
+        ),
+    }
+    adapter = AuthPolicyStoreAdapter(
+        hass, ha_version="2026.6.4", group_factory=fake_group_factory
+    )
+
+    assert await adapter.async_list_tessera_group_ids() == [
+        "tessera:admin",
+        "tessera:viewer",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_policy_store_rejects_non_allow_only_policy_shapes() -> None:
     """Native policies are fail-closed to Tessera's entity allow-list shape."""
     hass = FakeHass()
@@ -333,6 +358,19 @@ async def test_user_binding_rejects_delta_and_forbidden_groups() -> None:
         )
 
     assert hass.auth.update_calls == []
+
+
+@pytest.mark.asyncio
+async def test_user_binding_restore_exact_can_drop_tessera_groups() -> None:
+    """Restore exact binding may return a user to pre-install system groups."""
+    hass = FakeHass()
+    user = FakeUser("user-1", ["system-read-only", "tessera:viewer"])
+    adapter = UserBindingAdapter(hass, ha_version="2026.6.4")
+
+    await adapter.async_restore_exact_groups(user, ["system-read-only"])
+
+    assert hass.auth.update_calls == [(user, ["system-read-only"])]
+    assert user.group_ids == ["system-read-only"]
 
 
 @pytest.mark.asyncio
@@ -429,10 +467,16 @@ async def test_recovery_snapshot_restore_and_no_admin_lockout() -> None:
     recovery = RecoveryController(hass, binding)
 
     snapshot = await recovery.async_snapshot()
+    pre_install_snapshot = await recovery.async_snapshot(
+        [FakeUser("fresh", ["system-read-only"])], include_without_tessera=True
+    )
     managed.group_ids = ["system-read-only"]
     result = await recovery.async_restore(snapshot, {"managed": managed})
 
     assert result.restored_user_ids == ("managed",)
+    assert pre_install_snapshot == AuthRecoverySnapshot(
+        users=(UserGroupSnapshot("fresh", ("system-read-only",)),)
+    )
     assert managed.group_ids == ["system-read-only", "tessera:viewer"]
     assert await recovery.async_has_owner_or_admin() is True
     await recovery.async_assert_no_admin_lockout()
