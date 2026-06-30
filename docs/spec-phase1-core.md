@@ -81,7 +81,7 @@ Implementiere ausschließlich Schritt 1 (Scaffold + Store + Schema) für die Tes
 Branch/Worktree: core/phase1-store-compiler (NICHT main). Verzeichnis: custom_components/tessera/.
 
 Aufgabe:
-- HACS-Integration-Skelett: manifest.json (domain "tessera", config_flow true, iot_class local_polling, version 0.1.0), __init__.py (async_setup_entry/async_unload_entry, getypt), const.py (DOMAIN), config_flow.py (Minimal-Flow).
+- HACS-Integration-Skelett: manifest.json (domain "tessera", config_flow true, iot_class calculated, single_config_entry true, version 0.1.0), __init__.py (async_setup_entry/async_unload_entry, getypt), const.py (DOMAIN), config_flow.py (Minimal-Flow).
 - Store-Modul store.py: lädt/speichert .storage/tessera.config + tessera.policy via HA Store-Helper (async, KEIN blocking I/O), Schema-Version, Roundtrip.
 - Schema-Modul schema.py: Validierung der Store-Daten; schema-aware (verbiete bare-True / entities:true / domains:true; erlaube {read[,control]}-Leafs).
 

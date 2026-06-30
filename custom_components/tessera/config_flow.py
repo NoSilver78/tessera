@@ -232,6 +232,7 @@ class TesseraOptionsFlow(config_entries.OptionsFlow):
                                 ACTION_REMOVE_AREA_GRANT,
                             ],
                             mode=selector.SelectSelectorMode.DROPDOWN,
+                            translation_key="action",
                         )
                     )
                 }
