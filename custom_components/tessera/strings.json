@@ -21,7 +21,7 @@
       },
       "set_mode": {
         "title": "Set mode",
-        "description": "off does nothing; monitor compiles a read-only preview; enforce currently falls back to monitor (no native permission writes yet).",
+        "description": "off restores Tessera-managed native auth state and stops; monitor compiles a read-only preview; enforce applies Tessera-managed native auth after all gates pass.",
         "data": {
           "mode": "Mode"
         }
@@ -84,6 +84,16 @@
     "recompile": {
       "name": "Recompile",
       "description": "Recompiles the read-only Tessera monitor preview for all loaded entries. Takes no input and performs no native permission writes."
+    }
+  },
+  "issues": {
+    "enforce_fail_safe": {
+      "title": "Tessera fell back to monitor mode",
+      "description": "Tessera refused or stopped enforce mode for entry {entry_id} and persisted monitor mode. Reason: {reason}."
+    },
+    "restore_fail_safe": {
+      "title": "Tessera restore needs attention",
+      "description": "Tessera could not complete restore for entry {entry_id}. It fell back to monitor mode where possible. Reason: {reason}."
     }
   }
 }

@@ -6,7 +6,7 @@ import re
 from copy import deepcopy
 from typing import Any, TypedDict, cast
 
-from .const import MODE_OFF, MODES, STORAGE_VERSION
+from .const import MODE_MONITOR, MODES, STORAGE_VERSION
 
 
 class PermissionLeaf(TypedDict, total=False):
@@ -82,7 +82,7 @@ def default_config_data() -> TesseraConfigData:
     """
     return {
         "version": STORAGE_VERSION,
-        "mode": MODE_OFF,
+        "mode": MODE_MONITOR,
         "roles": {},
         "membership": {"by_user": {}, "by_group": {}},
         "d9_acks": {},

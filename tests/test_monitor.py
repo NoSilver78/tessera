@@ -12,6 +12,7 @@ from custom_components.tessera import DOMAIN, SERVICE_RECOMPILE
 from custom_components.tessera.linter import empty_lint_report
 from custom_components.tessera.monitor import compile_current, monitor_preview
 from custom_components.tessera.schema import default_config_data, default_policy_data
+from custom_components.tessera.state import default_state_data
 
 
 class FakeResolver:
@@ -45,6 +46,14 @@ class FakeStore:
         """Load fake policy."""
         self.policy_loads += 1
         return self.policy
+
+    async def async_load_state(self) -> dict[str, Any]:
+        """Load empty recovery state."""
+        return default_state_data()
+
+    async def async_save_config(self, config: dict[str, Any]) -> None:
+        """Persist fake config."""
+        self.config = config
 
 
 class FakeServices:
@@ -194,14 +203,32 @@ async def test_setup_entry_mode_monitor_compiles_preview_and_never_touches_auth(
 
 
 @pytest.mark.asyncio
-async def test_setup_entry_mode_enforce_warns_and_runs_monitor_preview_only(
+async def test_setup_entry_mode_enforce_blocked_fails_safe_to_monitor(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """Enforce mode remains gated and uses the monitor preview path only."""
+    """Blocked enforce plans fall back to monitor and keep redacted preview."""
     store = FakeStore(_config("enforce"), _policy())
     hass = FakeHass()
+    issues: list[tuple[str, str]] = []
+
+    async def fake_compute(_hass: Any, _store: Any) -> dict[str, Any]:
+        return {
+            "groups": [],
+            "bindings": [],
+            "orphan_group_ids": [],
+            "blocked": True,
+            "block_reason": "d9",
+            "block_detail": ["blocked"],
+        }
+
+    async def fake_issue(
+        _hass: Any, _entry_id: str, issue_id: str, *, reason: str
+    ) -> None:
+        issues.append((issue_id, reason))
 
     monkeypatch.setattr(tessera_init, "TesseraStore", lambda hass: store)
+    monkeypatch.setattr(tessera_init, "compute_enforce_plan", fake_compute)
+    monkeypatch.setattr(tessera_init, "_record_repair_issue", fake_issue)
     monkeypatch.setattr(
         tessera_init.AreaEntityResolver,
         "from_hass",
@@ -212,6 +239,8 @@ async def test_setup_entry_mode_enforce_warns_and_runs_monitor_preview_only(
     assert await tessera_init.async_setup_entry(hass, FakeEntry("entry-1")) is True
 
     entry_data = hass.data[DOMAIN]["entry-1"]
+    assert store.config["mode"] == "monitor"
+    assert entry_data["mode"] == "monitor"
     assert entry_data["compiled"] == {
         "viewer": {
             "entities": {"entity_ids": {"light.sofa": {"read": True, "control": True}}}
@@ -219,8 +248,8 @@ async def test_setup_entry_mode_enforce_warns_and_runs_monitor_preview_only(
     }
     assert entry_data["preview"]["control_total"] == 1
     assert entry_data["preview"]["lint"]["conflicts_total"] == 0
-    assert "enforce is not implemented yet" in caplog.text
-    assert "Tessera enforce preview" in caplog.text
+    assert issues == [(tessera_init.REPAIR_ENFORCE_FAIL_SAFE, "blocked:d9")]
+    assert "Tessera monitor preview" in caplog.text
     assert "light.sofa" not in caplog.text
 
 

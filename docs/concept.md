@@ -56,7 +56,7 @@ Exakt wie in der Homelab-Governance „NetBox = Fakten-SoT, `host.yml` = generie
 4. **ABAC/PBAC-Anteile:** Label-/`entity_category`-/floor-Selektoren sind Attribut-Prädikate (Policy-as-Data) — Bulk-Werkzeuge über dem RBAC-Kern.
 5. **Policy-as-Data + Compiler:** Store deklarativ/versioniert/diffbar (terraform-plan-artiges Apply-Gate); native Policy = idempotente, rollback-bare Projektion.
 6. **Defense-in-depth, ehrlich abgegrenzt:** Backend-Durchsetzung (native `check_entity`) ist **die** Grenze für operate/control; Frontend-Hide (browser_mod/Lovelace) ist reine UX-Konsistenz, nie Sicherheit. Für `view`-Vertraulichkeit gegen untrusted Subjekte → **Tier-2 (2-Instanz-Isolation)**, außerhalb dieses Produkts.
-7. **Fail-safe / kein Lockout:** Owner wird strukturell nie angefasst; ≥1 Admin-Bindung ist Compiler-Invariante; bei Tessera-**internem** Fehler → `mode=off` (nativ unverändert), **nicht** alles-deny.
+7. **Fail-safe / kein Lockout:** Owner wird strukturell nie angefasst; ≥1 Admin-Bindung ist Compiler-Invariante; bei Tessera-**internem** Fehler → `mode=monitor` (keine native Durchsetzung, read-only Preview), **nicht** alles-deny.
 8. **Auditierbarkeit:** Append-only Change- + Decision-Log mit before/after-Hash-Chain (**tamper-evident**; echte Non-Repudiation nur mit externem Export/Signatur — lokale `.storage`-JSONL ist admin/root-editierbar), getrennt vom Policy-Store.
 
 ---

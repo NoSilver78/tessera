@@ -348,17 +348,20 @@ class TesseraOptionsFlow(config_entries.OptionsFlow):
     async def _save_preview_finish(
         self, config: TesseraConfigData, policy: TesseraPolicyData
     ) -> config_entries.ConfigFlowResult:
-        """Persist stores, refresh monitor preview, and finish the options flow."""
+        """Persist stores, refresh the loaded entry, and finish the options flow."""
         store = self._get_store()
         await store.async_save_config(config)
         await store.async_save_policy(policy)
-        await _compile_preview(
-            self.hass,
-            self._config_entry.entry_id,
-            store,
-            config=config,
-            policy=policy,
-        )
+        if not await _refresh_loaded_entry(
+            self.hass, self._config_entry.entry_id, store
+        ):
+            await _compile_preview(
+                self.hass,
+                self._config_entry.entry_id,
+                store,
+                config=config,
+                policy=policy,
+            )
         return self.async_create_entry(title="", data={})
 
     def _get_store(self) -> TesseraStore:
@@ -468,7 +471,8 @@ async def _compile_preview(
         return
     if config["mode"] == MODE_ENFORCE:
         LOGGER.warning(
-            "Tessera enforce mode saved for entry %s; monitor preview only",
+            "Tessera enforce mode saved for unloaded entry %s; enforce applies "
+            "on next setup/reload",
             entry_id,
         )
     if config["mode"] in {MODE_MONITOR, MODE_ENFORCE}:
@@ -480,3 +484,18 @@ async def _compile_preview(
         entry_data["preview"] = log_monitor_preview(
             compiled, mode=config["mode"], lint_report=lint_report
         )
+
+
+async def _refresh_loaded_entry(
+    hass: HomeAssistant, entry_id: str, store: TesseraStore
+) -> bool:
+    """Run central mode handling for a live entry after options changed."""
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    entry_data = domain_data.get(entry_id)
+    if not isinstance(entry_data, dict):
+        return False
+    entry_data["store"] = store
+    from . import _compile_for_mode_safely
+
+    await _compile_for_mode_safely(hass, entry_id, entry_data)
+    return True

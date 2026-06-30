@@ -54,7 +54,7 @@ Label-/category-Bulk · Hochglanz-Lit-Panel · Community-Features · granulares 
 `.storage/tessera.config` (mode, roles, membership: {by_user, by_group}) · `tessera.policy` (Area×Rolle-Grants, Entity-Overrides, staging) · `tessera.compiled` (letzte native Projektion + Hash) · `tessera.audit` (Change-/Decision-Log, Hash-Chain) · `tessera.state` (Drift-Fingerprint). Schemas versioniert.
 
 ## Fehlerbehandlung
-**Fail-safe:** interner Fehler → `mode=off` (nativ unverändert), nie alles-deny. Owner strukturell unberührt; ≥1 Admin-Bindung Compiler-Invariante. `system_generated`-User nie managen. Apply mit Re-Read-Verify; Teilfehler → Auto-Rollback.
+**Fail-safe:** interner Fehler → `mode=monitor` (keine native Durchsetzung, read-only Preview), nie alles-deny. Owner strukturell unberührt; ≥1 Admin-Bindung Compiler-Invariante. `system_generated`-User nie managen. Apply mit Re-Read-Verify; Teilfehler → Auto-Rollback.
 
 ## Security / Secrets
 Keine Secrets im Repo/Logs (1Password via stdin). OIDC-Tokenwerte nie loggen. Tests nur gegen Dev-Instanz; **Live-Enforce erst nach Round-2-Gate + Michael-Freigabe**.
