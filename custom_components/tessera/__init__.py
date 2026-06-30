@@ -143,7 +143,15 @@ def _register_recompile_service(hass: HomeAssistant) -> None:
 
 
 def _register_ack_services(hass: HomeAssistant) -> None:
-    """Register admin-only D9 ack services once per HA instance."""
+    """Register the admin-only D9 ack services once per HA instance.
+
+    A D9 ack is a deliberate admin override of an auth-touching component's
+    enforce veto, so both services are gated through HA's
+    ``async_register_admin_service`` (the caller must be an admin). The one
+    inherited caveat is HA platform behaviour: a context-less/internal service
+    call (no ``context.user_id``) skips HA's admin check — but reaching that
+    still requires admin rights elsewhere (e.g. editing an automation).
+    """
     domain_data = _domain_data(hass)
     if domain_data.get(DATA_ACK_SERVICES_REGISTERED) is True:
         return
@@ -162,6 +170,13 @@ def _register_ack_services(hass: HomeAssistant) -> None:
             "content_hash": target["content_hash"],
             "accepted_at": accepted_at,
         }
+        # Tessera runs single-entry in practice; the loop applies the ack to
+        # every loaded entry (an ack is a global "trust this component"). The
+        # per-entry load->save->recompile is fail-safe by direction: a save
+        # error propagates to the admin, and any entry not yet acked simply
+        # stays MORE restrictive (its veto still blocks enforce). No native auth
+        # is half-written — recompile is fail-safe-to-monitor with its own
+        # rollback.
         for key, entry_data in list(_domain_data(hass).items()):
             if not isinstance(entry_data, dict):
                 continue
@@ -185,7 +200,9 @@ def _register_ack_services(hass: HomeAssistant) -> None:
             config = await store.async_load_config()
             revoked_ack = config["d9_acks"].get(domain)
             config["d9_acks"] = {
-                key: value for key, value in config["d9_acks"].items() if key != domain
+                ack_domain: ack_entry
+                for ack_domain, ack_entry in config["d9_acks"].items()
+                if ack_domain != domain
             }
             await store.async_save_config(config)
             await _compile_for_mode_safely(hass, key, entry_data)
