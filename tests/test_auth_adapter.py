@@ -21,6 +21,7 @@ from custom_components.tessera.auth_adapter import (
     UserGroupSnapshot,
 )
 from custom_components.tessera.const import DOMAIN
+from custom_components.tessera.state import default_state_data
 
 
 @dataclass
@@ -204,6 +205,10 @@ class ModeStore:
     async def async_load_policy(self) -> dict[str, Any]:
         """Return an empty policy for monitor-preview tests."""
         return {}
+
+    async def async_load_state(self) -> dict[str, Any]:
+        """Return empty recovery state."""
+        return default_state_data()
 
 
 def fake_group_factory(group_id: str, name: str, policy: dict[str, Any]) -> FakeGroup:

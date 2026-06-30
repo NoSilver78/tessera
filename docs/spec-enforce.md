@@ -21,7 +21,7 @@ Stand 2026-06-29 · **Voraussetzung: Spike Welle A–E PASS** (Schreibpfad/Rescu
 ## 2. Enforce-Build-Schritte (jeder Tier-1 → Adversarial-Panel-Gate)
 - **E1 — Auth-Adapter.** Die 4 Verträge, version-geguarded, Smoke-Test gegen `ha-tessera-dev`. Noch **kein** scharfes Enforce (Adapter isoliert testbar).
 - **E2 — Cross-Rollen-Linter (concept §5.2, VOR Scharfschaltung — Security-HIGH).** Rechnet pro managed User die volle Cross-Rollen-Merge-Menge; flaggt jede Entity, die eine Rolle verbirgt aber eine andere exponiert, als **ERROR** → blockt Apply / erzwingt Ack. Impersonation-Preview merged real. SoD-by-assignment.
-- **E3 — Mode-Manager + Enforce-Scharfschaltung.** off→monitor→enforce→restore (D15). Enforce schreibt das **volle Superset** via UserBindingAdapter, `invalidate_cache`, **fail-safe-to-off** bei Fehler. **Version-Gate (D11) + D9-Gate (`UNKNOWN_BLOCK_ENFORCE` blockt) + Linter (E2) VOR jedem Write.** Projiziert **nur `by_user`** (ADR 0005).
+- **E3 — Mode-Manager + Enforce-Scharfschaltung.** off→monitor→enforce→restore (D15). Enforce schreibt das **volle Superset** via UserBindingAdapter, `invalidate_cache`, **fail-safe-to-monitor** bei Fehler. **Version-Gate (D11) + D9-Gate (`UNKNOWN_BLOCK_ENFORCE` blockt) + Linter (E2) VOR jedem Write.** Projiziert **nur `by_user`** (ADR 0005).
 - **E4 — Uninstall/Recovery.** RecoveryController stellt native Policies beim Unload zurück (**kein Lockout**); Boot-Rescue scharf.
 - **E5 — Enforce-E2E + Härtung.** Voller Lifecycle im **Produkt** (nicht nur Spike-Harness), Lockout-Tests, Doku, Repairs-UX.
 

@@ -17,7 +17,7 @@ async_setup_entry / recompile, mode == enforce:
                                — REPLACE-bewusst, VOLLES Superset, system-users/Namespace-guarded
   6. CACHE                   : user.invalidate_cache() je betroffenem User
   7. SNAPSHOT                : RecoveryController-Snapshot des Vor-Zustands (für restore/uninstall)
-  Fehler an JEDER Stelle → fail-safe-to-off (kein Teil-Write bleibt unkontrolliert), redigiertes Log, nie Deny-all.
+  Fehler an JEDER Stelle → fail-safe-to-monitor (kein Teil-Write bleibt unkontrolliert), redigiertes Log, nie Deny-all.
 ```
 
 ## 3. Restore / Mode-Wechsel
@@ -25,7 +25,7 @@ async_setup_entry / recompile, mode == enforce:
 - Idempotenz: gleiche Policy ⇒ kein Write (Diff gegen Ist).
 
 ## 4. Harte Invarianten (aus Welle A–E, nicht verhandelbar)
-volles Superset (kein Delta) · ≥1 Owner/Admin behält Zugang · Version-fail-closed · D9-fail-closed · Linter blockt vor Apply · `by_user` only (ADR 0005) · fail-safe-to-off · Allow-only.
+volles Superset (kein Delta) · ≥1 Owner/Admin behält Zugang · Version-fail-closed · D9-fail-closed · Linter blockt vor Apply · `by_user` only (ADR 0005) · fail-safe-to-monitor · Allow-only.
 
 ## 5. Gating
 E3 als **mehrere kleine Codex-Schritte** (Mode-Manager-Skelett → Write-Sequenz mit Gates → Restore → E2E), **jeder enforce-kritisch → Adversarial-Panel**. **Erst nach D10-PASS + explizitem Human-Go.** Default-Mode bleibt `monitor` bis bewusst auf `enforce` gestellt + Soak.
