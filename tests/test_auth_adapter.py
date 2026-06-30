@@ -1,4 +1,4 @@
-"""Tests for dormant Tessera native-auth adapters."""
+"""Tests for Tessera native-auth adapters."""
 
 from __future__ import annotations
 
@@ -108,7 +108,7 @@ class AuthTrapHass:
     def auth(self) -> object:
         """Record and fail if setup touches native auth."""
         self.auth_access_count += 1
-        raise AssertionError("hass.auth must not be touched while adapters are dormant")
+        raise AssertionError("hass.auth must not be touched during off/monitor setup")
 
 
 class FakeServices:
@@ -366,6 +366,31 @@ async def test_user_binding_rejects_delta_and_forbidden_groups() -> None:
 
 
 @pytest.mark.asyncio
+async def test_user_binding_allows_admin_role_promotion() -> None:
+    """Forward binding accepts system-admin for a non-admin user (the `change` tier).
+
+    Admin assignment is governed by the PLAN (`_has_admin_role`), not the choke
+    point: the structural binding validator has no role context and must not
+    second-guess a legitimate is_admin-role promotion. Regression: an earlier
+    choke-point promotion guard blocked exactly this and silently broke enforce
+    for every admin-role assignment (caught by the verification panel).
+    """
+    hass = FakeHass()
+    user = FakeUser("user-1", ["system-read-only", "tessera:viewer"])
+    adapter = UserBindingAdapter(hass, ha_version="2026.6.4")
+
+    await adapter.async_bind_full_superset(
+        user,
+        ["system-admin", "system-read-only", "tessera:viewer"],
+        expected_tessera_group_ids=["tessera:viewer"],
+    )
+
+    assert hass.auth.update_calls == [
+        (user, ["system-admin", "system-read-only", "tessera:viewer"])
+    ]
+
+
+@pytest.mark.asyncio
 async def test_user_binding_restore_exact_can_drop_tessera_groups() -> None:
     """Restore exact binding may return a user to pre-install system groups."""
     hass = FakeHass()
@@ -512,6 +537,42 @@ async def test_recovery_snapshot_skips_unmanaged_users() -> None:
 
 
 @pytest.mark.asyncio
+async def test_recovery_snapshot_captures_system_users_member_verbatim() -> None:
+    """Pre-install snapshot records a normal user's ``system-users`` group verbatim.
+
+    Regression (CRITICAL): every normal non-admin HA user carries ``system-users``
+    (the allow-all group). The capture path used to validate it as a write target
+    and raised UnsafeAuthTarget on the first such user, silently fail-safing enforce
+    to monitor on every real install. The ha-tessera-dev E2E missed this because its
+    test user had empty group_ids.
+    """
+    hass = FakeHass()
+    recovery = RecoveryController(hass, UserBindingAdapter(hass, ha_version="2026.6.4"))
+
+    snapshot = await recovery.async_snapshot(
+        [FakeUser("normal", ["system-users"])],
+        include_without_tessera=True,
+    )
+
+    assert snapshot == AuthRecoverySnapshot(
+        users=(UserGroupSnapshot("normal", ("system-users",)),)
+    )
+
+
+@pytest.mark.asyncio
+async def test_user_binding_restore_exact_allows_system_users() -> None:
+    """Pre-install restore writes the captured original back, incl. ``system-users``."""
+    hass = FakeHass()
+    user = FakeUser("user-1", ["tessera:viewer"])
+    adapter = UserBindingAdapter(hass, ha_version="2026.6.4")
+
+    await adapter.async_restore_exact_groups(user, ["system-users"])
+
+    assert hass.auth.update_calls == [(user, ["system-users"])]
+    assert user.group_ids == ["system-users"]
+
+
+@pytest.mark.asyncio
 async def test_recovery_restore_rejects_unsafe_groups_and_admin_demotion() -> None:
     """Recovery restore keeps namespace and no-lockout guards fail-closed."""
     hass = FakeHass()
@@ -584,7 +645,7 @@ async def test_recovery_treats_falsey_active_flag_as_inactive() -> None:
 async def test_setup_entry_modes_do_not_touch_native_auth(
     monkeypatch: pytest.MonkeyPatch, mode: str
 ) -> None:
-    """E1 adapters are dormant: setup in off/monitor never touches hass.auth."""
+    """Setup in off/monitor never touches hass.auth (adapters are enforce-only)."""
     hass = AuthTrapHass()
 
     async def fake_compile_current(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
@@ -615,7 +676,7 @@ async def test_setup_entry_modes_do_not_touch_native_auth(
 async def test_auth_trap_records_swallowed_auth_access(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Prove the dormant boundary guard catches swallowed hass.auth access."""
+    """Prove the off/monitor boundary guard catches swallowed hass.auth access."""
     hass = AuthTrapHass()
 
     monkeypatch.setattr(

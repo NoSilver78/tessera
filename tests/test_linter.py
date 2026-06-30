@@ -105,6 +105,39 @@ def test_read_only_role_conflicts_with_control_role_on_same_entity() -> None:
     assert report["users"]["user-1"]["conflicts"][0]["restricting_roles"] == ["viewer"]
 
 
+def test_read_only_entity_override_implies_control_restriction_conflict() -> None:
+    """A read-only entity override carves out control, nullified by a control role.
+
+    The restricting role has no area grant: its only signal is a read-only
+    ``entity_override``. The linter must still infer the implied control
+    restriction (``read True``/no control => control carved out) so a separate
+    control-granting role registers as a separation-of-duties conflict.
+    """
+    config = _config("read_override", "operator")
+    policy = default_policy_data()
+    policy["area_grants"] = {"living": {"operator": {"control": True}}}
+    policy["entity_overrides"] = {"light.x": {"read_override": {"read": True}}}
+
+    report = lint_cross_role(
+        config,
+        policy,
+        FakeResolver({"living": ("light.x",)}),
+    )
+
+    assert has_blocking_conflicts(report) is True
+    assert report["conflicts_total"] == 1
+    assert report["users"]["user-1"]["conflicts"] == [
+        {
+            "user_id": "user-1",
+            "entity_id": "light.x",
+            "exposing_roles": ["operator"],
+            "restricting_roles": ["read_override"],
+            "level": "control",
+            "severity": "error",
+        }
+    ]
+
+
 def test_distinct_read_carve_is_kept_next_to_control_conflict() -> None:
     """Read conflicts survive when a different role causes the control conflict."""
     config = _config("control_hidden", "read_hidden", "operator")

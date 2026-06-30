@@ -29,8 +29,11 @@ durchlaufen dieselbe Review-Sorgfalt.
    Richtung und Scope abstimmen.
 2. **Fork → Branch → PR** gegen `main`. Kleine, fokussierte PRs sind leichter zu reviewen.
 3. **Qualitäts-Tor:** Code muss `ruff`, `black` und `mypy --strict` bestehen und Tests mitbringen.
-   Die CI führt zusätzlich Home-Assistant-Tests aus. *(Hinweis: Während der Vor-Release-Verdrahtung
-   kann `main` zeitweise rot sein — der Setup-Block unten beschreibt den Ziel-Zustand.)*
+   Verbindlich sind zudem die **[Qualitäts-Regeln R1–R7](docs/QUALITY.md)** (sichere-Soll-Tests, reale
+   `system-users`-Fixtures, jede Sicherheits-Invariante = ein benannter Test).
+   Die CI (`ci.yml`) führt zusätzlich Home-Assistant-Tests aus; sie ist auf `main` grün. *(Hinweis: Der
+   HACS-Datei-Check in `validate.yml` ist `continue-on-error`, bis das Repo öffentlich ist — er liest
+   `hacs.json`/`manifest` unauthentifiziert und schlägt am privaten Repo fehl.)*
 4. **Sicherheits-Regel (hart):** Auth-schreibende Tests laufen **nur** gegen eine **separate
    Dev-Instanz**, **niemals** gegen eine Produktiv-Instanz. Keine Secrets ins Repo.
 
@@ -38,7 +41,7 @@ durchlaufen dieselbe Review-Sorgfalt.
 
 ```bash
 python -m venv .venv && . .venv/bin/activate
-pip install homeassistant ruff black mypy pytest
+pip install homeassistant ruff black mypy pytest pytest-asyncio pytest-homeassistant-custom-component
 ruff check . && black --check . && mypy --strict custom_components/tessera && pytest
 ```
 

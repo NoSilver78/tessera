@@ -1,6 +1,6 @@
 # Tessera
 
-> Rollenbasierte Zugriffskontrolle (RBAC) für Home Assistant — *ansehen / bedienen / ändern* × **Rolle** × **Bereich**.
+> Rollenbasierte Zugriffskontrolle (RBAC) für Home Assistant — *Read / Control* × **Rolle** × **Bereich**.
 
 Tessera ist ein eigenständiges Berechtigungssystem für Home Assistant. Es schließt eine seit
 Jahren offene Lücke: HA kennt nur drei feste Systemgruppen, kein UI für feingranulare Rechte und
@@ -9,13 +9,16 @@ einen Owner-Bypass. Tessera kompiliert deklarative Richtlinien (**Rolle × Berei
 Home-Assistant-Auth-Store. **Kein Monkeypatch, kein Core-Fork.**
 
 > ⚠️ **Sicherheitskritische Integration.** Tessera verändert, wer in deiner Home-Assistant-Instanz
-> was sehen und tun darf. Lies das **[Sicherheitsmodell](#sicherheitsmodell-ehrlich)** unten, bevor du
-> `enforce` aktivierst — und beachte den **[Projektstatus](#projektstatus)**: Durchsetzung ist gebaut,
-> aber noch in Validierung und auf dem heutigen Stand **noch nicht aktiv**.
+> was sehen und tun darf. Im `enforce`-Modus **schreibt Tessera aktiv** in den HA-Auth-Store. Lies das
+> **[Sicherheitsmodell](#sicherheitsmodell-ehrlich)** unten, bevor du `enforce` aktivierst — und beachte
+> den **[Projektstatus](#projektstatus)**: Durchsetzung ist gebaut und verdrahtet, aber noch nicht in
+> der Praxis (End-to-End/Soak/Dogfood) bewiesen. Beginne mit `monitor`.
 
 ## Was Tessera tut
 
-- **Deklarative Policies** — Rollen × Bereiche × Aktionen (`view` / `operate` / `change`).
+- **Deklarative Policies** — Rollen × Bereiche × Aktionen. Pro Bereich × Rolle vergibst du im Panel
+  **Read** (ansehen) und/oder **Control** (bedienen); eine dritte Stufe **change** entspricht
+  HAs globalem `is_admin` (siehe [Sicherheitsmodell](#sicherheitsmodell-ehrlich)).
 - **Compiler** — übersetzt Policies in native HA-`PolicyPermissions` (expandiert Bereiche zu
   Entity-IDs, inkl. der area-losen Direkt-Entitäten, die HAs `area_ids` allein verfehlt).
 - **Linter** — prüft Policies vor dem Anwenden auf Konflikte und Lücken.
@@ -32,10 +35,11 @@ Home-Assistant-Auth-Store. **Kein Monkeypatch, kein Core-Fork.**
 |---|---|
 | **Core** (Store · Compiler · Linter · Schema · Config-Flow) | ✅ funktionsfähig |
 | **Monitor** (read-only Vorschau + Matrix-Panel) | ✅ funktionsfähig |
-| **Enforce-Maschinerie** (Plan · Bindings · Write+Guards · Restore/Recovery) | ✅ gebaut, adversarial gegated, **ruht** (nicht verdrahtet) |
-| **Enforce-Verdrahtung** (`mode=enforce` schaltet scharf) | 🚧 in Arbeit — auf `main` **noch nicht aktiv** |
-| **Echter End-to-End-Test gegen eine Dev-Instanz + Soak** | ⏳ ausstehend |
-| **HACS-Release** | ⏳ ausstehend |
+| **Enforce-Maschinerie** (Plan · Bindings · Write+Guards · Restore/Recovery) | ✅ gebaut, adversarial gegated |
+| **Enforce-Verdrahtung** (`mode=enforce` schaltet scharf) | ✅ verdrahtet (E3.5) — `mode=enforce` schreibt nativen Auth; Fehler → fail-safe auf `monitor` |
+| **Echter End-to-End-Test gegen eine Dev-Instanz + Soak** | ⏳ ausstehend (vor Praxiseinsatz) |
+| **HACS-Aktivierung** (`hacs.json` · HACS+hassfest-CI · Brand-Icon) | ✅ erledigt (Datei-Check braucht öffentliches Repo) |
+| **HACS-Release** (getaggtes Release + Public-Flip) | ⏳ ausstehend |
 
 Die ganze Geschichte — Vision, Phasen, was als Nächstes kommt und **wo wir Unterstützung gut
 gebrauchen können** — steht in der **[ROADMAP](ROADMAP.md)** und in **[CONTRIBUTING](CONTRIBUTING.md)**.
@@ -51,8 +55,9 @@ gebrauchen können** — steht in der **[ROADMAP](ROADMAP.md)** und in **[CONTRI
 4. **Home Assistant neu starten.**
 5. **Einstellungen → Geräte & Dienste → Integration hinzufügen → Tessera**.
 
-**Getestete HA-Version:** Home Assistant **2026.6.4** (siehe *[Version-Guard](#version-guard-private-ha-apis)*) —
-wird mit dem ersten Release über `hacs.json` gepinnt.
+**Getestete HA-Version:** Home Assistant **2026.6.4** (siehe *[Version-Guard](#version-guard-private-ha-apis)*).
+Auf einer abweichenden HA-Version blockiert der Laufzeit-Guard den `enforce`-Schreibpfad und hält
+Tessera im read-only `monitor`-Zustand.
 
 ## Sicherheitsmodell (ehrlich)
 
@@ -62,12 +67,16 @@ Tessera kennt drei Betriebsmodi. **Der Default ist nicht-eingreifend.**
 |---|---|
 | `off` | Tessera tut nichts. |
 | `monitor` | Tessera **berechnet** Permissions und zeigt Abweichungen (Panel + Logs), **schreibt aber NICHT** in den Auth-Store. Sicher zum Einfahren. |
-| `enforce` | **Zielverhalten:** Tessera **schreibt** die kompilierten Permissions aktiv in den HA-Auth-Store und greift real in Zugriffe ein. |
+| `enforce` | Tessera **schreibt** die kompilierten Permissions aktiv in den HA-Auth-Store (native Gruppen-`PolicyPermissions` + Rebind der `group_ids`) und greift real in Zugriffe ein. |
 
-> **Aktueller Stand:** Auf dem heutigen `main` ist `enforce` **noch nicht verdrahtet** — `mode=enforce`
-> liefert die `monitor`-Vorschau **plus eine Warnung** und **schreibt nicht**, bis die Verdrahtung
-> gemergt und end-to-end validiert ist (siehe [ROADMAP](ROADMAP.md)). Beginne ohnehin mit `monitor`,
-> prüfe die berechneten Verdicts, und wechsle erst dann bewusst zu `enforce`.
+> **Aktueller Stand:** `enforce` ist verdrahtet (seit E3.5) und **schreibt** beim Setzen von
+> `mode=enforce` nativen Auth-Zustand — nach einer fail-closed Gate-Sequenz (HA-Version → Compile →
+> [D9-Vorprüfung](#d9-vorprüfung-enforce-gate) → Linter → Lockout-Precheck → unveränderlicher
+> Snapshot/Journal → Apply). **Jeder Fehler in dieser Kette fällt sicher auf `monitor` zurück**
+> (kein halb-scharfer Zustand); ein abgebrochener Lauf wird beim Start aus dem Pre-Install-Snapshot
+> wiederhergestellt. Was noch **aussteht**, ist der Praxis-Nachweis (End-to-End gegen eine
+> Dev-Instanz + Soak + Dogfood, siehe [ROADMAP](ROADMAP.md)). Beginne deshalb mit `monitor`, prüfe
+> die berechneten Verdicts, und wechsle erst dann bewusst zu `enforce`.
 
 ### Allow-only-Modell
 Tessera vergibt Berechtigungen **additiv (allow-only)**: Eine Policy *gewährt* Zugriff; nicht
@@ -92,11 +101,14 @@ Pfade **nicht** schließen — sie sind hier ehrlich dokumentiert:
 Tessera schreibt teils über **private/undokumentierte HA-Auth-APIs**, für die Home Assistant **keine**
 Stabilitätsgarantie gibt — sie können zwischen Releases brechen. Schutz:
 
-- Der Auth-Schreibpfad prüft im Code auf die **exakt getestete** HA-Version (derzeit **2026.6.4**).
-  Auf einer abweichenden Version wird der Schreibpfad **fail-closed blockiert** — es bleibt beim
-  read-only `monitor`-Zustand, **kein** nativer Write.
-- Mit dem ersten Release pinnt zusätzlich `hacs.json` die HA-Mindestversion, sodass HACS
-  Installation/Update auf ungetesteten Instanzen blockt.
+- **Aktiver Schutz (Laufzeit-Guard):** Der Auth-Schreibpfad prüft im Code auf die **exakt getestete**
+  HA-Version (`SUPPORTED_HA_AUTH_VERSION`, derzeit **2026.6.4** — exakter Gleichheits-Match). Auf jeder
+  abweichenden Version wird der Schreibpfad **fail-closed blockiert** und `enforce` fällt auf den
+  read-only `monitor`-Zustand zurück — **kein** nativer Write.
+- Ein zusätzlicher `hacs.json`-Pin der HA-Mindestversion ist **bewusst noch nicht** gesetzt (die
+  HACS-Validierung lehnte den Wert als künftiges Minimum ab); er kann mit dem Public-Flip als
+  optionale zweite Hürde ergänzt werden. Die eigentliche Absicherung ist und bleibt der
+  Laufzeit-Guard oben.
 - Bricht eine interne API, wird die getestete/gepinnte Version angehoben und eine neue
   MAJOR-Version veröffentlicht.
 

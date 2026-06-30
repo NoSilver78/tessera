@@ -1,4 +1,4 @@
-"""Tests for dormant E3.4 restore orchestration."""
+"""Tests for E3.4 restore orchestration."""
 
 from __future__ import annotations
 
@@ -197,6 +197,35 @@ async def test_restore_skips_owner_and_system_generated_users() -> None:
     assert result["restored_user_ids"] == []
     assert binding.restore_calls == []
     assert result["group_ids_removed"] == ["tessera:viewer"]
+
+
+@pytest.mark.asyncio
+async def test_restore_system_generated_admin_is_not_a_survivor() -> None:
+    """With no owner, a system-generated admin must not count as a survivor."""
+    events: list[str] = []
+    # No owner present; the only system-admin holder is system_generated.
+    users = {
+        "gen": FakeUser("gen", ["system-admin"], system_generated=True),
+        "user-1": FakeUser("user-1", ["tessera:viewer"]),
+    }
+    policy_store = SpyPolicyStore(["tessera:viewer"], events)
+    binding = SpyBindingAdapter(events)
+
+    result = await async_restore_to_pre_install(
+        _snapshot(("user-1", ("system-read-only",))),
+        policy_store,
+        binding,
+        users,
+    )
+
+    assert result == {
+        "status": "failed",
+        "refused_reason": "lockout",
+        "restored_user_ids": [],
+        "group_ids_removed": [],
+        "detail": ["LockoutRisk"],
+    }
+    assert events == []
 
 
 @pytest.mark.asyncio

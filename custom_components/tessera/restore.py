@@ -1,10 +1,15 @@
-"""Dormant E3.4 restore orchestration for Tessera native auth."""
+"""E3.4 restore orchestration for Tessera native auth.
+
+Wired into the enforce-undo paths: crash recovery on startup (open apply
+journal) and mode-switch away from enforce.
+"""
 
 from __future__ import annotations
 
 from collections.abc import Collection, Mapping
 from typing import Any, Literal, Protocol, TypedDict
 
+from ._user_helpers import _is_unmanaged_user, _user_group_ids
 from .auth_adapter import (
     GROUP_ID_ADMIN,
     AuthRecoverySnapshot,
@@ -16,7 +21,7 @@ RestoreRefusedReason = Literal["lockout", "write-error"]
 
 
 class RestoreResult(TypedDict):
-    """Dormant restore result with redacted write accounting."""
+    """Restore result with redacted write accounting."""
 
     status: RestoreStatus
     refused_reason: RestoreRefusedReason | None
@@ -55,11 +60,12 @@ async def async_restore_to_pre_install(
 ) -> RestoreResult:
     """Restore native auth bindings and remove all Tessera groups.
 
-    This E3.4 callable is deliberately dormant: no setup, mode handling, or
-    startup path invokes it. When explicitly called, it restores user bindings
-    first and removes ``tessera:*`` groups only after no restored user should
-    reference them anymore. Restore is not atomic: if a later write fails,
-    earlier user/group writes remain applied and are reported in the result.
+    This E3.4 callable is invoked by the enforce-undo paths (crash recovery on
+    startup via the apply journal, and mode-switch away from enforce). It
+    restores user bindings first and removes ``tessera:*`` groups only after no
+    restored user should reference them anymore. Restore is not atomic: if a
+    later write fails, earlier user/group writes remain applied and are reported
+    in the result.
     """
     result = _restore_result("restored")
     try:
@@ -118,18 +124,6 @@ def _assert_restore_owner_or_admin_survives(
         if GROUP_ID_ADMIN in group_ids:
             return
     raise LockoutRisk("restore would remove the last owner/admin recovery path")
-
-
-def _is_unmanaged_user(user: Any) -> bool:
-    return bool(getattr(user, "is_owner", False)) or bool(
-        getattr(user, "system_generated", False)
-    )
-
-
-def _user_group_ids(user: Any) -> list[str]:
-    if hasattr(user, "group_ids"):
-        return sorted(str(group_id) for group_id in user.group_ids)
-    return sorted(str(group.id) for group in user.groups)
 
 
 def _redacted_error_detail(error: Exception) -> list[str]:

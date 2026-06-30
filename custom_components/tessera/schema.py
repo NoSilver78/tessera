@@ -34,7 +34,7 @@ class MembershipData(TypedDict):
 class D9AckData(TypedDict):
     """Admin acknowledgement for one D9 unknown custom component.
 
-    ``accepted_at`` is audit-only in dormant E2.5; acknowledgements do not expire
+    ``accepted_at`` is audit-only; D9 acknowledgements do not expire
     here and are revalidated by domain, version, and content hash.
     """
 

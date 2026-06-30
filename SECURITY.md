@@ -40,8 +40,8 @@ ideen sind aber willkommen):
   Daten-Isolation (siehe [README](README.md#dokumentierte-leak-pfade-bekannte-grenzen)).
 - **`change` ist global:** bildet HAs `is_admin` ab, nicht bereichs-scoped.
 - **Private HA-APIs:** Tessera schreibt teils über nicht-öffentliche Auth-APIs; ein HA-Upgrade kann
-  sie brechen. Schutz über Versions-Pin + Fallback auf `monitor`
-  (siehe [docs/MAINTENANCE.md](docs/MAINTENANCE.md)).
+  sie brechen. Schutz über den Laufzeit-Guard auf die exakt getestete HA-Version + Fallback auf
+  `monitor` (siehe [docs/MAINTENANCE.md](docs/MAINTENANCE.md)).
 
 ## D9-Vorprüfung (Enforce-Gate) — Sicherheitsmodell
 
@@ -71,8 +71,11 @@ Custom-Components. Ihr Zweck ist **Konflikt-Vermeidung**, kein Malware-Sandbox:
 
 Tessera ist in aktiver Vor-Release-Entwicklung. Bis zum ersten stabilen Release wird **nur der
 aktuelle `main`-Stand** mit Sicherheitsfixes versorgt. Die aktuell getestete HA-Version ist
-**2026.6.4** (im Code-Guard `SUPPORTED_HA_AUTH_VERSION` verankert); mit dem ersten Release wird sie
-zusätzlich über `hacs.json` (`homeassistant`) gepinnt.
+**2026.6.4**, im Code-Guard `SUPPORTED_HA_AUTH_VERSION` (exakter Gleichheits-Match) verankert: Auf
+jeder abweichenden HA-Version blockiert der Laufzeit-Guard den `enforce`-Schreibpfad fail-closed und
+hält Tessera im read-only `monitor`-Zustand — das ist der **aktive** Schutz. Ein zusätzlicher
+`hacs.json`-Pin (`homeassistant`) ist derzeit **nicht** gesetzt (die HACS-Validierung lehnte den Wert
+als künftiges Minimum ab) und kann beim Public-Flip als optionale zweite Hürde nachgezogen werden.
 
 ## Verantwortungsvolle Offenlegung
 

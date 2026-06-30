@@ -1,4 +1,4 @@
-"""Tests for Tessera's dormant E3.1 mode manager."""
+"""Tests for Tessera's E3 mode manager."""
 
 from __future__ import annotations
 
@@ -669,6 +669,72 @@ async def test_apply_enforce_plan_lockout_guard_blocks_all_writes() -> None:
         policy_store,
         binding,
         {"user-1": FakeUser("user-1", ["system-admin"])},
+    )
+
+    assert result == {
+        "status": "failed",
+        "refused_reason": "lockout",
+        "groups_written": [],
+        "bindings_written": [],
+        "orphan_group_ids_removed": [],
+        "detail": ["LockoutRisk"],
+    }
+    assert policy_store.set_calls == []
+    assert binding.bind_calls == []
+    assert policy_store.remove_calls == []
+
+
+@pytest.mark.asyncio
+async def test_apply_enforce_plan_owner_survivor_allows_demoting_admins() -> None:
+    """An owner alone preserves recovery, so demoting every admin still applies.
+
+    The owner carries no ``system-admin`` group and has no plan binding, so the
+    only thing keeping this apply off the lockout path is ``is_owner``: if that
+    survivor branch broke, the plan (which leaves no admin-bound user) would be
+    refused with ``LockoutRisk``.
+    """
+    plan = _apply_plan()
+    # The only managed binding drops the user to viewer-only (no system-admin).
+    plan["bindings"][0]["target_group_ids"] = ["tessera:viewer"]
+    policy_store = SpyPolicyStoreAdapter()
+    binding = SpyBindingAdapter()
+    owner = FakeUser("owner", [], is_owner=True)
+    user = FakeUser("user-1", ["tessera:viewer"])
+
+    result = await apply_enforce_plan(
+        plan,
+        policy_store,
+        binding,
+        {"owner": owner, "user-1": user},
+    )
+
+    assert result == {
+        "status": "applied",
+        "refused_reason": None,
+        "groups_written": ["tessera:admin", "tessera:viewer"],
+        "bindings_written": ["user-1"],
+        "orphan_group_ids_removed": ["tessera:ghost"],
+        "detail": [],
+    }
+    assert binding.bind_calls == [(user, ["tessera:viewer"], ["tessera:viewer"])]
+
+
+@pytest.mark.asyncio
+async def test_apply_enforce_plan_system_generated_admin_is_not_a_survivor() -> None:
+    """A system-generated admin must not satisfy the lockout survivor check."""
+    plan = _apply_plan()
+    plan["bindings"] = [
+        {"user_id": "gen", "target_group_ids": ["system-admin", "tessera:viewer"]}
+    ]
+    policy_store = SpyPolicyStoreAdapter()
+    binding = SpyBindingAdapter()
+
+    result = await apply_enforce_plan(
+        plan,
+        policy_store,
+        binding,
+        # No owner present; the only system-admin holder is system_generated.
+        {"gen": FakeUser("gen", ["system-admin"], system_generated=True)},
     )
 
     assert result == {

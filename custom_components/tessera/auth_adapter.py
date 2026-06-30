@@ -1,11 +1,10 @@
-"""Dormant native-auth adapters for Tessera's enforce path (E1).
+"""Native-auth adapters for Tessera's enforce path.
 
-These adapters encapsulate the *only* code that would mutate Home Assistant's
-native auth store. In phase 1 they are dormant: no product code path calls
-them (they are imported only by tests). Every write is fail-closed behind a
-version guard (``SUPPORTED_HA_AUTH_VERSION``), the ``tessera:`` namespace
-guard, and an owner/admin lockout check. They are wired in only at E3, after
-the D10 benchmark and a panel review — see docs/spec-e3-enforce.md.
+These adapters encapsulate the *only* code that mutates Home Assistant's native
+auth store, and are wired into the enforce path (E3.5: setup applies an enforce
+plan when the persisted mode is enforce). Every write is fail-closed behind a
+version guard (``SUPPORTED_HA_AUTH_VERSION``), the ``tessera:`` namespace guard,
+and an owner/admin lockout check — see docs/spec-e3-enforce.md.
 """
 
 from __future__ import annotations
@@ -15,6 +14,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol, cast
 
+from ._user_helpers import _user_group_ids
 from .const import MODE_OFF
 from .schema import TesseraConfigData
 
@@ -89,7 +89,7 @@ class AuthLike(Protocol):
 
 
 class HassAuthLike(Protocol):
-    """Home Assistant subset needed by the dormant adapters."""
+    """Home Assistant subset needed by the native-auth adapters."""
 
     auth: AuthLike
 
@@ -122,8 +122,8 @@ class AuthRestoreResult:
 class AuthPolicyStoreAdapter:
     """Version-guarded access to native HA group policy storage.
 
-    The adapter is intentionally dormant in E1. It exposes the private auth-store
-    choke point behind a narrow guard so E3 can wire it only after panel review.
+    It exposes the private auth-store choke point behind a narrow guard; the E3
+    enforce path uses it behind the version/namespace/lockout guards.
     """
 
     def __init__(
@@ -252,8 +252,9 @@ class UserBindingAdapter:
         """Restore one managed user to an exact pre-install group set.
 
         Unlike enforce binding, restore must be allowed to drop current
-        ``tessera:*`` groups. It still rejects owner/system-generated users,
-        forbidden group ids, and admin demotion.
+        ``tessera:*`` groups and re-apply the captured original (including
+        ``system-users``). It still rejects owner/system-generated users and
+        refuses admin demotion.
         """
         self._assert_supported_version()
         sorted_group_ids = _validate_exact_restore_binding(user, group_ids)
@@ -285,7 +286,7 @@ class UserBindingAdapter:
             snapshots.append(
                 UserGroupSnapshot(
                     user_id=_user_id(user),
-                    group_ids=tuple(_validate_restore_group_ids(user)),
+                    group_ids=tuple(_capture_managed_group_ids(user)),
                 )
             )
         return AuthRecoverySnapshot(users=tuple(snapshots))
@@ -311,7 +312,7 @@ class PermissionProbeAdapter:
 
 
 class RecoveryController:
-    """Dormant recovery helpers for product enforce wiring in E3/E4."""
+    """Recovery helpers for the enforce path: snapshot, restore, lockout guards."""
 
     def __init__(self, hass: HassAuthLike, binding: UserBindingAdapter) -> None:
         """Initialize recovery helpers with a guarded binding adapter."""
@@ -433,24 +434,39 @@ def _validate_full_group_superset(
         )
     if GROUP_ID_ADMIN in current_group_ids and GROUP_ID_ADMIN not in group_ids:
         raise LockoutRisk("refusing to remove system-admin from an admin user")
+    # Admin assignment (the `change` tier) is governed by the PLAN
+    # (_has_admin_role -> system-admin), NOT this choke point: the structural
+    # validator has no role context, so it must not second-guess a legitimate
+    # is_admin-role promotion. (An earlier guard here silently broke enforce for
+    # every admin-role assignment — caught by the verification panel.)
     return sorted(group_ids)
 
 
-def _validate_restore_group_ids(user: Any) -> list[str]:
-    """Validate a recovery snapshot group set for one managed user."""
+def _capture_managed_group_ids(user: Any) -> list[str]:
+    """Capture one managed user's CURRENT group ids for the recovery snapshot.
+
+    Records the pre-install state verbatim — it must NOT apply the
+    forward-binding allow-list (``_assert_allowed_binding_group_id``). Normal
+    non-admin HA users carry ``system-users`` (the allow-all group); rejecting
+    it here raised on the first such user and silently fail-safed enforce to
+    monitor on every real install. The allow-list belongs on the FORWARD
+    enforce binding (``_validate_full_group_superset``) only.
+    """
     _assert_managed_user(user)
-    group_ids = _user_group_ids(user)
-    for group_id in group_ids:
-        _assert_allowed_binding_group_id(group_id)
-    return sorted(group_ids)
+    return sorted(_user_group_ids(user))
 
 
 def _validate_exact_restore_binding(user: Any, group_ids: Collection[str]) -> list[str]:
-    """Validate an exact restore replacement group set."""
+    """Validate an exact restore replacement group set.
+
+    Restore writes the captured pre-install snapshot back verbatim, so it must
+    NOT apply the forward-binding allow-list — the original legitimately
+    contains ``system-users`` (or other native groups) for normal users.
+    Snapshot integrity itself is validated on load (``validate_state_data``);
+    here only the managed-user guard and the admin-demotion lockout guard apply.
+    """
     _assert_managed_user(user)
     target_group_ids = set(group_ids)
-    for group_id in target_group_ids:
-        _assert_allowed_binding_group_id(group_id)
     current_group_ids = set(_user_group_ids(user))
     if GROUP_ID_ADMIN in current_group_ids and GROUP_ID_ADMIN not in target_group_ids:
         raise LockoutRisk("refusing to remove system-admin from an admin user")
@@ -515,17 +531,11 @@ def _assert_allowed_binding_group_id(group_id: str) -> None:
     _assert_tessera_group_id(group_id)
 
 
-def _user_group_ids(user: Any) -> list[str]:
-    """Return sorted group ids from HA user or test double objects."""
-    if hasattr(user, "group_ids"):
-        return sorted(str(group_id) for group_id in user.group_ids)
-    return sorted(str(group.id) for group in user.groups)
-
-
 def _user_id(user: Any) -> str:
     """Return a stable user id from HA user or test double objects."""
     user_id = getattr(user, "id", None)
     if not isinstance(user_id, str) or not user_id:
+        # Layer-specific: auth writes use UnsafeAuthTarget; do not consolidate.
         raise UnsafeAuthTarget("managed users require a stable id")
     return user_id
 

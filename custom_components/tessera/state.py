@@ -1,4 +1,4 @@
-"""Secret-free persistent recovery state for dormant E3.4 restore."""
+"""Secret-free persistent recovery state for E3.4 restore."""
 
 from __future__ import annotations
 
@@ -80,12 +80,12 @@ def snapshot_from_state_data(
 def decide_startup_recovery(
     state: TesseraStateData | dict[str, Any],
 ) -> StartupRecoveryDecision:
-    """Return a dormant startup recovery decision.
+    """Return a startup recovery decision.
 
-    E3.4 does not wire startup recovery. If a two-phase apply journal is left
-    open, the conservative choice is ``rollback`` to the immutable
-    ``pre_install_snapshot`` rather than trying to infer whether a half-apply is
-    safe to re-apply.
+    Startup recovery is wired (setup calls this on load). If a two-phase apply
+    journal is left open, the conservative choice is ``rollback`` to the
+    immutable ``pre_install_snapshot`` rather than trying to infer whether a
+    half-apply is safe to re-apply.
     """
     validated = validate_state_data(cast(dict[str, Any], state))
     if validated["apply_in_progress"]:

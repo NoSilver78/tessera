@@ -107,13 +107,17 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 def _register_recompile_service(hass: HomeAssistant) -> None:
-    """Register the monitor-mode recompilation service once per HA instance."""
+    """Register the recompile service once per HA instance."""
     domain_data = _domain_data(hass)
     if domain_data.get(DATA_SERVICE_REGISTERED) is True:
         return
 
     async def _handle_recompile(call: ServiceCall) -> None:
-        """Recompile all loaded Tessera entries without native writes."""
+        """Recompile every loaded Tessera entry for its current mode.
+
+        In off/monitor this rebuilds the read-only projection only; in enforce it
+        re-applies the native auth bindings (writes the auth store), like setup.
+        """
         del call  # parameterless service; the call carries no Tessera input
         for key, entry_data in list(_domain_data(hass).items()):
             if key == DATA_SERVICE_REGISTERED or not isinstance(entry_data, dict):
@@ -335,6 +339,19 @@ async def _apply_enforce_mode(
         entry_data["mode"] = MODE_ENFORCE
         return
 
+    # Apply failed partway: native auth may be half-written. Roll back to the
+    # pre-install snapshot IMMEDIATELY rather than leaving a half-enforced state
+    # behind a monitor facade until the next startup recovery (a window in which
+    # some users carry half-applied permissions). _restore_pre_install_safely
+    # clears the journal on a clean rollback, or records a repair and leaves it
+    # open (for startup recovery to retry) if the rollback itself fails.
+    await _restore_pre_install_safely(
+        hass,
+        entry_id,
+        entry_data,
+        reason=f"apply_failed:{result['refused_reason'] or result['status']}",
+        clear_apply_in_progress=True,
+    )
     await _fail_safe_to_monitor(
         hass,
         entry_id,
