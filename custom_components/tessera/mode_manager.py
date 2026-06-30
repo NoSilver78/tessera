@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any, Literal, Protocol, TypedDict, cast
 
 from .auth_adapter import (
@@ -21,6 +22,7 @@ from .resolver import AreaEntityResolver
 from .schema import TesseraConfigData, TesseraPolicyData
 
 BlockReason = Literal["version", "resolver", "store", "compile", "d9", "linter", "auth"]
+ApplyStatus = Literal["applied", "blocked", "failed"]
 DEFAULT_ROLE_ID = "__default__"
 _PRESERVED_SYSTEM_GROUP_IDS = frozenset({GROUP_ID_ADMIN, GROUP_ID_READ_ONLY})
 
@@ -51,6 +53,16 @@ class EnforcePlan(TypedDict):
     block_detail: list[str]
 
 
+class ApplyResult(TypedDict):
+    """Dormant E3.3 native-apply result with redacted write accounting."""
+
+    status: ApplyStatus
+    groups_written: list[str]
+    bindings_written: list[str]
+    orphan_group_ids_removed: list[str]
+    detail: list[str]
+
+
 class _StoreLike(Protocol):
     """Small store subset needed by the dormant mode manager."""
 
@@ -60,6 +72,34 @@ class _StoreLike(Protocol):
 
     async def async_load_policy(self) -> TesseraPolicyData:
         """Load Tessera policy."""
+        ...
+
+
+class _PolicyStoreAdapterLike(Protocol):
+    """Writable native group-policy adapter subset used by E3.3."""
+
+    async def async_set_group_policy(
+        self, group_id: str, name: str, policy: Mapping[str, Any]
+    ) -> None:
+        """Create or replace one native group policy."""
+        ...
+
+    async def async_remove_group(self, group_id: str) -> None:
+        """Remove one native group."""
+        ...
+
+
+class _UserBindingAdapterLike(Protocol):
+    """Writable native user-binding adapter subset used by E3.3."""
+
+    async def async_bind_full_superset(
+        self,
+        user: Any,
+        full_group_ids: list[str],
+        *,
+        expected_tessera_group_ids: list[str],
+    ) -> None:
+        """Replace one user's native group ids with the complete target set."""
         ...
 
 
@@ -148,10 +188,97 @@ async def compute_enforce_plan(hass: object, store: _StoreLike) -> EnforcePlan:
     }
 
 
+async def apply_enforce_plan(
+    plan: EnforcePlan,
+    policy_store: _PolicyStoreAdapterLike,
+    binding_adapter: _UserBindingAdapterLike,
+    users_by_id: Mapping[str, Any],
+) -> ApplyResult:
+    """Apply an already-computed enforce plan through guarded native adapters.
+
+    This is the first native-write E3.3 surface, but remains dormant: no setup,
+    websocket, config-flow, or monitor code calls it. It writes only when a
+    caller explicitly passes a non-blocked plan and adapter instances.
+    """
+    if plan["blocked"]:
+        return _apply_result(
+            "blocked",
+            detail=[
+                f"{plan['block_reason']}: {detail}" for detail in plan["block_detail"]
+            ]
+            or [str(plan["block_reason"])],
+        )
+
+    try:
+        binding_operations = _validated_binding_operations(plan, users_by_id)
+    except Exception as error:
+        return _apply_result("failed", detail=[f"{type(error).__name__}: {error}"])
+
+    result = _apply_result("applied")
+    try:
+        for group in plan["groups"]:
+            await policy_store.async_set_group_policy(
+                group["group_id"],
+                group["group_id"],
+                group["policy"],
+            )
+            result["groups_written"].append(group["group_id"])
+
+        for binding, user, expected_group_ids in binding_operations:
+            await binding_adapter.async_bind_full_superset(
+                user,
+                binding["target_group_ids"],
+                expected_tessera_group_ids=expected_group_ids,
+            )
+            result["bindings_written"].append(binding["user_id"])
+
+        for group_id in plan["orphan_group_ids"]:
+            await policy_store.async_remove_group(group_id)
+            result["orphan_group_ids_removed"].append(group_id)
+    except Exception as error:
+        result["status"] = "failed"
+        result["detail"] = [f"{type(error).__name__}: {error}"]
+    return result
+
+
 class _BindingAndOrphanPlan(TypedDict):
     bindings: list[UserBindingPlan]
     orphan_group_ids: list[str]
     needs_default_role: bool
+
+
+_BindingOperation = tuple[UserBindingPlan, Any, list[str]]
+
+
+def _apply_result(
+    status: ApplyStatus, *, detail: list[str] | None = None
+) -> ApplyResult:
+    return {
+        "status": status,
+        "groups_written": [],
+        "bindings_written": [],
+        "orphan_group_ids_removed": [],
+        "detail": detail or [],
+    }
+
+
+def _validated_binding_operations(
+    plan: EnforcePlan, users_by_id: Mapping[str, Any]
+) -> list[_BindingOperation]:
+    operations: list[_BindingOperation] = []
+    for binding in plan["bindings"]:
+        user_id = binding["user_id"]
+        if user_id not in users_by_id:
+            raise ValueError(f"missing native user for binding {user_id}")
+        expected_group_ids = [
+            group_id
+            for group_id in binding["target_group_ids"]
+            if group_id.startswith(TESSERA_GROUP_PREFIX)
+        ]
+        if not expected_group_ids:
+            raise ValueError(f"binding {user_id} has no Tessera target group")
+        operations.append((binding, users_by_id[user_id], expected_group_ids))
+    return operations
 
 
 def _blocked(reason: BlockReason, detail: list[str]) -> EnforcePlan:
