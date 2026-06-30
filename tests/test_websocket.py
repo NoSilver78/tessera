@@ -132,12 +132,8 @@ def _conflict_policy() -> dict[str, Any]:
     return policy
 
 
-@pytest.fixture
-def matrix_hass(monkeypatch: pytest.MonkeyPatch) -> FakeHass:
-    """Return a fake HA instance wired for matrix responses."""
-    store = FakeStore(_config(), _policy())
-    hass = FakeHass(store)
-
+def _install_matrix_doubles(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Patch the area registry and resolver doubles the matrix API depends on."""
     monkeypatch.setattr(
         "custom_components.tessera.websocket.ar.async_get",
         lambda hass: FakeAreaRegistry(
@@ -151,6 +147,14 @@ def matrix_hass(monkeypatch: pytest.MonkeyPatch) -> FakeHass:
         "custom_components.tessera.websocket.AreaEntityResolver.from_hass",
         classmethod(lambda cls, hass: FakeResolver()),
     )
+
+
+@pytest.fixture
+def matrix_hass(monkeypatch: pytest.MonkeyPatch) -> FakeHass:
+    """Return a fake HA instance wired for matrix responses."""
+    store = FakeStore(_config(), _policy())
+    hass = FakeHass(store)
+    _install_matrix_doubles(monkeypatch)
     return hass
 
 
@@ -223,6 +227,70 @@ async def test_matrix_set_grant_all_false_removes_grant(
         "control": False,
     }
     assert result["preview"]["read_total"] == 0
+
+
+@pytest.mark.asyncio
+async def test_matrix_set_grant_in_enforce_reapplies_native(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CXR-02: saving a grant in enforce re-applies via the central mode handler."""
+    config = _config()
+    config["mode"] = "enforce"
+    store = FakeStore(config, _policy())
+    hass = FakeHass(store)
+    _install_matrix_doubles(monkeypatch)
+
+    calls: list[tuple[Any, str, dict[str, Any]]] = []
+
+    async def _spy_compile(
+        spy_hass: Any, entry_id: str, entry_data: dict[str, Any]
+    ) -> None:
+        calls.append((spy_hass, entry_id, entry_data))
+
+    monkeypatch.setattr(
+        "custom_components.tessera._compile_for_mode_safely", _spy_compile
+    )
+
+    result = await async_set_matrix_grant(
+        hass,
+        area_id="living",
+        role_id="operator",
+        read=True,
+        control=False,
+    )
+
+    assert store.saved_policies, "policy must be persisted before re-apply"
+    assert len(calls) == 1, "enforce must re-apply through the central handler once"
+    spy_hass, entry_id, entry_data = calls[0]
+    assert spy_hass is hass
+    assert entry_id == "entry-1"
+    assert entry_data is hass.data[DOMAIN]["entry-1"]
+    assert result["grants"]["living"]["operator"]["read"] is True
+
+
+@pytest.mark.asyncio
+async def test_matrix_set_grant_in_monitor_does_not_reapply(
+    matrix_hass: FakeHass, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Monitor keeps the matrix API read-only on native auth (no native re-apply)."""
+    calls: list[tuple[Any, ...]] = []
+
+    async def _spy_compile(*args: Any) -> None:
+        calls.append(args)
+
+    monkeypatch.setattr(
+        "custom_components.tessera._compile_for_mode_safely", _spy_compile
+    )
+
+    await async_set_matrix_grant(
+        matrix_hass,
+        area_id="living",
+        role_id="operator",
+        read=True,
+        control=False,
+    )
+
+    assert calls == [], "monitor mode must not write native auth"
 
 
 @pytest.mark.asyncio
