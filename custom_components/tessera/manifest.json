@@ -6,6 +6,7 @@
   "issue_tracker": "https://github.com/NoSilver78/tessera/issues",
   "codeowners": ["@NoSilver78"],
   "config_flow": true,
+  "dependencies": ["http"],
   "single_config_entry": true,
   "iot_class": "calculated",
   "integration_type": "service",
