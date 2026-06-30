@@ -19,6 +19,7 @@ from custom_components.tessera.auth_adapter import (
     UnsupportedAuthVersion,
     UserBindingAdapter,
     UserGroupSnapshot,
+    _assert_owner_or_admin_survives_in,
 )
 from custom_components.tessera.const import DOMAIN
 from custom_components.tessera.state import default_state_data
@@ -484,6 +485,54 @@ def test_permission_probe_uses_user_check_entity() -> None:
 
     assert adapter.check_entity(user, "light.sofa", "control") is True
     assert adapter.check_entity(user, "light.sofa", "read") is False
+
+
+def test_owner_or_admin_survives_helper_allows_owner() -> None:
+    """Owner users preserve the recovery path without a target admin group."""
+    _assert_owner_or_admin_survives_in(
+        {},
+        {"owner": FakeUser("owner", [], is_owner=True)},
+        message="custom lockout message",
+    )
+
+
+def test_owner_or_admin_survives_helper_allows_target_admin() -> None:
+    """A target system-admin group preserves the recovery path."""
+    _assert_owner_or_admin_survives_in(
+        {"user-1": {"system-admin"}},
+        {"user-1": FakeUser("user-1", ["tessera:viewer"])},
+        message="custom lockout message",
+    )
+
+
+def test_owner_or_admin_survives_helper_rejects_system_generated_admin() -> None:
+    """System-generated admin users do not preserve the recovery path."""
+    with pytest.raises(LockoutRisk, match="custom lockout message"):
+        _assert_owner_or_admin_survives_in(
+            {},
+            {
+                "generated": FakeUser(
+                    "generated", ["system-admin"], system_generated=True
+                )
+            },
+            message="custom lockout message",
+        )
+
+
+def test_owner_or_admin_survives_helper_skips_inactive_admin() -> None:
+    """Inactive admin users do not preserve the recovery path."""
+    with pytest.raises(LockoutRisk, match="custom lockout message"):
+        _assert_owner_or_admin_survives_in(
+            {},
+            {"admin": FakeUser("admin", ["system-admin"], is_active=False)},
+            message="custom lockout message",
+        )
+
+
+def test_owner_or_admin_survives_helper_empty_users_uses_message() -> None:
+    """Empty user maps fail closed with the caller-supplied message."""
+    with pytest.raises(LockoutRisk, match="exact message"):
+        _assert_owner_or_admin_survives_in({}, {}, message="exact message")
 
 
 @pytest.mark.asyncio

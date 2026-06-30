@@ -531,6 +531,30 @@ def _assert_allowed_binding_group_id(group_id: str) -> None:
     _assert_tessera_group_id(group_id)
 
 
+def _assert_owner_or_admin_survives_in(
+    target_group_ids_by_user: Mapping[str, set[str]],
+    users_by_id: Mapping[str, Any],
+    *,
+    message: str,
+) -> None:
+    """Fail closed if no active owner/admin recovery user survives.
+
+    Shared by the enforce-plan and restore lockout prechecks. Each caller builds
+    ``target_group_ids_by_user`` from its own source and passes its own message.
+    """
+    for user_id, user in users_by_id.items():
+        if not getattr(user, "is_active", True):
+            continue
+        if getattr(user, "system_generated", False):
+            continue
+        if getattr(user, "is_owner", False):
+            return
+        group_ids = target_group_ids_by_user.get(user_id, set(_user_group_ids(user)))
+        if GROUP_ID_ADMIN in group_ids:
+            return
+    raise LockoutRisk(message)
+
+
 def _user_id(user: Any) -> str:
     """Return a stable user id from HA user or test double objects."""
     user_id = getattr(user, "id", None)
