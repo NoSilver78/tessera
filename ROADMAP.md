@@ -43,8 +43,10 @@ machbar.
 - **Linter** für Policy-Konflikte/Lücken.
 - **Config-Flow** + Options (Modus-Umschaltung) + **Matrix-Admin-Panel** in der Seitenleiste.
 - **Monitor-Modus** — kompiliert eine read-only Vorschau, **ohne** HA zu verändern.
-- **Produkt-Gate (D9)** — fail-closed-Klassifikation, mit der Tessera entscheidet, ob es eine
-  Instanz sicher kompilieren kann.
+- **Produkt-Gate (D9, v2 „auth-scoped")** — klassifiziert installierte Custom-Components vor
+  `enforce`. Nur Components, die den verwalteten Auth-Zustand mutieren können (oder nicht statisch
+  analysierbar sind), blockieren — per **Ack**/Klassifikation freigebbar; generische Surfaces laufen
+  per Default (Konflikt-Vermeidung, kein Malware-Sandbox — siehe [SECURITY.md](SECURITY.md)).
 
 ### ✅ Phase 2 — Enforce-Maschinerie *(gebaut, gegated, **ruhend** — nicht verdrahtet — auf `main`)*
 Vollständig implementiert, jeweils durch ein adversariales Mehr-Agenten-Gate + Mutationsproben

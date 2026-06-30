@@ -43,6 +43,30 @@ ideen sind aber willkommen):
   sie brechen. Schutz über Versions-Pin + Fallback auf `monitor`
   (siehe [docs/MAINTENANCE.md](docs/MAINTENANCE.md)).
 
+## D9-Vorprüfung (Enforce-Gate) — Sicherheitsmodell
+
+Bevor `enforce` aktiviert wird, klassifiziert die **D9-Vorprüfung** alle installierten
+Custom-Components. Ihr Zweck ist **Konflikt-Vermeidung**, kein Malware-Sandbox:
+
+- **Threat-Model:** HA-Custom-Components führen beliebigen, voll privilegierten Python-Code aus.
+  Eine *bösartige* Komponente kann jeden statischen Gate aushebeln — dagegen schützt D9 nicht und
+  gibt das auch nicht vor. D9 verhindert **versehentliche Konflikte** (eine andere Komponente, die
+  parallel denselben Auth-/Gruppen-Zustand verwaltet) und vermeidet ein falsches Sicherheitsgefühl.
+- **Default-Posture (bewusste Entscheidung):** Nur Components, die den **verwalteten Auth-Zustand
+  mutieren können** (erkannte Auth-API-Marker), **oder nicht statisch analysierbar** sind
+  (kompiliert `.so/.pyd`, unparsebar/dynamisch), blockieren `enforce` — und auch das nur, solange
+  sie nicht per **Ack** (Domain+Version+Content-Hash) oder kuratierter Klassifikation freigegeben
+  sind. **Alles andere — generische UI-Surfaces (HTTP/Service/WebSocket) und unbekannte Components
+  ohne Auth-Surface — läuft per Default.** Das ist bewusst eine *fail-open*-Haltung für
+  Nicht-Auth-Surfaces; sie ersetzt die ursprüngliche „alles blockiert"-Haltung, die `enforce` auf
+  realen Installationen unbenutzbar machte. Der Verlass liegt damit auf der **Vollständigkeit der
+  Auth-Marker-Liste** (introspektiv gegen die installierte HA-Auth-API gepflegt).
+- **Statische-Scan-Grenzen:** Die Auth-Erkennung ist ein Token-basierter AST-Scan echter
+  HA-Auth-API-Namen. Ehrliche **Over-Matches** (z. B. ein reiner Type-Hint auf `UserMeta`) sind
+  **sichere Über-Blockaden** und per Ack auflösbar. Bewusste Verschleierung ist — gemäß Threat-Model
+  — out of scope. Fehlende Marker für echte HA-Auth-Mutations-Pfade sind hingegen **im Scope**
+  (bitte melden).
+
 ## Unterstützte Versionen
 
 Tessera ist in aktiver Vor-Release-Entwicklung. Bis zum ersten stabilen Release wird **nur der
