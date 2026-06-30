@@ -310,7 +310,11 @@ def _require_non_empty_string(value: object, path: str) -> str:
 def _require_role_id(value: object, path: str) -> str:
     """Validate internal Tessera role ids cannot overlap native group ids."""
     role_id = _require_non_empty_string(value, path)
-    if ":" in role_id or role_id.lower().startswith("tessera"):
+    if (
+        ":" in role_id
+        or role_id.lower().startswith("tessera")
+        or role_id.startswith("__")
+    ):
         raise TesseraSchemaError(
             f"{path} is reserved for native Tessera group namespace"
         )

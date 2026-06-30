@@ -84,9 +84,15 @@ class FakeUser:
 class WriteTrapStore:
     """Auth store double that allows reads and traps native persistence."""
 
-    def __init__(self, groups: list[FakeNativeGroup] | None = None) -> None:
+    def __init__(
+        self,
+        groups: list[FakeNativeGroup] | None = None,
+        *,
+        fail_get_groups: Exception | None = None,
+    ) -> None:
         """Initialize native groups."""
         self._groups = {group.id: group for group in groups or []}
+        self.fail_get_groups = fail_get_groups
         self.get_groups_calls = 0
         self.save_calls = 0
         self._store = self
@@ -94,6 +100,8 @@ class WriteTrapStore:
     async def async_get_groups(self) -> list[FakeNativeGroup]:
         """Read native groups without mutating them."""
         self.get_groups_calls += 1
+        if self.fail_get_groups is not None:
+            raise self.fail_get_groups
         return list(self._groups.values())
 
     async def async_save(self, data: dict[str, Any]) -> None:
@@ -109,16 +117,22 @@ class FakeAuth:
         self,
         users: list[FakeUser] | None = None,
         groups: list[FakeNativeGroup] | None = None,
+        *,
+        fail_get_users: Exception | None = None,
+        fail_get_groups: Exception | None = None,
     ) -> None:
         """Initialize native users and groups."""
         self.users = users or []
-        self._store = WriteTrapStore(groups)
+        self.fail_get_users = fail_get_users
+        self._store = WriteTrapStore(groups, fail_get_groups=fail_get_groups)
         self.get_users_calls = 0
         self.update_calls = 0
 
     async def async_get_users(self) -> list[FakeUser]:
         """Read native users without mutating them."""
         self.get_users_calls += 1
+        if self.fail_get_users is not None:
+            raise self.fail_get_users
         return self.users
 
     async def async_update_user(self, user: FakeUser, **kwargs: Any) -> None:
@@ -134,9 +148,17 @@ class FakeHass:
         self,
         users: list[FakeUser] | None = None,
         groups: list[FakeNativeGroup] | None = None,
+        *,
+        fail_get_users: Exception | None = None,
+        fail_get_groups: Exception | None = None,
     ) -> None:
         """Initialize fake auth state."""
-        self.auth = FakeAuth(users, groups)
+        self.auth = FakeAuth(
+            users,
+            groups,
+            fail_get_users=fail_get_users,
+            fail_get_groups=fail_get_groups,
+        )
 
 
 class AuthTrapHass:
@@ -548,6 +570,61 @@ async def test_binding_plan_reports_orphan_tessera_groups() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("hass", "expected_detail"),
+    [
+        (
+            FakeHass(fail_get_users=RuntimeError("users unavailable")),
+            "RuntimeError: users unavailable",
+        ),
+        (
+            FakeHass(
+                users=[FakeUser("user-1", [])],
+                fail_get_groups=OSError("groups unavailable"),
+            ),
+            "OSError: groups unavailable",
+        ),
+    ],
+)
+async def test_binding_plan_auth_read_errors_fail_closed(
+    hass: FakeHass, expected_detail: str
+) -> None:
+    """Auth user/group read failures block and never propagate."""
+    result = await compute_enforce_plan(
+        hass, FakeStore(_config("viewer"), _policy("viewer"))
+    )
+
+    assert result == {
+        "groups": [],
+        "bindings": [],
+        "orphan_group_ids": [],
+        "blocked": True,
+        "block_reason": "auth",
+        "block_detail": [expected_detail],
+    }
+    assert hass.auth.update_calls == 0
+    assert hass.auth._store.save_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_binding_plan_empty_user_id_fails_closed() -> None:
+    """Invalid managed user ids are auth-plan failures, not propagated errors."""
+    result = await compute_enforce_plan(
+        FakeHass(users=[FakeUser("", [])]),
+        FakeStore(_config("viewer"), _policy("viewer")),
+    )
+
+    assert result == {
+        "groups": [],
+        "bindings": [],
+        "orphan_group_ids": [],
+        "blocked": True,
+        "block_reason": "auth",
+        "block_detail": ["ValueError: managed users require a stable id"],
+    }
+
+
+@pytest.mark.asyncio
 async def test_unsupported_ha_version_blocks_before_store_load(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -565,11 +642,24 @@ async def test_unsupported_ha_version_blocks_before_store_load(
     assert store.policy_loads == 0
 
 
-@pytest.mark.parametrize("role_id", ["tessera:x", "a:b", "TesseraAdmin"])
+@pytest.mark.parametrize(
+    "role_id", ["tessera:x", "a:b", "TesseraAdmin", "__default__", "__x"]
+)
 def test_schema_role_id_namespace_guard(role_id: str) -> None:
     """Role ids cannot collide with native ``tessera:<role>`` group ids."""
     config = default_config_data()
     config["roles"] = {role_id: {"name": "bad"}}
+
+    with pytest.raises(TesseraSchemaError, match="reserved"):
+        validate_config_data(config)
+
+
+def test_schema_default_role_sentinel_prevents_duplicate_group_plan() -> None:
+    """The internal default-role sentinel cannot be configured as a real role."""
+    config = default_config_data()
+    config["mode"] = "enforce"
+    config["roles"] = {DEFAULT_ROLE_ID: {"name": "Default"}}
+    config["membership"]["by_user"] = {"user-1": []}
 
     with pytest.raises(TesseraSchemaError, match="reserved"):
         validate_config_data(config)
