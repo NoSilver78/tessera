@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
@@ -64,6 +65,7 @@ class TesseraStore:
         self._config_store = factory(hass, STORAGE_VERSION, CONFIG_STORAGE_KEY)
         self._policy_store = factory(hass, STORAGE_VERSION, POLICY_STORAGE_KEY)
         self._state_store = factory(hass, STORAGE_VERSION, STATE_STORAGE_KEY)
+        self._state_lock = asyncio.Lock()
 
     async def async_load_config(self) -> TesseraConfigData:
         """Load Tessera configuration, returning defaults when absent.
@@ -120,30 +122,33 @@ class TesseraStore:
         self, snapshot: AuthRecoverySnapshot
     ) -> TesseraStateData:
         """Persist the immutable pre-install snapshot exactly once."""
-        state = await self.async_load_state()
-        if state["pre_install_snapshot"] is not None:
-            raise TesseraStateError("pre_install_snapshot is immutable")
-        state["pre_install_snapshot"] = snapshot_to_state_data(snapshot)
-        await self.async_save_state(state)
-        return state
+        async with self._state_lock:
+            state = await self.async_load_state()
+            if state["pre_install_snapshot"] is not None:
+                raise TesseraStateError("pre_install_snapshot is immutable")
+            state["pre_install_snapshot"] = snapshot_to_state_data(snapshot)
+            await self.async_save_state(state)
+            return state
 
     async def async_mark_apply_in_progress(
         self, snapshot: AuthRecoverySnapshot
     ) -> TesseraStateData:
         """Open the two-phase apply journal, setting the snapshot if absent."""
-        state = await self.async_load_state()
-        if state["pre_install_snapshot"] is None:
-            state["pre_install_snapshot"] = snapshot_to_state_data(snapshot)
-        state["apply_in_progress"] = True
-        await self.async_save_state(state)
-        return state
+        async with self._state_lock:
+            state = await self.async_load_state()
+            if state["pre_install_snapshot"] is None:
+                state["pre_install_snapshot"] = snapshot_to_state_data(snapshot)
+            state["apply_in_progress"] = True
+            await self.async_save_state(state)
+            return state
 
     async def async_clear_apply_in_progress(self) -> TesseraStateData:
         """Clear the two-phase apply journal after a successful apply."""
-        state = await self.async_load_state()
-        state["apply_in_progress"] = False
-        await self.async_save_state(state)
-        return state
+        async with self._state_lock:
+            state = await self.async_load_state()
+            state["apply_in_progress"] = False
+            await self.async_save_state(state)
+            return state
 
 
 def _homeassistant_store_factory(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any, ClassVar, cast
 
 import pytest
@@ -40,6 +41,20 @@ class MemoryStore:
     async def async_save(self, data: dict[str, Any]) -> None:
         """Save the payload."""
         self.buckets[self.key] = data
+
+
+class SlowMemoryStore(MemoryStore):
+    """Memory store that yields during state load/save to expose races."""
+
+    async def async_load(self) -> dict[str, Any] | None:
+        """Load after yielding to the event loop."""
+        await asyncio.sleep(0)
+        return await super().async_load()
+
+    async def async_save(self, data: dict[str, Any]) -> None:
+        """Save after yielding to the event loop."""
+        await asyncio.sleep(0)
+        await super().async_save(data)
 
 
 @pytest.fixture(autouse=True)
@@ -170,3 +185,27 @@ async def test_store_apply_journal_sets_and_clears_without_overwriting_snapshot(
     assert decide_startup_recovery(second_open) == "rollback"
     assert cleared["apply_in_progress"] is False
     assert decide_startup_recovery(cleared) == "none"
+
+
+@pytest.mark.asyncio
+async def test_store_pre_install_snapshot_first_writer_wins_under_concurrency() -> None:
+    """Concurrent first snapshot attempts are serialized by the state lock."""
+    store = TesseraStore(hass=object(), store_factory=SlowMemoryStore)
+    first = AuthRecoverySnapshot(
+        users=(UserGroupSnapshot("user-1", ("system-read-only",)),)
+    )
+    second = AuthRecoverySnapshot(
+        users=(UserGroupSnapshot("user-2", ("system-read-only",)),)
+    )
+
+    results = await asyncio.gather(
+        store.async_set_pre_install_snapshot(first),
+        store.async_set_pre_install_snapshot(second),
+        return_exceptions=True,
+    )
+
+    successes = [result for result in results if not isinstance(result, Exception)]
+    failures = [result for result in results if isinstance(result, TesseraStateError)]
+    assert len(successes) == 1
+    assert len(failures) == 1
+    assert MemoryStore.buckets[STATE_STORAGE_KEY] == successes[0]

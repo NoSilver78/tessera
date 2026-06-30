@@ -58,7 +58,8 @@ async def async_restore_to_pre_install(
     This E3.4 callable is deliberately dormant: no setup, mode handling, or
     startup path invokes it. When explicitly called, it restores user bindings
     first and removes ``tessera:*`` groups only after no restored user should
-    reference them anymore.
+    reference them anymore. Restore is not atomic: if a later write fails,
+    earlier user/group writes remain applied and are reported in the result.
     """
     result = _restore_result("restored")
     try:
@@ -107,7 +108,7 @@ def _assert_restore_owner_or_admin_survives(
         for user_snapshot in snapshot.users
     }
     for user_id, user in users_by_id.items():
-        if getattr(user, "is_active", True) is False:
+        if not getattr(user, "is_active", True):
             continue
         if getattr(user, "system_generated", False):
             continue

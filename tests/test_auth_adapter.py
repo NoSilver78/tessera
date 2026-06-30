@@ -539,6 +539,18 @@ async def test_recovery_detects_lockout_and_can_fail_safe_to_off() -> None:
 
 
 @pytest.mark.asyncio
+async def test_recovery_treats_falsey_active_flag_as_inactive() -> None:
+    """Falsey non-bool active flags are not owner/admin recovery survivors."""
+    hass = FakeHass()
+    hass.auth.users = [FakeUser("admin", ["system-admin"], is_active=0)]
+    recovery = RecoveryController(hass, UserBindingAdapter(hass, ha_version="2026.6.4"))
+
+    assert await recovery.async_has_owner_or_admin() is False
+    with pytest.raises(LockoutRisk):
+        await recovery.async_assert_no_admin_lockout()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("mode", ["off", "monitor"])
 async def test_setup_entry_modes_do_not_touch_native_auth(
     monkeypatch: pytest.MonkeyPatch, mode: str

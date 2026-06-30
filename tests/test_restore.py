@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import ClassVar
 
 import pytest
 from custom_components.tessera.auth_adapter import (
@@ -10,6 +11,11 @@ from custom_components.tessera.auth_adapter import (
     UserGroupSnapshot,
 )
 from custom_components.tessera.restore import async_restore_to_pre_install
+from custom_components.tessera.state import (
+    decide_startup_recovery,
+    snapshot_from_state_data,
+)
+from custom_components.tessera.store import TesseraStore
 
 
 @dataclass
@@ -51,6 +57,7 @@ class SpyPolicyStore:
         if group_id == self.fail_remove:
             raise RuntimeError("token-shaped value must not leak")
         self.remove_calls.append(group_id)
+        self.group_ids.remove(group_id)
 
 
 class SpyBindingAdapter:
@@ -85,6 +92,24 @@ def _snapshot(*users: tuple[str, tuple[str, ...]]) -> AuthRecoverySnapshot:
             UserGroupSnapshot(user_id, group_ids) for user_id, group_ids in users
         )
     )
+
+
+class MemoryStore:
+    """In-memory HA Store helper replacement for bridge tests."""
+
+    buckets: ClassVar[dict[str, dict[str, object]]] = {}
+
+    def __init__(self, hass: object, version: int, key: str) -> None:
+        """Create one memory-backed storage bucket."""
+        self.key = key
+
+    async def async_load(self) -> dict[str, object] | None:
+        """Load the stored payload."""
+        return self.buckets.get(self.key)
+
+    async def async_save(self, data: dict[str, object]) -> None:
+        """Save the payload."""
+        self.buckets[self.key] = data
 
 
 @pytest.mark.asyncio
@@ -199,3 +224,119 @@ async def test_restore_redacts_exception_messages() -> None:
         "detail": ["RuntimeError"],
     }
     assert "Bearer" not in str(result)
+
+
+@pytest.mark.asyncio
+async def test_journal_rollback_decision_roundtrips_into_restore() -> None:
+    """Persisted rollback state can be converted back into an actionable restore."""
+    MemoryStore.buckets = {}
+    store = TesseraStore(hass=object(), store_factory=MemoryStore)
+    snapshot = _snapshot(("user-1", ("system-read-only",)))
+    await store.async_mark_apply_in_progress(snapshot)
+    state = await store.async_load_state()
+    assert decide_startup_recovery(state) == "rollback"
+    assert state["pre_install_snapshot"] is not None
+    restored_snapshot = snapshot_from_state_data(state["pre_install_snapshot"])
+    events: list[str] = []
+    users = {
+        "user-1": FakeUser("user-1", ["tessera:viewer"]),
+        "admin": FakeUser("admin", ["system-admin"]),
+    }
+    policy_store = SpyPolicyStore(["tessera:viewer"], events)
+    binding = SpyBindingAdapter(events)
+
+    result = await async_restore_to_pre_install(
+        restored_snapshot, policy_store, binding, users
+    )
+
+    assert result["status"] == "restored"
+    assert users["user-1"].group_ids == ["system-read-only"]
+    assert result["group_ids_removed"] == ["tessera:viewer"]
+
+
+@pytest.mark.asyncio
+async def test_restore_mid_user_failure_reports_prior_writes_without_lockout() -> None:
+    """A second-user restore failure reports the first successful rebind only."""
+    events: list[str] = []
+    users = {
+        "user-1": FakeUser("user-1", ["tessera:viewer"]),
+        "user-2": FakeUser("user-2", ["tessera:admin"]),
+        "admin": FakeUser("admin", ["system-admin"]),
+    }
+    policy_store = SpyPolicyStore(["tessera:admin", "tessera:viewer"], events)
+    binding = SpyBindingAdapter(events, fail_user_id="user-2")
+
+    result = await async_restore_to_pre_install(
+        _snapshot(
+            ("user-1", ("system-read-only",)),
+            ("user-2", ("system-read-only",)),
+        ),
+        policy_store,
+        binding,
+        users,
+    )
+
+    assert result == {
+        "status": "failed",
+        "refused_reason": "write-error",
+        "restored_user_ids": ["user-1"],
+        "group_ids_removed": [],
+        "detail": ["RuntimeError"],
+    }
+    assert users["admin"].group_ids == ["system-admin"]
+    assert events == ["bind:user-1", "bind:user-2"]
+
+
+@pytest.mark.asyncio
+async def test_restore_mid_group_failure_reports_prior_removals() -> None:
+    """A second group removal failure reports the first removed group only."""
+    events: list[str] = []
+    users = {
+        "user-1": FakeUser("user-1", ["tessera:viewer"]),
+        "admin": FakeUser("admin", ["system-admin"]),
+    }
+    policy_store = SpyPolicyStore(
+        ["tessera:admin", "tessera:operator", "tessera:viewer"],
+        events,
+        fail_remove="tessera:operator",
+    )
+    binding = SpyBindingAdapter(events)
+
+    result = await async_restore_to_pre_install(
+        _snapshot(("user-1", ("system-read-only",))),
+        policy_store,
+        binding,
+        users,
+    )
+
+    assert result == {
+        "status": "failed",
+        "refused_reason": "write-error",
+        "restored_user_ids": ["user-1"],
+        "group_ids_removed": ["tessera:admin"],
+        "detail": ["RuntimeError"],
+    }
+    assert policy_store.group_ids == ["tessera:operator", "tessera:viewer"]
+
+
+@pytest.mark.asyncio
+async def test_restore_treats_falsey_is_active_as_inactive() -> None:
+    """Falsey non-bool active flags do not count as admin survivors."""
+    events: list[str] = []
+    users = {
+        "inactive-admin": FakeUser("inactive-admin", ["system-admin"], is_active=0),
+        "user-1": FakeUser("user-1", ["tessera:viewer"]),
+    }
+    policy_store = SpyPolicyStore(["tessera:viewer"], events)
+    binding = SpyBindingAdapter(events)
+
+    result = await async_restore_to_pre_install(
+        _snapshot(("user-1", ("system-read-only",))),
+        policy_store,
+        binding,
+        users,
+    )
+
+    assert result["status"] == "failed"
+    assert result["refused_reason"] == "lockout"
+    assert events == []

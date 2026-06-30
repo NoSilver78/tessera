@@ -520,7 +520,7 @@ def _user_id(user: Any) -> str:
 
 def _is_active_owner_or_admin(user: Any) -> bool:
     """Return whether a user preserves the owner/admin recovery path."""
-    if getattr(user, "is_active", True) is False:
+    if not getattr(user, "is_active", True):
         return False
     if getattr(user, "system_generated", False):
         return False
