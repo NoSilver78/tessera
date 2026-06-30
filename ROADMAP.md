@@ -23,8 +23,9 @@ Store (Source of Truth, PAP)
          → HAs check_entity (Policy Enforcement Point)
 ```
 
-- **Stufen:** `view` = lesen · `operate` = bedienen (echt durchgesetzt) · `change` = globales
-  `is_admin` (nicht bereichs-scoped).
+- **Stufen** (UI-Bezeichner in Klammern): `view` (**Read**) = lesen · `operate` (**Control**) =
+  bedienen (echt durchgesetzt) · `change` = globales `is_admin` (nicht bereichs-scoped, keine
+  Grant-Zelle im Panel).
 - **Allow-only** — Policies *gewähren*, sie *verbieten* nicht (Spezialisierung statt Deny).
 - **Pflege-Ebene Bereich × Rolle** als Primärfall (~90 %); der Compiler expandiert Bereiche zu den
   konkreten Entity-IDs.
@@ -48,9 +49,9 @@ machbar.
   analysierbar sind), blockieren — per **Ack**/Klassifikation freigebbar; generische Surfaces laufen
   per Default (Konflikt-Vermeidung, kein Malware-Sandbox — siehe [SECURITY.md](SECURITY.md)).
 
-### ✅ Phase 2 — Enforce-Maschinerie *(gebaut, gegated, **ruhend** — nicht verdrahtet — auf `main`)*
+### ✅ Phase 2 — Enforce-Maschinerie *(gebaut, gegated, **verdrahtet** — auf `main`)*
 Vollständig implementiert, jeweils durch ein adversariales Mehr-Agenten-Gate + Mutationsproben
-geführt, aber **noch nicht verdrahtet** (kein Pfad löst sie aus):
+geführt — und seit E3.5 (Phase 3) im Setup-Pfad verdrahtet:
 - **Plan** — Gate-Sequenz (HA-Version → Compile → Produkt-Gate → Linter → Bindings), fail-closed.
 - **Bindings** — No-Drop-Superset, Default-Rolle für leere Vereinigung, Promotion-Guard,
   Orphan-Erkennung; Owner/System-Konten unangetastet.
@@ -59,13 +60,13 @@ geführt, aber **noch nicht verdrahtet** (kein Pfad löst sie aus):
 - **Restore / Recovery / Journal** — unveränderlicher Pre-Install-Snapshot, Restore auf den
   Ursprungszustand, Two-Phase-Journal für Crash-Recovery.
 
-### 🚧 Phase 3 — Verdrahtung & Validierung *(in Arbeit)*
+### 🚧 Phase 3 — Verdrahtung & Validierung *(Verdrahtung erledigt, Praxis-Validierung offen)*
 
 > Die Codes `E3.x` sind interne Schritt-Bezeichner unseres Bauprozesses (hier: die Verdrahtung der oben gebauten Teile).
-- **E3.5 — Verdrahtung:** `mode=enforce` löst die Sequenz tatsächlich aus (compute → Snapshot →
-  Journal → apply → clear; beim Start → Recovery-Entscheidung → ggf. Restore). *Aktuell im
-  Review/Fix.*
-- **Dev-E2E:** echter Schreib-Zyklus gegen eine **separate Dev-Instanz** (nie Produktiv): enforce
+- **E3.5 — Verdrahtung:** ✅ `mode=enforce` löst die Sequenz tatsächlich aus (compute → Snapshot →
+  Journal → apply → clear; beim Start → Recovery-Entscheidung → ggf. Restore; jeder Fehler → fail-safe
+  auf `monitor`).
+- **Dev-E2E:** ⏳ echter Schreib-Zyklus gegen eine **separate Dev-Instanz** (nie Produktiv): enforce
   setzen → native Gruppen/Bindungen verifizieren → zurücknehmen → Restore verifizieren.
 - **Soak:** über längere Zeit auf der Dev-Instanz laufen lassen.
 - **Dogfood:** auf einer echten, eigenen Instanz betreiben — überlebt es ein HA-Update ohne
@@ -79,10 +80,12 @@ geführt, aber **noch nicht verdrahtet** (kein Pfad löst sie aus):
 
 ## Was als Nächstes zu tun ist (konkret)
 
-- [ ] E3.5-Verdrahtung grün (CI + adversariales Gate) → mergen.
+- [x] E3.5-Verdrahtung grün (CI + adversariales Gate) → gemergt.
+- [x] HACS-Artefakte aktiviert (`hacs.json`, Validierungs-CI hassfest+HACS, `brand/`-Icon) — der
+      HACS-Datei-Check ist `continue-on-error`, bis das Repo öffentlich ist.
 - [ ] Dev-E2E gegen die Dev-Instanz fahren und protokollieren.
 - [ ] Soak-Phase + erste Dogfood-Instanz.
-- [ ] Release-Artefakte aktivieren (`hacs.json`, Validierungs-CI, `brand/`-Icon, erstes getaggtes Release).
+- [ ] Erstes getaggtes Release + Public-Flip (dann `continue-on-error` am HACS-Job entfernen).
 - [ ] `SECURITY.md`-Kanal + Private Vulnerability Reporting scharfschalten.
 - [ ] README/Doku-Feinschliff fürs öffentliche Repo.
 
@@ -100,13 +103,15 @@ Diese Punkte sind bewusst **nicht** gelöst und teils Stellen, an denen wir **Hi
 können** (→ [CONTRIBUTING.md](CONTRIBUTING.md)):
 
 1. **Private-API-Abhängigkeit** — der Auth-Store-Schreibpfad nutzt teils nicht-öffentliche HA-APIs.
-   Größtes Dauer-Risiko: ein HA-Release kann sie brechen. Gegenmittel (Version-Pin, Import-Guards,
-   Fallback auf `monitor`) sind eingebaut, aber das Tracking pro HA-Version bleibt laufende Arbeit.
+   Größtes Dauer-Risiko: ein HA-Release kann sie brechen. Gegenmittel (Laufzeit-Guard auf die exakt
+   getestete HA-Version mit Fallback auf `monitor`) ist eingebaut, aber das Tracking pro HA-Version
+   bleibt laufende Arbeit.
 2. **Leak-Pfade** — `render_template`, Logbook/History und Assist können die Permission-Schicht
    teilweise umgehen (siehe README). Tessera dokumentiert das ehrlich, schließt es aber nicht.
-3. **Enforce noch nicht in der Praxis bewiesen** — die Maschinerie ist gebaut + gegated, aber der
-   echte End-to-End-Lauf + Soak + Dogfood stehen aus. Bis dahin: read-only `monitor` vertrauen.
+3. **Enforce noch nicht in der Praxis bewiesen** — die Maschinerie ist gebaut, gegated und verdrahtet
+   (schreibt bei `mode=enforce`), aber der echte End-to-End-Lauf + Soak + Dogfood stehen aus. Bis
+   dahin: read-only `monitor` vertrauen.
 4. **`change` ist global** — die Stufe `change` bildet HAs `is_admin` ab und ist nicht
    bereichs-scoped (HA-Limit, kein Tessera-Bug).
-5. **Single-Writer-Annahme** beim State/Journal — heute durch einen Lock + den dormanten Zustand
-   gedeckt; bei zukünftiger Parallelität erneut zu prüfen.
+5. **Single-Writer-Annahme** beim State/Journal — heute durch einen Lock gedeckt (ein Apply-Lauf pro
+   Instanz zur Zeit); bei zukünftiger Parallelität erneut zu prüfen.

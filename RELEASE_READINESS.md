@@ -39,9 +39,11 @@ Diese Liste ist das **minimal hinreichende** Set, damit ein Nutzer Tessera per
 3. **`hacs.json` im Repo-Root**, mindestens Key `name`. Minimal: `{"name": "Tessera"}`.
    `name` ist der **einzige Pflicht-Key**. **(FEHLT aktuell — Blocker, siehe §2)**
    Quelle: https://www.hacs.xyz/docs/publish/start/
-4. **`hacs.json` Key `homeassistant`** (optional, aber für Tessera **dringend empfohlen**):
-   minimale getestete HA-Version. HACS blockt Download/Update bei älterem HA. Hebel gegen die
-   Private-API-Abhängigkeit (siehe §3).
+4. **`hacs.json` Key `homeassistant`** (optional): minimale getestete HA-Version; HACS blockt
+   Download/Update bei älterem HA. **Für Tessera derzeit bewusst NICHT gesetzt** — die `hacs/action`
+   lehnte den Wert als künftiges Minimum ab. Die Private-API-Absicherung (siehe §3) übernimmt der
+   **Laufzeit-Guard** `SUPPORTED_HA_AUTH_VERSION` (exakter Match → fail-closed auf `monitor`); der Pin
+   kann beim Public-Flip optional nachgezogen werden.
    Quelle: https://www.hacs.xyz/docs/publish/start/
 5. **`manifest.json` in `custom_components/tessera/`** mit den HACS-Pflicht-Keys:
    `domain`, `documentation`, `issue_tracker`, `codeowners`, `name`, `version`.
@@ -75,9 +77,10 @@ Diese Liste ist das **minimal hinreichende** Set, damit ein Nutzer Tessera per
   genügt NICHT — es muss ein echtes Release sein.** **(FEHLT — keine Tags/Releases im Repo)**
   Quelle: https://www.hacs.xyz/docs/publish/start/
 - **Inline-Brand-Icon** `custom_components/tessera/brand/icon.png` (HA 2026.3+). Für Custom-Repo
-  nicht hart erforderlich, aber Polish.
+  nicht hart erforderlich, aber Polish. **(VORHANDEN — PR #27)**
   Quelle: https://developers.home-assistant.io/blog/2026/02/24/brands-proxy-api/
 - **`hacs/action` + `hassfest` CI** (siehe Pfad B Punkt 9–10) — empfohlen, fängt Fehler früh.
+  **(VORHANDEN — `validate.yml`, PR #27/#31; HACS-Datei-Check `continue-on-error` bis Public-Flip.)**
 
 ---
 
@@ -149,8 +152,11 @@ Quelle der Bestandsaufnahme: lokales Datei-Listing (facet `repo-gap`), 2026-06-3
 `[ ]` = offen/Blocker · `[x]` = bereits vorhanden.
 
 ### Blocker für Pfad A (Custom-Repo)
-- [ ] **`hacs.json` im Repo-Root fehlt.** Ohne sie lädt/validiert HACS das Repo nicht.
-      Minimal `{"name": "Tessera"}`; empfohlen zusätzlich `homeassistant`-Pin.
+- [x] **`hacs.json` im Repo-Root vorhanden** (`{"name": "Tessera"}`, PR #27). Der optionale
+      `homeassistant`-Pin ist bewusst **nicht** gesetzt: die `hacs/action`-Validierung lehnte den Wert
+      als künftiges Minimum ab. Die HA-Versions-Absicherung übernimmt stattdessen der Laufzeit-Guard
+      `SUPPORTED_HA_AUTH_VERSION` (exakter Match, fail-closed auf `monitor`); ein `hacs.json`-Pin kann
+      beim Public-Flip optional nachgezogen werden.
       → `/Users/michaelscholz/tessera/hacs.json`
 - [ ] **GitHub-Release / Tag v0.1.0 fehlt.** Keine Tags im Repo; default branch `main`.
       `manifest.json` hat `version=0.1.0`, aber kein passendes Release. Tag-String muss
@@ -166,9 +172,14 @@ Quelle der Bestandsaufnahme: lokales Datei-Listing (facet `repo-gap`), 2026-06-3
       Datei-Befund prüfbar — am Repo verifizieren.
 
 ### Blocker erst für Pfad B (Default-Store), jetzt schon sinnvoll
-- [ ] **`hacs/action`-Workflow fehlt** (`.github/workflows/` hat nur `ci.yml`).
-- [ ] **`hassfest`-Workflow fehlt.**
-- [ ] **Brand-Icon fehlt** (kein PNG im Repo). Für Pfad B Pflicht (Inline-Pfad `brand/icon.png`).
+- [x] **`hacs/action`-Workflow vorhanden** (`.github/workflows/validate.yml`, Job `hacs`, PR #27/#31).
+      Der HACS-Datei-Check ist bis zum Public-Flip `continue-on-error`: `hacs/action` liest
+      `hacs.json`/`manifest` **unauthentifiziert** und scheitert am privaten Repo; er wird automatisch
+      grün, sobald das Repo öffentlich ist — dann `continue-on-error` entfernen.
+- [x] **`hassfest`-Workflow vorhanden** (`validate.yml`, Job `hassfest`) — grün.
+- [x] **Brand-Icon vorhanden** (`custom_components/tessera/brand/icon.png` + `icon@2x.png` + `icon.svg`,
+      PR #27). `brands` bleibt im HACS-Job ignoriert, bis `tessera` in `home-assistant/brands`
+      eingetragen ist (Inline-Pfad deckt HAs Icon-Rendering).
 - [x] **LICENSE vorhanden** (MIT, © 2026 Michael Scholz) — auf `release-prep`.
       **⚠️ UNSICHER als HARTER HACS-Gate:** Keine der gefetchten HACS-Check-Listen führt LICENSE
       als Auto-Check. **Aber:** Ohne Lizenz ist der Code rechtlich „all rights reserved" → blockiert
@@ -243,9 +254,12 @@ Wartungsrisiko**. Weder `hassfest` noch `hacs/action` prüfen Laufzeit-/API-Stab
 > Quelle: https://developers.home-assistant.io/docs/creating_integration_manifest/
 
 ### Der Tracking-Prozess (pro HA-Release)
-1. **Minimum-HA-Pin in `hacs.json`** (`"homeassistant": "<niedrigste getestete Version>"`).
-   HACS blockt dann Download/Update auf inkompatiblem (älterem) HA. **Anheben, sobald sich eine
-   interne Signatur ändert.**
+1. **Laufzeit-Guard auf die exakt getestete HA-Version** (`SUPPORTED_HA_AUTH_VERSION`, derzeit
+   `2026.6.4`, exakter Gleichheits-Match) — **dies ist die aktive Absicherung.** Vor jedem nativen
+   Write geprüft; auf abweichender Version fail-closed → kein Write, `enforce` fällt auf `monitor`.
+   **Bei jeder verifizierten neuen HA-Version anheben.** Optionaler Zusatz beim Public-Flip: ein
+   Minimum-HA-Pin in `hacs.json` (`"homeassistant": "…"`), der HACS-Download/Update auf älterem HA
+   blockt — derzeit **nicht** gesetzt (die `hacs/action` lehnte ihn als künftiges Minimum ab).
    Quelle: https://www.hacs.xyz/docs/publish/start/
 2. **Import-Guards um private APIs.** `try/except ImportError` + Feature-Detection um die privaten
    Auth-Imports in `auth_adapter.py`/`restore.py`, sodass ein HA-Upgrade **graceful degradiert**
@@ -284,17 +298,25 @@ werden, wenn das Reife-Gate durch ist.
 
 ### Gate-1: Verteilungs-Gate (Pfad A installierbar)
 **Status: ROT.** Mindestens diese Blocker offen, bevor ein Nutzer überhaupt sicher installieren kann:
-- `hacs.json` fehlt.
-- Kein Release/Tag v0.1.0.
+- ~~`hacs.json` fehlt~~ → **erledigt** (`{"name": "Tessera"}`, PR #27).
+- ~~`hacs/action`+`hassfest`-CI fehlt~~ → **erledigt** (`validate.yml`, PR #27/#31; HACS-Datei-Check
+  `continue-on-error` bis Public-Flip).
+- ~~Brand-Icon fehlt~~ → **erledigt** (`custom_components/tessera/brand/`, PR #27).
 - ~~README noch nicht user-facing~~ → **erledigt** (auf `release-prep`).
 - ~~LICENSE fehlt~~ → **erledigt** (MIT, auf `release-prep`).
-- Description/Topics am Repo unverifiziert.
+- **Kein Release/Tag v0.1.0** (noch offen).
+- **Repo noch nicht öffentlich** (Public-Flip steht aus; aktiviert zugleich den HACS-Datei-Check).
+- **Description/Topics am Repo unverifiziert.**
 
 → **Erst wenn Gate-1 grün ist**, ist Tessera als Custom-Repo überhaupt sauber installierbar.
 
 ### Gate-2: Reife-Gate (enforce erst dev-proven + gesoakt)
-**Status: ROT (per Design).** `enforce` (aktives Schreiben in den Auth-Store) ist die
-sicherheitskritische Stufe. Reihenfolge **verbindlich**:
+**Status: ROT (per Design — operative Empfehlung, kein Code-Lock).** `enforce` (aktives Schreiben in
+den Auth-Store) ist die sicherheitskritische Stufe. **Wichtig:** Es gibt **keinen** Reife-Code-Gate,
+der das Schreiben sperrt — sobald ein Admin `mode=enforce` setzt **und** die Lauf-Vorprüfungen
+(HA-Versions-Guard, D9, Linter, Lockout-Precheck) bestehen, **schreibt** Tessera nativen Auth-Zustand.
+Die folgende Reihenfolge ist daher **operative Disziplin** dafür, *wann* man bewusst umschalten
+sollte — nicht etwas, das der Code erzwingt:
 
 1. **`off`/`monitor` zuerst.** Tessera nur beobachtend laufen lassen — Resolver/Compiler/Linter
    gegen reale Policy/Rollen, ohne in den Auth-Store zu schreiben.
@@ -304,15 +326,18 @@ sicherheitskritische Stufe. Reihenfolge **verbindlich**:
 3. **Gesoakt:** Über mehrere Tage in `monitor` auf der echten Instanz mitlaufen lassen; Diff
    zwischen „würde setzen" und Ist beobachten (`monitor.py`), bis keine unerwarteten Verdicts mehr
    auftreten.
-4. **Erst dann `enforce`** auf der produktiven Instanz freischalten — und nur, wenn der
-   getestete HA-Versionsstand dem Minimum-Pin in `hacs.json` entspricht.
+4. **Erst dann `enforce`** auf der produktiven Instanz freischalten — und nur, wenn die HA-Version
+   exakt der vom Laufzeit-Guard getesteten Version (`SUPPORTED_HA_AUTH_VERSION`) entspricht;
+   andernfalls fällt der Schreibpfad ohnehin fail-closed auf `monitor` zurück.
 
 ### Ehrliche Aussage für den Owner
 - **Heute auslieferbar:** als **Pfad-A-Custom-Repo im `monitor`-Modus**, sobald Gate-1 grün ist —
   als kontrollierter Early-Access, NICHT als „aktiviere enforce".
-- **Noch NICHT auslieferbar:** Default-Store (Pfad B) und `enforce`-als-Default. Default-Store
-  braucht Brands + CI + Release + ggf. Maintainer-Klärung zur Private-API-Frage; `enforce` braucht
-  Gate-2.
+- **Noch NICHT auslieferbar:** Default-Store (Pfad B) und `enforce`-als-Default. `hacs.json`,
+  HACS+hassfest-CI und Brand-Icon sind erledigt; Default-Store braucht noch Public-Flip + Release +
+  Brands-Eintrag (`home-assistant/brands`) + ggf. Maintainer-Klärung zur Private-API-Frage. `enforce`
+  ist verdrahtet und schreibt, ist aber bis zum Praxis-Nachweis (Gate-2: Dev-E2E + Soak + Dogfood)
+  nicht als Default zu empfehlen.
 - **Größtes Restrisiko:** die Private-Auth-API-Abhängigkeit ohne HA-Stabilitätsvertrag (§3) — sie
   ist kein HACS-Blocker, aber der wahrscheinlichste Grund für stillen Bruch nach einem HA-Update.
 
