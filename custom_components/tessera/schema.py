@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from copy import deepcopy
 from typing import Any, TypedDict, cast
 
@@ -29,6 +30,18 @@ class MembershipData(TypedDict):
     by_group: dict[str, list[str]]
 
 
+class D9AckData(TypedDict):
+    """Admin acknowledgement for one D9 unknown custom component.
+
+    ``accepted_at`` is audit-only in dormant E2.5; acknowledgements do not expire
+    here and are revalidated by domain, version, and content hash.
+    """
+
+    version: str | None
+    content_hash: str
+    accepted_at: str
+
+
 class TesseraConfigData(TypedDict):
     """Tessera configuration store payload."""
 
@@ -36,6 +49,7 @@ class TesseraConfigData(TypedDict):
     mode: str
     roles: dict[str, RoleData]
     membership: MembershipData
+    d9_acks: dict[str, D9AckData]
 
 
 class _TesseraPolicyRequiredData(TypedDict):
@@ -70,6 +84,7 @@ def default_config_data() -> TesseraConfigData:
         "mode": MODE_OFF,
         "roles": {},
         "membership": {"by_user": {}, "by_group": {}},
+        "d9_acks": {},
     }
 
 
@@ -140,6 +155,7 @@ def validate_config_data(data: object) -> TesseraConfigData:
         "mode": mode,
         "roles": roles,
         "membership": membership,
+        "d9_acks": _validate_d9_acks(payload.get("d9_acks", {})),
     }
 
 
@@ -184,6 +200,40 @@ def _validate_membership_map(data: object, path: str) -> dict[str, list[str]]:
             _require_non_empty_string(role_id, f"{path}.{subject_id} role")
             for role_id in role_ids
         ]
+    return result
+
+
+def _validate_d9_acks(data: object) -> dict[str, D9AckData]:
+    mapping = _require_mapping(data, "config.d9_acks")
+    result: dict[str, D9AckData] = {}
+    for domain, ack_data in mapping.items():
+        domain_key = _require_non_empty_string(domain, "config.d9_acks key")
+        ack_payload = _require_mapping(ack_data, f"config.d9_acks.{domain_key}")
+
+        version = ack_payload.get("version")
+        if version is not None and not isinstance(version, str):
+            raise TesseraSchemaError(
+                f"config.d9_acks.{domain_key}.version must be a string or null"
+            )
+
+        content_hash = _require_sha256_hex(
+            ack_payload.get("content_hash"),
+            f"config.d9_acks.{domain_key}.content_hash",
+        )
+        accepted_at = _require_non_empty_string(
+            ack_payload.get("accepted_at"), f"config.d9_acks.{domain_key}.accepted_at"
+        )
+        unsupported = set(ack_payload) - {"version", "content_hash", "accepted_at"}
+        if unsupported:
+            raise TesseraSchemaError(
+                "config.d9_acks."
+                f"{domain_key} contains unsupported keys: {sorted(unsupported)}"
+            )
+        result[domain_key] = {
+            "version": version,
+            "content_hash": content_hash,
+            "accepted_at": accepted_at,
+        }
     return result
 
 
@@ -247,3 +297,12 @@ def _require_non_empty_string(value: object, path: str) -> str:
     if not isinstance(value, str) or not value:
         raise TesseraSchemaError(f"{path} must be a non-empty string")
     return value
+
+
+def _require_sha256_hex(value: object, path: str) -> str:
+    if not isinstance(value, str):
+        raise TesseraSchemaError(f"{path} must be a sha256 hex string")
+    normalized = value.lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", normalized):
+        raise TesseraSchemaError(f"{path} must be a sha256 hex string")
+    return normalized
