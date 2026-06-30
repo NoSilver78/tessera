@@ -1,4 +1,4 @@
-"""Dormant read-only enforce planning for Tessera E3.1."""
+"""Read-only enforce planning for Tessera E3 (wired into setup's enforce path)."""
 
 from __future__ import annotations
 
@@ -59,7 +59,7 @@ class EnforcePlan(TypedDict):
 
 
 class ApplyResult(TypedDict):
-    """Dormant E3.3 native-apply result with redacted write accounting."""
+    """E3.3 native-apply result with redacted write accounting."""
 
     status: ApplyStatus
     refused_reason: RefusedReason | None
@@ -70,7 +70,7 @@ class ApplyResult(TypedDict):
 
 
 class _StoreLike(Protocol):
-    """Small store subset needed by the dormant mode manager."""
+    """Small store subset needed by the mode manager."""
 
     async def async_load_config(self) -> TesseraConfigData:
         """Load Tessera configuration."""
@@ -110,12 +110,13 @@ class _UserBindingAdapterLike(Protocol):
 
 
 async def compute_enforce_plan(hass: object, store: _StoreLike) -> EnforcePlan:
-    """Compute the read-only E3 enforce plan without native auth writes.
+    """Compute the read-only E3 enforce plan (no native auth writes here).
 
-    The gate sequence is fail-closed and intentionally dormant: it is not wired
-    into setup, websocket, config-flow, or monitor paths. It performs no native
-    auth writes. E3.2 reads native HA users and group ids only after all gates
-    pass, so off/monitor paths remain free of ``hass.auth`` access.
+    The gate sequence is fail-closed. This function is wired into setup: it runs
+    when the persisted mode is enforce, and the caller applies the returned plan.
+    It performs no native auth writes itself; E3.2 reads native HA users and
+    group ids only after all gates pass, so off/monitor paths remain free of
+    ``hass.auth`` access.
 
     Args:
         hass: Home Assistant instance or test double.
@@ -202,9 +203,9 @@ async def apply_enforce_plan(
 ) -> ApplyResult:
     """Apply an already-computed enforce plan through guarded native adapters.
 
-    This is the first native-write E3.3 surface, but remains dormant: no setup,
-    websocket, config-flow, or monitor code calls it. It writes only when a
-    caller explicitly passes a non-blocked plan and adapter instances.
+    This is the first native-write E3.3 surface, wired into setup's enforce path
+    (``_apply_enforce_mode``). It writes only when a caller passes a non-blocked
+    plan and adapter instances.
 
     E3.3 intentionally has no rollback journal yet. On a mid-apply adapter
     failure it stops, reports redacted write accounting, and leaves an

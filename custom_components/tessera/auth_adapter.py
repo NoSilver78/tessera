@@ -1,11 +1,10 @@
-"""Dormant native-auth adapters for Tessera's enforce path (E1).
+"""Native-auth adapters for Tessera's enforce path.
 
-These adapters encapsulate the *only* code that would mutate Home Assistant's
-native auth store. In phase 1 they are dormant: no product code path calls
-them (they are imported only by tests). Every write is fail-closed behind a
-version guard (``SUPPORTED_HA_AUTH_VERSION``), the ``tessera:`` namespace
-guard, and an owner/admin lockout check. They are wired in only at E3, after
-the D10 benchmark and a panel review — see docs/spec-e3-enforce.md.
+These adapters encapsulate the *only* code that mutates Home Assistant's native
+auth store, and are wired into the enforce path (E3.5: setup applies an enforce
+plan when the persisted mode is enforce). Every write is fail-closed behind a
+version guard (``SUPPORTED_HA_AUTH_VERSION``), the ``tessera:`` namespace guard,
+and an owner/admin lockout check — see docs/spec-e3-enforce.md.
 """
 
 from __future__ import annotations
@@ -89,7 +88,7 @@ class AuthLike(Protocol):
 
 
 class HassAuthLike(Protocol):
-    """Home Assistant subset needed by the dormant adapters."""
+    """Home Assistant subset needed by the native-auth adapters."""
 
     auth: AuthLike
 
@@ -122,8 +121,8 @@ class AuthRestoreResult:
 class AuthPolicyStoreAdapter:
     """Version-guarded access to native HA group policy storage.
 
-    The adapter is intentionally dormant in E1. It exposes the private auth-store
-    choke point behind a narrow guard so E3 can wire it only after panel review.
+    It exposes the private auth-store choke point behind a narrow guard; the E3
+    enforce path uses it behind the version/namespace/lockout guards.
     """
 
     def __init__(
@@ -312,7 +311,7 @@ class PermissionProbeAdapter:
 
 
 class RecoveryController:
-    """Dormant recovery helpers for product enforce wiring in E3/E4."""
+    """Recovery helpers for the enforce path: snapshot, restore, lockout guards."""
 
     def __init__(self, hass: HassAuthLike, binding: UserBindingAdapter) -> None:
         """Initialize recovery helpers with a guarded binding adapter."""
