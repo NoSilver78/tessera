@@ -14,8 +14,7 @@ POLICY_STORAGE_KEY: Final = "tessera.policy"
 STATE_STORAGE_KEY: Final = "tessera.state"
 
 # Operating modes. These are the only accepted values; they are validated via
-# ``schema.MODES``. ``enforce`` is inert in phase 1 (monitor-preview only, no
-# native Home Assistant auth writes) — see docs/spec-e3-enforce.md.
+# ``schema.MODES``. ``enforce`` writes only through the guarded E3 adapters.
 MODE_OFF: Final = "off"
 MODE_MONITOR: Final = "monitor"
 MODE_ENFORCE: Final = "enforce"

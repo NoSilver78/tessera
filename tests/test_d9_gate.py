@@ -109,28 +109,26 @@ def _mock_loader(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-async def test_runtime_service_without_services_yaml_is_unknown(tmp_path: Path) -> None:
-    """Runtime services hard-veto even when services.yaml is absent."""
-    component = _write_component(tmp_path, "sneaky_service")
-    hass = FakeHass(tmp_path, {"sneaky_service": {"do_it": object()}})
+async def test_generic_runtime_service_no_longer_hard_vetoes(tmp_path: Path) -> None:
+    """D9 v2: a generic runtime service (no auth mutation) does not block enforce."""
+    component = _write_component(tmp_path, "service_only")
+    hass = FakeHass(tmp_path, {"service_only": {"do_it": object()}})
 
     result = await evaluate_d9_gate(hass, default_config_data())
 
     assert compute_component_hash(component)
-    assert result["by_component"]["sneaky_service"]["verdict"] == D9_VERDICT_UNKNOWN
-    assert result["by_component"]["sneaky_service"]["source"] == "surface_veto"
-    assert result["blocking"] == ["sneaky_service"]
-    assert result["enforce_blocked"] is True
+    assert result["by_component"]["service_only"]["verdict"] == D9_VERDICT_ALLOW
+    assert result["by_component"]["service_only"]["source"] == "default"
+    assert result["blocking"] == []
+    assert result["enforce_blocked"] is False
     assert hass.executor_calls == 1
 
 
-async def test_entity_component_with_view_or_ws_marker_is_unknown(
-    tmp_path: Path,
-) -> None:
-    """Static View/WS markers hard-veto faked entity-style integrations."""
+async def test_generic_http_ws_surfaces_no_longer_block(tmp_path: Path) -> None:
+    """D9 v2: generic View/WS surfaces (no auth mutation) no longer hard-veto."""
     _write_component(
         tmp_path,
-        "sneaky_http",
+        "ui_only",
         py_source=(
             "from homeassistant.components.http import HomeAssistantView\n"
             "async def async_setup(hass, config):\n"
@@ -141,34 +139,122 @@ async def test_entity_component_with_view_or_ws_marker_is_unknown(
 
     result = await evaluate_d9_gate(FakeHass(tmp_path), default_config_data())
 
-    assert result["by_component"]["sneaky_http"]["verdict"] == D9_VERDICT_UNKNOWN
-    assert result["by_component"]["sneaky_http"]["source"] == "surface_veto"
-    assert "sneaky_http" in result["blocking"]
+    assert result["by_component"]["ui_only"]["verdict"] == D9_VERDICT_ALLOW
+    assert result["blocking"] == []
+    assert result["enforce_blocked"] is False
+
+
+async def test_self_domain_is_excluded_despite_surfaces(tmp_path: Path) -> None:
+    """Tessera's own domain is trusted and never D9-vetoes itself.
+
+    Regression: Tessera legitimately registers a panel/service/websocket. Without
+    excluding its own domain the surface hard-veto blocked enforce on every real
+    install (caught by the ha-tessera-dev E2E).
+    """
+    _write_component(
+        tmp_path,
+        "tessera",
+        py_source=(
+            "from homeassistant.components.http import HomeAssistantView\n"
+            "async def async_setup(hass, config):\n"
+            "    hass.http.register_view(HomeAssistantView())\n"
+            "    hass.components.websocket_api.async_register_command(lambda: None)\n"
+        ),
+    )
+
+    result = await evaluate_d9_gate(
+        FakeHass(tmp_path), default_config_data(), self_domain="tessera"
+    )
+
+    assert "tessera" not in result["by_component"]
+    assert result["blocking"] == []
+    assert result["enforce_blocked"] is False
 
 
 async def test_ack_expires_when_content_hash_changes(tmp_path: Path) -> None:
-    """Ack is bound to domain, version, and exact content hash."""
-    component = _write_component(tmp_path, "mutable_component")
+    """A stale ack no longer overrides the auth-surface veto after a content change."""
+    auth_a = "async def f(hass):\n    await hass.auth.async_update_user(None)\n"
+    auth_b = (
+        "async def f(hass):\n    await hass.auth.async_update_user(None)  # changed\n"
+    )
+    component = _write_component(tmp_path, "auth_mutable", py_source=auth_a)
     stale_hash = compute_component_hash(component)
-    (component / "__init__.py").write_text("# changed\n", encoding="utf-8")
+    (component / "__init__.py").write_text(auth_b, encoding="utf-8")
 
     result = await evaluate_d9_gate(
         FakeHass(tmp_path),
-        _config_with_ack("mutable_component", version="1.0.0", content_hash=stale_hash),
+        _config_with_ack("auth_mutable", version="1.0.0", content_hash=stale_hash),
     )
 
-    assert result["by_component"]["mutable_component"]["verdict"] == D9_VERDICT_UNKNOWN
-    assert result["by_component"]["mutable_component"]["source"] == "default"
+    assert result["by_component"]["auth_mutable"]["verdict"] == D9_VERDICT_UNKNOWN
+    assert result["by_component"]["auth_mutable"]["source"] == "surface_veto"
+    assert result["enforce_blocked"] is True
 
 
-async def test_unknown_component_defaults_to_blocking_unknown(tmp_path: Path) -> None:
-    """Unknown installed custom components block enforce by default."""
-    _write_component(tmp_path, "unknown_component")
+async def test_unknown_component_without_surfaces_defaults_to_allow(
+    tmp_path: Path,
+) -> None:
+    """D9 v2: an unknown component without auth-relevant surfaces is trusted."""
+    _write_component(tmp_path, "plain_component")
 
     result = await evaluate_d9_gate(FakeHass(tmp_path), default_config_data())
 
-    assert result["by_component"]["unknown_component"]["verdict"] == D9_VERDICT_UNKNOWN
+    assert result["by_component"]["plain_component"]["verdict"] == D9_VERDICT_ALLOW
+    assert result["by_component"]["plain_component"]["source"] == "default"
+    assert result["enforce_blocked"] is False
+
+
+async def test_auth_mutating_component_is_vetoed(tmp_path: Path) -> None:
+    """D9 v2 (E): a component that mutates the auth store hard-vetoes when un-acked."""
+    _write_component(
+        tmp_path,
+        "auth_toucher",
+        py_source=(
+            "async def async_setup(hass, config):\n"
+            "    await hass.auth.async_update_user(None, group_ids=[])\n"
+        ),
+    )
+
+    result = await evaluate_d9_gate(FakeHass(tmp_path), default_config_data())
+
+    assert result["by_component"]["auth_toucher"]["verdict"] == D9_VERDICT_UNKNOWN
+    assert result["by_component"]["auth_toucher"]["source"] == "surface_veto"
+    assert "auth_toucher" in result["blocking"]
     assert result["enforce_blocked"] is True
+
+
+async def test_admin_ack_overrides_auth_surface_veto(tmp_path: Path) -> None:
+    """D9 v2 (A): a content-hash-matched admin ack overrides the auth-surface veto."""
+    component = _write_component(
+        tmp_path,
+        "acked_auth",
+        py_source=(
+            "async def async_setup(hass, config):\n"
+            "    await hass.auth.async_update_user(None, group_ids=[])\n"
+        ),
+    )
+    content_hash = compute_component_hash(component)
+
+    result = await evaluate_d9_gate(
+        FakeHass(tmp_path),
+        _config_with_ack("acked_auth", version="1.0.0", content_hash=content_hash),
+    )
+
+    assert result["by_component"]["acked_auth"]["verdict"] == D9_VERDICT_ALLOW
+    assert result["by_component"]["acked_auth"]["source"] == "ack"
+    assert result["enforce_blocked"] is False
+
+
+async def test_compiled_artifact_is_vetoed(tmp_path: Path) -> None:
+    """D9 v2: un-analysable compiled code hard-vetoes (could hide auth mutation)."""
+    component = _write_component(tmp_path, "compiled_component")
+    (component / "ext.so").write_bytes(b"\x7fELF stub")
+
+    result = await evaluate_d9_gate(FakeHass(tmp_path), default_config_data())
+
+    assert result["by_component"]["compiled_component"]["verdict"] == D9_VERDICT_UNKNOWN
+    assert result["by_component"]["compiled_component"]["source"] == "surface_veto"
+    assert "compiled_component" in result["blocking"]
 
 
 async def test_clean_component_allows_with_table_hash_match(
@@ -230,7 +316,7 @@ async def test_table_version_mismatch_is_unknown(
     result = await evaluate_d9_gate(FakeHass(tmp_path), default_config_data())
 
     component_result = result["by_component"]["version_mismatch"]
-    assert component_result["verdict"] == D9_VERDICT_UNKNOWN
+    assert component_result["verdict"] == D9_VERDICT_ALLOW
     assert component_result["source"] == "default"
 
 
@@ -248,7 +334,7 @@ async def test_ack_version_none_vs_string_is_unknown(tmp_path: Path) -> None:
     )
 
     component_result = result["by_component"]["ack_version_mismatch"]
-    assert component_result["verdict"] == D9_VERDICT_UNKNOWN
+    assert component_result["verdict"] == D9_VERDICT_ALLOW
     assert component_result["source"] == "default"
 
 
@@ -280,16 +366,16 @@ async def test_version_none_can_be_pinned_by_table(
     assert result["by_component"]["versionless"]["verdict"] == D9_VERDICT_ALLOW
 
 
-async def test_table_allow_with_new_surface_is_unknown(
+async def test_table_no_surface_anchor_rejects_auth_surface(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Surface hard-veto runs before table ALLOW."""
+    """Anti-forgery: a no_surface_verified anchor must not trust an auth surface."""
     component = _write_component(
         tmp_path,
         "mutated_allow",
         py_source=(
             "async def async_setup(hass, config):\n"
-            "    hass.http.register_view(view)\n"
+            "    await hass.auth.async_update_user(None, group_ids=[])\n"
         ),
     )
     monkeypatch.setattr(
@@ -425,39 +511,147 @@ async def test_table_allow_without_evidence_type_fails_closed(
     assert result["by_component"]["missing_evidence"]["source"] == "classification"
 
 
-async def test_aliased_view_import_is_surface(tmp_path: Path) -> None:
-    """AST detection catches aliased HomeAssistantView imports."""
-    _write_component(
-        tmp_path,
-        "aliased_http",
-        py_source=(
-            "from homeassistant.components.http import HomeAssistantView as HV\n"
-            "class View(HV):\n"
-            "    pass\n"
-        ),
+def test_aliased_view_import_is_detected_as_http_surface() -> None:
+    """The AST detector still resolves aliased HomeAssistantView imports.
+
+    Generic HTTP surfaces no longer hard-veto in D9 v2, so this asserts the
+    detector directly, decoupled from the now-permissive verdict policy.
+    """
+    src = (
+        "from homeassistant.components.http import HomeAssistantView as HV\n"
+        "class View(HV):\n"
+        "    pass\n"
     )
 
-    result = await evaluate_d9_gate(FakeHass(tmp_path), default_config_data())
-
-    component_result = result["by_component"]["aliased_http"]
-    assert component_result["verdict"] == D9_VERDICT_UNKNOWN
-    assert component_result["source"] == "surface_veto"
+    assert d9_gate.SURFACE_HTTP in d9_gate._detect_python_surfaces(src)
 
 
-async def test_getattr_string_marker_is_surface(tmp_path: Path) -> None:
-    """AST detection catches simple string-marker dynamic calls."""
-    _write_component(
+def test_auth_mutation_call_is_detected_as_auth_surface() -> None:
+    """The AST detector resolves an auth-store mutation call to SURFACE_AUTH."""
+    src = (
+        "async def f(hass):\n"
+        "    await hass.auth.async_update_user(None, group_ids=[])\n"
+    )
+
+    assert d9_gate.SURFACE_AUTH in d9_gate._detect_python_surfaces(src)
+
+
+@pytest.mark.parametrize(
+    "expr",
+    [
+        "hass.auth.async_create_system_user",
+        "hass.auth.async_get_or_create_user",
+        "hass.auth.async_enable_user_mfa",
+        "hass.auth.async_disable_user_mfa",
+        "hass.auth.async_set_expiry",
+        "hass.auth.async_update_user_credentials_data",
+    ],
+)
+def test_honest_auth_manager_mutations_are_detected(expr: str) -> None:
+    """Real HA AuthManager mutation APIs (gate finding) resolve to SURFACE_AUTH."""
+    src = f"def f(hass):\n    return {expr}\n"
+
+    assert d9_gate.SURFACE_AUTH in d9_gate._detect_python_surfaces(src)
+
+
+def test_usermeta_provider_provisioning_is_auth_surface() -> None:
+    """A custom auth provider assigning a group via UserMeta is auth-relevant."""
+    src = (
+        "from homeassistant.auth.providers import UserMeta\n"
+        "async def async_user_meta_for_credentials(self, credentials):\n"
+        "    return UserMeta(name='x', is_active=True, group='system-admin')\n"
+    )
+
+    assert d9_gate.SURFACE_AUTH in d9_gate._detect_python_surfaces(src)
+
+
+def test_direct_groups_write_is_auth_surface() -> None:
+    """Direct membership reassignment ``user.groups = [...]`` is auth-relevant."""
+    src = "def f(user, groups):\n    user.groups = groups\n"
+
+    assert d9_gate.SURFACE_AUTH in d9_gate._detect_python_surfaces(src)
+
+
+def test_groups_read_is_not_auth_surface() -> None:
+    """Reading membership must not flag — precision guard against over-blocking."""
+    src = "def f(user):\n    return [g.id for g in user.groups]\n"
+
+    assert d9_gate.SURFACE_AUTH not in d9_gate._detect_python_surfaces(src)
+
+
+def test_text_path_detects_auth_marker_only() -> None:
+    """The manifest/yaml text scan surfaces auth markers but not generic ones."""
+    assert d9_gate.SURFACE_AUTH in d9_gate._detect_text_surfaces(
+        "this calls async_update_user somewhere"
+    )
+    assert d9_gate.SURFACE_AUTH not in d9_gate._detect_text_surfaces(
+        "this only does register_view"
+    )
+
+
+def test_invented_group_apis_are_not_markers() -> None:
+    """Regression: async_create_group/async_remove_group are not real HA APIs.
+
+    They were invented in the first draft and removed; the noisy bare ``_groups``
+    marker was replaced by the precise AUTH_WRITE_ATTRS Store-write detector.
+    """
+    assert "async_create_group" not in d9_gate.AUTH_MUTATION_MARKERS
+    assert "async_remove_group" not in d9_gate.AUTH_MUTATION_MARKERS
+    assert "_groups" not in d9_gate.AUTH_MUTATION_MARKERS
+
+
+async def test_runtime_verified_allow_permits_auth_surface(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """runtime_verified_allow asserts the surface itself was verified -> ALLOW.
+
+    Unlike no_surface_verified (rejected when a veto surface is present), this
+    evidence type intentionally permits the surface it was verified against.
+    """
+    component = _write_component(
         tmp_path,
-        "getattr_http",
+        "verified_auth",
         py_source=(
             "async def async_setup(hass, config):\n"
-            '    getattr(hass.http, "register_view")(object())\n'
+            "    await hass.auth.async_update_user(None, group_ids=[])\n"
+        ),
+    )
+    monkeypatch.setattr(
+        d9_gate,
+        "CLASSIFICATIONS",
+        {
+            "verified_auth": (
+                D9ClassificationEntry(
+                    version="1.0.0",
+                    content_hash=compute_component_hash(component),
+                    verdict=D9_VERDICT_ALLOW,
+                    evidence_type="runtime_verified_allow",
+                    reason="runtime verified safe with its surface",
+                ),
+            )
+        },
+    )
+
+    result = await evaluate_d9_gate(FakeHass(tmp_path), default_config_data())
+
+    assert result["by_component"]["verified_auth"]["verdict"] == D9_VERDICT_ALLOW
+    assert result["by_component"]["verified_auth"]["source"] == "classification"
+
+
+async def test_getattr_string_auth_marker_is_surface(tmp_path: Path) -> None:
+    """AST detection catches an auth mutation referenced via a string marker."""
+    _write_component(
+        tmp_path,
+        "getattr_auth",
+        py_source=(
+            "async def async_setup(hass, config):\n"
+            '    getattr(hass.auth, "async_update_user")(None)\n'
         ),
     )
 
     result = await evaluate_d9_gate(FakeHass(tmp_path), default_config_data())
 
-    component_result = result["by_component"]["getattr_http"]
+    component_result = result["by_component"]["getattr_auth"]
     assert component_result["verdict"] == D9_VERDICT_UNKNOWN
     assert component_result["source"] == "surface_veto"
 
@@ -543,13 +737,13 @@ async def test_loader_path_merges_and_version_precedence(
     result = await evaluate_d9_gate(FakeHass(tmp_path), default_config_data())
 
     assert result["by_component"]["loader_and_disk"]["version"] == "9.9.9"
-    assert result["by_component"]["loader_and_disk"]["verdict"] == D9_VERDICT_UNKNOWN
+    assert result["by_component"]["loader_and_disk"]["verdict"] == D9_VERDICT_ALLOW
     assert result["by_component"]["loader_only"] == {
-        "verdict": D9_VERDICT_UNKNOWN,
+        "verdict": D9_VERDICT_ALLOW,
         "version": "3.0.0",
         "content_hash": None,
         "source": "default",
-        "reason": "no matching classification or ack",
+        "reason": "no auth-relevant surface and no blocking classification or ack",
     }
 
 
@@ -577,7 +771,7 @@ async def test_fresh_disk_hash_beats_stale_table(
     result = await evaluate_d9_gate(FakeHass(tmp_path), default_config_data())
 
     component_result = result["by_component"]["fresh_hash"]
-    assert component_result["verdict"] == D9_VERDICT_UNKNOWN
+    assert component_result["verdict"] == D9_VERDICT_ALLOW
     assert component_result["source"] == "default"
 
 

@@ -21,6 +21,7 @@ from custom_components.tessera.auth_adapter import (
     UserGroupSnapshot,
 )
 from custom_components.tessera.const import DOMAIN
+from custom_components.tessera.state import default_state_data
 
 
 @dataclass
@@ -204,6 +205,10 @@ class ModeStore:
     async def async_load_policy(self) -> dict[str, Any]:
         """Return an empty policy for monitor-preview tests."""
         return {}
+
+    async def async_load_state(self) -> dict[str, Any]:
+        """Return empty recovery state."""
+        return default_state_data()
 
 
 def fake_group_factory(group_id: str, name: str, policy: dict[str, Any]) -> FakeGroup:
@@ -480,6 +485,30 @@ async def test_recovery_snapshot_restore_and_no_admin_lockout() -> None:
     assert managed.group_ids == ["system-read-only", "tessera:viewer"]
     assert await recovery.async_has_owner_or_admin() is True
     await recovery.async_assert_no_admin_lockout()
+
+
+@pytest.mark.asyncio
+async def test_recovery_snapshot_skips_unmanaged_users() -> None:
+    """Pre-install snapshot skips owner/system-generated users without raising.
+
+    Regression: real HA always has system-generated users; snapshotting them
+    raised UnsafeAuthTarget and blocked enforce (caught by the ha-tessera-dev E2E).
+    """
+    hass = FakeHass()
+    recovery = RecoveryController(hass, UserBindingAdapter(hass, ha_version="2026.6.4"))
+
+    snapshot = await recovery.async_snapshot(
+        [
+            FakeUser("managed", ["system-read-only"]),
+            FakeUser("owner", ["system-admin"], is_owner=True),
+            FakeUser("sysgen", ["system-users"], system_generated=True),
+        ],
+        include_without_tessera=True,
+    )
+
+    assert snapshot == AuthRecoverySnapshot(
+        users=(UserGroupSnapshot("managed", ("system-read-only",)),)
+    )
 
 
 @pytest.mark.asyncio

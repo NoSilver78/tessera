@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+import custom_components.tessera as tessera_init
 import pytest
 from custom_components.tessera.config_flow import (
     TesseraConfigFlow,
@@ -328,7 +329,7 @@ async def test_compile_preview_off_clears_stale_preview() -> None:
         hass,
         "entry-1",
         FakeStore(),
-        config=default_config_data(),
+        config=set_mode(default_config_data(), "off"),
         policy=default_policy_data(),
     )
 
@@ -370,6 +371,38 @@ async def test_options_flow_set_mode_saves_and_finishes(
     assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
     assert store.saved_config is not None
     assert store.saved_config["mode"] == "monitor"
+
+
+@pytest.mark.asyncio
+async def test_options_flow_set_mode_refreshes_live_entry_via_central_handler(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A live mode change uses setup's central enforce/restore handler."""
+    calls: list[tuple[str, dict[str, Any]]] = []
+    store = RecordingStore()
+    flow = _options_flow(store)
+    flow.hass.data[DOMAIN] = {"entry-1": {"store": store, "mode": "enforce"}}
+
+    async def fake_compile_safely(
+        _hass: Any, entry_id: str, entry_data: dict[str, Any]
+    ) -> None:
+        calls.append((entry_id, entry_data))
+        entry_data["mode"] = store.saved_config["mode"]
+
+    async def fail_preview(*_args: Any, **_kwargs: Any) -> None:
+        raise AssertionError("live entry must not use preview-only path")
+
+    monkeypatch.setattr(tessera_init, "_compile_for_mode_safely", fake_compile_safely)
+    monkeypatch.setattr(
+        "custom_components.tessera.config_flow._compile_preview", fail_preview
+    )
+
+    result = await flow.async_step_set_mode({"mode": "off"})
+
+    assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+    assert store.saved_config["mode"] == "off"
+    assert calls == [("entry-1", flow.hass.data[DOMAIN]["entry-1"])]
+    assert flow.hass.data[DOMAIN]["entry-1"]["mode"] == "off"
 
 
 @pytest.mark.asyncio

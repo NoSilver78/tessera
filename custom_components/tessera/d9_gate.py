@@ -1,4 +1,11 @@
-"""Read-only D9 custom-component gate for future Tessera enforce mode."""
+"""D9 custom-component gate for Tessera enforce mode (auth-scoped veto).
+
+The gate classifies installed custom components before enforce activates. Only
+components that can mutate the managed Home Assistant auth state, or that cannot
+be statically analysed (compiled/dynamic), hard-veto enforce; an explicit admin
+ack or a curated classification overrides the veto. Generic UI surfaces and
+unknown components without auth-relevant surfaces are trusted by default.
+"""
 
 from __future__ import annotations
 
@@ -32,6 +39,7 @@ SURFACE_COMPILED = "compiled_artifact"
 SURFACE_DYNAMIC = "dynamic_or_unparseable_python"
 SURFACE_SERVICE = "service"
 SURFACE_WEBSOCKET = "websocket"
+SURFACE_AUTH = "auth_store_mutation"
 
 COMPILED_SURFACE_SUFFIXES = frozenset({".so", ".pyd", ".pyx"})
 TEXT_SCAN_SUFFIXES = frozenset({".yaml", ".yml"})
@@ -39,6 +47,49 @@ TEXT_SCAN_FILENAMES = frozenset({"manifest.json"})
 HTTP_MARKERS = frozenset({"HomeAssistantView", "panel", "register_view"})
 SERVICE_MARKERS = frozenset({"async_register"})
 WEBSOCKET_MARKERS = frozenset({"async_register_command", "websocket_command"})
+# Markers that signal a component can MUTATE the Home Assistant auth state
+# Tessera manages (users, group membership, credentials, tokens) — the real
+# conflict/interference surface for native enforcement. These are exact public
+# AuthManager / auth-provider names (introspected against the installed HA, so
+# low false-positive). A static token scan cannot catch deliberate obfuscation;
+# that is out of scope per the threat model (a malicious component already runs
+# with full privileges), so the veto targets honest conflicting components.
+AUTH_MUTATION_MARKERS = frozenset(
+    {
+        # User + group-membership lifecycle (AuthManager).
+        "async_create_user",
+        "async_create_system_user",
+        "async_get_or_create_user",
+        "async_update_user",
+        "async_remove_user",
+        "async_activate_user",
+        "async_deactivate_user",
+        # Credentials, MFA, and refresh/access tokens.
+        "async_link_user",
+        "async_remove_credentials",
+        "async_update_user_credentials_data",
+        "async_create_refresh_token",
+        "async_remove_refresh_token",
+        "async_set_expiry",
+        "async_enable_user_mfa",
+        "async_disable_user_mfa",
+        # Custom auth-provider provisioning (UserMeta carries the assigned group).
+        "async_user_meta_for_credentials",
+        "UserMeta",
+    }
+)
+
+# Attribute names whose direct assignment (``user.groups = [...]``) reassigns
+# the membership Tessera compiles into PolicyPermissions. Detected only in a
+# Store (write) context, so reads like ``for g in user.groups`` are not flagged.
+AUTH_WRITE_ATTRS = frozenset({"groups"})
+
+# D9 v2 — auth-scoped veto. Only these surfaces hard-veto enforce: a component
+# that can mutate the managed auth state, or that cannot be statically analysed
+# at all (compiled/dynamic). Generic HTTP/service/websocket surfaces do not
+# threaten native enforcement and no longer block on their own; an explicit
+# admin ack (or a curated classification with evidence) overrides the veto.
+VETO_SURFACES = frozenset({SURFACE_AUTH, SURFACE_COMPILED, SURFACE_DYNAMIC})
 
 
 class D9ComponentResult(TypedDict):
@@ -99,22 +150,31 @@ class _DiskComponent:
     surfaces: frozenset[str]
 
 
-async def evaluate_d9_gate(hass: _HassLike, config: TesseraConfigData) -> D9GateResult:
+async def evaluate_d9_gate(
+    hass: _HassLike,
+    config: TesseraConfigData,
+    *,
+    self_domain: str | None = None,
+) -> D9GateResult:
     """Evaluate installed custom components for E3 enforce blockers.
 
-    The gate is dormant and read-only: it enumerates custom components, scans
-    source markers in an executor, checks runtime service registrations, and
-    returns a fail-closed report. It never writes native Home Assistant auth
-    state and is intentionally not wired into mode handling yet.
+    The gate is read-only: it enumerates custom components, scans source markers
+    in an executor, checks runtime service registrations, and returns a report
+    consumed by ``compute_enforce_plan``. It never writes native Home Assistant
+    auth state itself. Only auth-mutating or un-analysable (compiled/dynamic)
+    surfaces hard-veto; an explicit ack or curated classification overrides the
+    veto, and components without such surfaces are trusted by default.
 
     Args:
         hass: Home Assistant instance or test double.
         config: Validated Tessera config containing optional ``d9_acks``.
+        self_domain: Tessera's own integration domain, excluded from evaluation
+            so the trusted enforcer never vetoes its own legitimate surfaces.
 
     Returns:
         A deterministic D9 report. ``enforce_blocked`` is true when any custom
-        component remains unknown, needs Tier-2 handling, or is explicitly
-        denied.
+        component is blocked: an un-acked auth-relevant/opaque surface, a Tier-2
+        row, an explicit deny, or an evidence-inconsistent classification.
     """
     root = Path(hass.config.path("custom_components"))
     disk_components = await _run_executor(hass, _scan_custom_components, root)
@@ -124,6 +184,10 @@ async def evaluate_d9_gate(hass: _HassLike, config: TesseraConfigData) -> D9Gate
 
     by_component: dict[str, D9ComponentResult] = {}
     for domain in sorted(set(disk_components) | set(loader_components)):
+        if domain == self_domain:
+            # Tessera is the trusted enforcer itself; it must not veto its own
+            # legitimate panel/service/websocket surfaces (would self-block enforce).
+            continue
         disk = disk_components.get(domain)
         integration = loader_components.get(domain)
         version = _component_version(integration, disk)
@@ -180,15 +244,7 @@ def _classify_component(
     surfaces: frozenset[str],
     ack: D9AckData | None,
 ) -> D9ComponentResult:
-    if surfaces:
-        return _result(
-            D9_VERDICT_UNKNOWN,
-            version,
-            content_hash,
-            SOURCE_SURFACE_VETO,
-            f"surface hard-veto: {', '.join(sorted(surfaces))}",
-        )
-
+    veto_surfaces = surfaces & VETO_SURFACES
     entry = _matching_classification(domain, version, content_hash)
     if entry is not None:
         if (
@@ -201,6 +257,25 @@ def _classify_component(
                 content_hash,
                 SOURCE_CLASSIFICATION,
                 f"classification {entry.verdict} is missing evidence_type",
+            )
+        if (
+            entry.verdict == D9_VERDICT_ALLOW
+            and entry.evidence_type == "no_surface_verified"
+            and veto_surfaces
+        ):
+            # Anti-forgery: a "no_surface_verified" anchor claims the component
+            # has no surface, so a detected veto-surface contradicts it -> reject.
+            # A "runtime_verified_allow" anchor instead asserts the runtime
+            # behavior was verified *with* its surfaces, so it may carry them;
+            # "tier2_accepted" returns TIER-2 and blocks regardless. All three
+            # are hash-pinned, so a content change drops the anchor entirely.
+            return _result(
+                D9_VERDICT_UNKNOWN,
+                version,
+                content_hash,
+                SOURCE_SURFACE_VETO,
+                "classification asserts no_surface_verified but detected "
+                f"{', '.join(sorted(veto_surfaces))}",
             )
         return _result(
             entry.verdict,
@@ -219,12 +294,21 @@ def _classify_component(
             "admin ack matched domain, version, and content hash",
         )
 
+    if veto_surfaces:
+        return _result(
+            D9_VERDICT_UNKNOWN,
+            version,
+            content_hash,
+            SOURCE_SURFACE_VETO,
+            f"auth-relevant or opaque surface veto: {', '.join(sorted(veto_surfaces))}",
+        )
+
     return _result(
-        D9_VERDICT_UNKNOWN,
+        D9_VERDICT_ALLOW,
         version,
         content_hash,
         SOURCE_DEFAULT,
-        "no matching classification or ack",
+        "no auth-relevant surface and no blocking classification or ack",
     )
 
 
@@ -346,9 +430,11 @@ def _detect_static_surfaces(component_path: Path) -> frozenset[str]:
     Python files are parsed with AST so aliases and simple string-based
     ``getattr`` markers are visible. HTTP/WS still have no HA runtime registry
     backstop here; dynamic registration built via ``exec``/``chr``-style string
-    construction can evade static analysis. For executable Python, a table ALLOW
-    therefore needs ``runtime_verified_allow`` evidence rather than relying on an
-    empty static scan alone.
+    construction can evade static analysis. Curators SHOULD therefore prefer
+    ``runtime_verified_allow`` over ``no_surface_verified`` for components with
+    executable code, since an empty static scan alone can be obfuscated. The
+    gate itself only enforces that a *detected* veto-surface contradicts a
+    ``no_surface_verified`` anchor (see ``_classify_component``).
     """
     surfaces: set[str] = set()
     for file_path in _iter_hash_files(component_path):
@@ -376,9 +462,13 @@ def _detect_python_surfaces(text: str) -> set[str]:
         return {SURFACE_DYNAMIC}
 
     markers: set[str] = set()
+    surfaces: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Attribute):
             markers.add(node.attr)
+            if isinstance(node.ctx, ast.Store) and node.attr in AUTH_WRITE_ATTRS:
+                # Direct membership reassignment, e.g. ``user.groups = [...]``.
+                surfaces.add(SURFACE_AUTH)
         elif isinstance(node, ast.Name):
             markers.add(node.id)
         elif isinstance(node, ast.alias):
@@ -387,13 +477,16 @@ def _detect_python_surfaces(text: str) -> set[str]:
                 markers.add(node.asname)
         elif isinstance(node, ast.Constant) and isinstance(node.value, str):
             markers.add(node.value)
-    return _markers_to_surfaces(markers)
+    surfaces |= _markers_to_surfaces(markers)
+    return surfaces
 
 
 def _detect_text_surfaces(text: str) -> set[str]:
     return _markers_to_surfaces(
         marker
-        for marker in HTTP_MARKERS | SERVICE_MARKERS | WEBSOCKET_MARKERS
+        for marker in (
+            HTTP_MARKERS | SERVICE_MARKERS | WEBSOCKET_MARKERS | AUTH_MUTATION_MARKERS
+        )
         if marker in text
     )
 
@@ -407,6 +500,8 @@ def _markers_to_surfaces(markers: Iterable[str]) -> set[str]:
         surfaces.add(SURFACE_HTTP)
     if marker_set & WEBSOCKET_MARKERS:
         surfaces.add(SURFACE_WEBSOCKET)
+    if marker_set & AUTH_MUTATION_MARKERS:
+        surfaces.add(SURFACE_AUTH)
     return surfaces
 
 
