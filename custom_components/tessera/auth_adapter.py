@@ -272,6 +272,11 @@ class UserBindingAdapter:
         """Capture namespace-guarded group bindings for managed users."""
         snapshots: list[UserGroupSnapshot] = []
         for user in users:
+            if not _is_managed_user(user):
+                # Owner/system-generated users are never bound or restored by
+                # Tessera; excluding them keeps the full pre-install snapshot
+                # writable instead of raising on the first unmanaged user.
+                continue
             group_ids = _user_group_ids(user)
             if not include_without_tessera and not any(
                 group_id.startswith(TESSERA_GROUP_PREFIX) for group_id in group_ids
@@ -478,6 +483,13 @@ def _assert_allow_only_policy(policy: Mapping[str, Any]) -> None:
             raise AllowOnlyPolicyViolation("allow-only")
         if any(not isinstance(value, bool) for value in leaf.values()):
             raise AllowOnlyPolicyViolation("allow-only")
+
+
+def _is_managed_user(user: Any) -> bool:
+    """Return whether Tessera manages this user (not owner, not system-generated)."""
+    return not getattr(user, "is_owner", False) and not getattr(
+        user, "system_generated", False
+    )
 
 
 def _assert_managed_user(user: Any) -> None:
