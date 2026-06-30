@@ -1,9 +1,10 @@
 {
   "domain": "tessera_spike",
   "name": "Tessera Spike Harness",
-  "version": "0.0.1",
-  "documentation": "https://example.invalid/tessera-spike",
-  "dependencies": [],
   "codeowners": [],
-  "requirements": []
+  "dependencies": [],
+  "documentation": "https://github.com/NoSilver78/tessera",
+  "iot_class": "calculated",
+  "requirements": [],
+  "version": "0.0.1"
 }

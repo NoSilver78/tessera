@@ -1,0 +1,39 @@
+name: Validate
+
+# HACS- und hassfest-Validierung. Ergaenzt (ersetzt nicht) ci.yml (Lint/Typ/Test).
+# Stand: hassfest + quality (ci.yml) sind gruen. Die hacs/action validiert das Repo
+# REMOTE ueber die GitHub-API am Default-Branch (lokaler checkout aendert das nicht,
+# empirisch geprueft) — der HACS-Check wird daher erst gruen, wenn hacs.json + Manifest
+# auf 'main' liegen (= Merge dieses PRs). 'brands' bleibt ignoriert, bis 'tessera' in
+# home-assistant/brands eingetragen ist (Release-Schritt).
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hacs:
+    name: HACS
+    runs-on: ubuntu-latest
+    steps:
+      - name: HACS validation
+        uses: hacs/action@main
+        with:
+          category: integration
+          comment: "false"
+          # 'brands' ignorieren, bis 'tessera' in home-assistant/brands eingetragen ist
+          # (Inline custom_components/tessera/brand/ deckt nur HAs Icon-Rendering).
+          ignore: brands
+
+  hassfest:
+    name: hassfest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: home-assistant/actions/hassfest@master

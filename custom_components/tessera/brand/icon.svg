@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="g" gradientUnits="userSpaceOnUse" x1="64" y1="40" x2="456" y2="472">
+      <stop offset="0" stop-color="#22D3EE"/>
+      <stop offset="1" stop-color="#4F46E5"/>
+    </linearGradient>
+    <linearGradient id="s" gradientUnits="userSpaceOnUse" x1="256" y1="0" x2="256" y2="280">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="512" height="512" rx="120" fill="url(#g)"/>
+  <rect x="0" y="0" width="512" height="512" rx="120" fill="url(#s)"/>
+  <g fill="#ffffff">
+    <rect x="72" y="72" width="104" height="104" rx="26"/>
+    <rect x="204" y="72" width="104" height="104" rx="26"/>
+    <rect x="336" y="72" width="104" height="104" rx="26"/>
+    <rect x="204" y="204" width="104" height="104" rx="26"/>
+    <rect x="204" y="336" width="104" height="104" rx="26"/>
+  </g>
+  <g fill="#ffffff" fill-opacity="0.14" stroke="#ffffff" stroke-opacity="0.5" stroke-width="7">
+    <rect x="72" y="204" width="104" height="104" rx="26"/>
+    <rect x="336" y="204" width="104" height="104" rx="26"/>
+    <rect x="72" y="336" width="104" height="104" rx="26"/>
+    <rect x="336" y="336" width="104" height="104" rx="26"/>
+  </g>
+</svg>
