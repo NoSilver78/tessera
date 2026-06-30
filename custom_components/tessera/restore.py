@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections.abc import Collection, Mapping
 from typing import Any, Literal, Protocol, TypedDict
 
+from ._user_helpers import _is_unmanaged_user, _user_group_ids
 from .auth_adapter import (
     GROUP_ID_ADMIN,
     AuthRecoverySnapshot,
@@ -123,18 +124,6 @@ def _assert_restore_owner_or_admin_survives(
         if GROUP_ID_ADMIN in group_ids:
             return
     raise LockoutRisk("restore would remove the last owner/admin recovery path")
-
-
-def _is_unmanaged_user(user: Any) -> bool:
-    return bool(getattr(user, "is_owner", False)) or bool(
-        getattr(user, "system_generated", False)
-    )
-
-
-def _user_group_ids(user: Any) -> list[str]:
-    if hasattr(user, "group_ids"):
-        return sorted(str(group_id) for group_id in user.group_ids)
-    return sorted(str(group.id) for group in user.groups)
 
 
 def _redacted_error_detail(error: Exception) -> list[str]:
