@@ -10,6 +10,13 @@ Stand 2026-06-30 (Architekt: Claude) · **Löst `spec-e3-enforce.md` §6 (Design
 
 ## Teil A — E2.5: D9-Produkt-Gate (baubar jetzt, non-scharf)
 
+> **⚠️ v2-Revision (auth-scoped Veto).** Die unten beschriebene v1-Logik („jede user-erreichbare
+> Surface = Hard-Veto", Default fail-closed) wurde im Code zu **D9 v2** weiterentwickelt: Nur
+> **auth-berührende** oder **nicht-analysierbare** (compiled/dynamic) Surfaces blocken noch; ein
+> expliziter **Ack** oder eine kuratierte Klassifikation übersteuert den Veto; generische UI-Surfaces
+> und unbekannte Components ohne Auth-Surface **laufen per Default**. Maßgeblich sind `d9_gate.py`
+> und [SECURITY.md](../SECURITY.md). Dieser Abschnitt bleibt als Design-Historie erhalten.
+
 ### A.1 Problem & Scope-Grenze (ehrlich)
 `spec-e3-enforce.md` §2 Schritt 3 verlangt vor jedem Enforce-Write ein **D9-Gate**: existieren installierte Komponenten mit **user-token-erreichbarer** Bypass-Oberfläche (nicht-entity-geprüfte Services, HTTP-Views, WS-Commands, die ein *confined User* aufruft), muss Enforce **fail-closed blockiert** werden.
 
