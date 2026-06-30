@@ -84,6 +84,26 @@
     "recompile": {
       "name": "Recompile",
       "description": "Recompiles every loaded Tessera entry for its current mode: a read-only preview in off/monitor, or a native re-apply (writes the auth store) in enforce. Takes no input."
+    },
+    "acknowledge_component": {
+      "name": "Acknowledge component",
+      "description": "Acknowledge a custom component so its D9 conflict-veto is overridden for the current installed version (admin-only; the ack auto-invalidates if the component changes).",
+      "fields": {
+        "domain": {
+          "name": "Domain",
+          "description": "The custom component domain to acknowledge."
+        }
+      }
+    },
+    "revoke_component_ack": {
+      "name": "Revoke component acknowledgement",
+      "description": "Revoke a D9 custom component acknowledgement and immediately recompile Tessera's current mode.",
+      "fields": {
+        "domain": {
+          "name": "Domain",
+          "description": "The custom component domain whose acknowledgement should be revoked."
+        }
+      }
     }
   },
   "issues": {

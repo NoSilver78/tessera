@@ -18,7 +18,11 @@ from custom_components.tessera.d9_classification import (
     D9_VERDICT_UNKNOWN,
     D9ClassificationEntry,
 )
-from custom_components.tessera.d9_gate import compute_component_hash, evaluate_d9_gate
+from custom_components.tessera.d9_gate import (
+    compute_component_ack_target,
+    compute_component_hash,
+    evaluate_d9_gate,
+)
 from custom_components.tessera.schema import (
     TesseraSchemaError,
     default_config_data,
@@ -243,6 +247,49 @@ async def test_admin_ack_overrides_auth_surface_veto(tmp_path: Path) -> None:
     assert result["by_component"]["acked_auth"]["verdict"] == D9_VERDICT_ALLOW
     assert result["by_component"]["acked_auth"]["source"] == "ack"
     assert result["enforce_blocked"] is False
+
+
+async def test_computed_ack_target_matches_gate_then_revoke_blocks_again(
+    tmp_path: Path,
+) -> None:
+    """Ack target helper pins exactly the version/hash the D9 gate consumes."""
+    _write_component(
+        tmp_path,
+        "ack_service_auth",
+        py_source=(
+            "async def async_setup(hass, config):\n"
+            "    await hass.auth.async_update_user(None, group_ids=[])\n"
+        ),
+    )
+    hass = FakeHass(tmp_path)
+    config = default_config_data()
+
+    blocked = await evaluate_d9_gate(hass, config)
+    target = await compute_component_ack_target(hass, "ack_service_auth")
+    assert target is not None
+    config["d9_acks"] = {
+        "ack_service_auth": {
+            **target,
+            "accepted_at": "2026-07-01T00:00:00Z",
+        }
+    }
+    allowed = await evaluate_d9_gate(hass, config)
+    config["d9_acks"].pop("ack_service_auth")
+    blocked_again = await evaluate_d9_gate(hass, config)
+
+    assert blocked["by_component"]["ack_service_auth"]["verdict"] == D9_VERDICT_UNKNOWN
+    assert allowed["by_component"]["ack_service_auth"]["verdict"] == D9_VERDICT_ALLOW
+    assert allowed["by_component"]["ack_service_auth"]["source"] == "ack"
+    assert blocked_again["by_component"]["ack_service_auth"]["verdict"] == (
+        D9_VERDICT_UNKNOWN
+    )
+
+
+async def test_computed_ack_target_returns_none_for_non_disk_domain(
+    tmp_path: Path,
+) -> None:
+    """Loader-only or unknown components cannot be acknowledged."""
+    assert await compute_component_ack_target(FakeHass(tmp_path), "missing") is None
 
 
 async def test_compiled_artifact_is_vetoed(tmp_path: Path) -> None:

@@ -110,6 +110,13 @@ class D9GateResult(TypedDict):
     enforce_blocked: bool
 
 
+class D9AckTarget(TypedDict):
+    """Version/hash tuple an admin ack must pin."""
+
+    version: str | None
+    content_hash: str
+
+
 class _HassConfigLike(Protocol):
     """Tiny subset of ``hass.config`` needed by this read-only gate."""
 
@@ -213,6 +220,30 @@ async def evaluate_d9_gate(
         "by_component": by_component,
         "blocking": blocking,
         "enforce_blocked": bool(blocking),
+    }
+
+
+async def compute_component_ack_target(
+    hass: _HassLike, domain: str
+) -> D9AckTarget | None:
+    """Return the version/hash tuple the D9 gate checks for ``domain``.
+
+    The ack writer must pin the exact values the gate will later compare
+    against. This intentionally reuses the gate's own disk scan, loader lookup,
+    version resolution, and content-hash primitives. ``None`` means the
+    component is not present on disk and therefore cannot be acknowledged.
+    """
+    root = Path(hass.config.path("custom_components"))
+    disk_components = await _run_executor(hass, _scan_custom_components, root)
+    disk = disk_components.get(domain)
+    if disk is None:
+        return None
+
+    loader_components = await _async_get_custom_components(hass)
+    integration = loader_components.get(domain)
+    return {
+        "version": _component_version(integration, disk),
+        "content_hash": disk.content_hash,
     }
 
 

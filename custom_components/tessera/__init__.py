@@ -11,9 +11,14 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+import voluptuous as vol
 from homeassistant.components.frontend import async_remove_panel
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.components.panel_custom import async_register_panel
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.service import async_register_admin_service
+from homeassistant.util import dt as dt_util
 
 from . import websocket as tessera_websocket
 from .auth_adapter import (
@@ -23,11 +28,12 @@ from .auth_adapter import (
     UserBindingAdapter,
 )
 from .const import DOMAIN, MODE_ENFORCE, MODE_MONITOR, MODE_OFF
+from .d9_gate import compute_component_ack_target
 from .mode_manager import apply_enforce_plan, compute_enforce_plan
 from .monitor import compile_current, lint_current_preview, log_monitor_preview
 from .resolver import AreaEntityResolver
 from .restore import async_restore_to_pre_install
-from .schema import TesseraConfigData
+from .schema import D9AckData, TesseraConfigData
 from .state import (
     TesseraStateData,
     decide_startup_recovery,
@@ -41,10 +47,14 @@ if TYPE_CHECKING:
 
 LOGGER = logging.getLogger(__name__)
 SERVICE_RECOMPILE = "recompile"
+SERVICE_ACK_COMPONENT = "acknowledge_component"
+SERVICE_REVOKE_COMPONENT_ACK = "revoke_component_ack"
+SERVICE_COMPONENT_SCHEMA = vol.Schema({vol.Required("domain"): cv.string})
 # Bookkeeping sentinels stored in the domain bucket alongside per-entry dicts.
 # Their values are non-dict (bool), so the isinstance(dict) filter in
 # _has_loaded_entries cleanly distinguishes them from real entry data.
 DATA_SERVICE_REGISTERED = "__recompile_service_registered"
+DATA_ACK_SERVICES_REGISTERED = "__ack_services_registered"
 DATA_WEBSOCKET_REGISTERED = "__websocket_registered"
 DATA_PANEL_REGISTERED = "__panel_registered"
 PANEL_URL_PATH = "tessera"
@@ -68,6 +78,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     domain_data = _domain_data(hass)
     domain_data[entry.entry_id] = {"store": TesseraStore(hass)}
     _register_recompile_service(hass)
+    _register_ack_services(hass)
     _register_websocket_api(hass)
     await _async_register_matrix_panel(hass)
     recovered = await _startup_recovery_safely(
@@ -102,7 +113,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if domain_data.pop(DATA_PANEL_REGISTERED, None) is True:
             async_remove_panel(hass, PANEL_URL_PATH, warn_if_unknown=False)
         hass.services.async_remove(DOMAIN, SERVICE_RECOMPILE)
+        hass.services.async_remove(DOMAIN, SERVICE_ACK_COMPONENT)
+        hass.services.async_remove(DOMAIN, SERVICE_REVOKE_COMPONENT_ACK)
         domain_data.pop(DATA_SERVICE_REGISTERED, None)
+        domain_data.pop(DATA_ACK_SERVICES_REGISTERED, None)
     return True
 
 
@@ -126,6 +140,76 @@ def _register_recompile_service(hass: HomeAssistant) -> None:
 
     hass.services.async_register(DOMAIN, SERVICE_RECOMPILE, _handle_recompile)
     domain_data[DATA_SERVICE_REGISTERED] = True
+
+
+def _register_ack_services(hass: HomeAssistant) -> None:
+    """Register admin-only D9 ack services once per HA instance."""
+    domain_data = _domain_data(hass)
+    if domain_data.get(DATA_ACK_SERVICES_REGISTERED) is True:
+        return
+
+    async def _handle_acknowledge(call: ServiceCall) -> None:
+        domain = str(call.data["domain"])
+        target = await compute_component_ack_target(hass, domain)
+        if target is None:
+            raise HomeAssistantError(
+                f"Cannot acknowledge unknown or non-disk component: {domain}"
+            )
+
+        accepted_at = dt_util.utcnow().isoformat()
+        ack: D9AckData = {
+            "version": target["version"],
+            "content_hash": target["content_hash"],
+            "accepted_at": accepted_at,
+        }
+        for key, entry_data in list(_domain_data(hass).items()):
+            if not isinstance(entry_data, dict):
+                continue
+            store = cast(TesseraStore, entry_data["store"])
+            config = await store.async_load_config()
+            config["d9_acks"] = {**config["d9_acks"], domain: ack}
+            await store.async_save_config(config)
+            await _compile_for_mode_safely(hass, key, entry_data)
+            LOGGER.warning(
+                "Tessera D9 component ack recorded: domain=%s version=%s",
+                domain,
+                target["version"],
+            )
+
+    async def _handle_revoke(call: ServiceCall) -> None:
+        domain = str(call.data["domain"])
+        for key, entry_data in list(_domain_data(hass).items()):
+            if not isinstance(entry_data, dict):
+                continue
+            store = cast(TesseraStore, entry_data["store"])
+            config = await store.async_load_config()
+            revoked_ack = config["d9_acks"].get(domain)
+            config["d9_acks"] = {
+                key: value for key, value in config["d9_acks"].items() if key != domain
+            }
+            await store.async_save_config(config)
+            await _compile_for_mode_safely(hass, key, entry_data)
+            LOGGER.warning(
+                "Tessera D9 component ack revoked: domain=%s version=%s",
+                domain,
+                revoked_ack.get("version") if revoked_ack is not None else None,
+            )
+
+    async_register_admin_service(
+        hass,
+        DOMAIN,
+        SERVICE_ACK_COMPONENT,
+        _handle_acknowledge,
+        schema=SERVICE_COMPONENT_SCHEMA,
+    )
+    async_register_admin_service(
+        hass,
+        DOMAIN,
+        SERVICE_REVOKE_COMPONENT_ACK,
+        _handle_revoke,
+        schema=SERVICE_COMPONENT_SCHEMA,
+    )
+    domain_data[DATA_ACK_SERVICES_REGISTERED] = True
 
 
 def _register_websocket_api(hass: HomeAssistant) -> None:
