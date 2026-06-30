@@ -107,13 +107,17 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 def _register_recompile_service(hass: HomeAssistant) -> None:
-    """Register the monitor-mode recompilation service once per HA instance."""
+    """Register the recompile service once per HA instance."""
     domain_data = _domain_data(hass)
     if domain_data.get(DATA_SERVICE_REGISTERED) is True:
         return
 
     async def _handle_recompile(call: ServiceCall) -> None:
-        """Recompile all loaded Tessera entries without native writes."""
+        """Recompile every loaded Tessera entry for its current mode.
+
+        In off/monitor this rebuilds the read-only projection only; in enforce it
+        re-applies the native auth bindings (writes the auth store), like setup.
+        """
         del call  # parameterless service; the call carries no Tessera input
         for key, entry_data in list(_domain_data(hass).items()):
             if key == DATA_SERVICE_REGISTERED or not isinstance(entry_data, dict):

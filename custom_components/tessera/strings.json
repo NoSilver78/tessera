@@ -83,7 +83,7 @@
   "services": {
     "recompile": {
       "name": "Recompile",
-      "description": "Recompiles the read-only Tessera monitor preview for all loaded entries. Takes no input and performs no native permission writes."
+      "description": "Recompiles every loaded Tessera entry for its current mode: a read-only preview in off/monitor, or a native re-apply (writes the auth store) in enforce. Takes no input."
     }
   },
   "issues": {
