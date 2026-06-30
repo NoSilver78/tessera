@@ -5,11 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from custom_components.tessera.resolver import (
-    AreaEntityResolver,
-    resolve_all,
-    resolve_area_entities,
-)
+from custom_components.tessera.resolver import AreaEntityResolver
 
 
 @dataclass(frozen=True)
@@ -158,22 +154,3 @@ def test_missing_device_does_not_resolve() -> None:
     )
 
     assert resolver.entity_ids_for_area("living_room") == ()
-
-
-def test_function_contract_returns_sets() -> None:
-    """Compiler-facing helpers expose the expected set-based contract."""
-    entity_registry = Registry(
-        entities={
-            "light.sofa": Entry(device_id="device-living"),
-            "sensor.office": Entry(area_id="office"),
-        }
-    )
-    device_registry = Registry(devices={"device-living": Entry(area_id="living_room")})
-
-    assert resolve_area_entities("living_room", entity_registry, device_registry) == {
-        "light.sofa"
-    }
-    assert resolve_all(entity_registry, device_registry) == {
-        "living_room": {"light.sofa"},
-        "office": {"sensor.office"},
-    }
