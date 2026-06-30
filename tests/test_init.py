@@ -9,9 +9,12 @@ from typing import Any
 import custom_components.tessera as tessera_init
 import pytest
 from custom_components.tessera import (
+    DATA_ACK_SERVICES_REGISTERED,
     DATA_SERVICE_REGISTERED,
     DOMAIN,
+    SERVICE_ACK_COMPONENT,
     SERVICE_RECOMPILE,
+    SERVICE_REVOKE_COMPONENT_ACK,
 )
 from custom_components.tessera.auth_adapter import (
     AuthRecoverySnapshot,
@@ -23,6 +26,7 @@ from custom_components.tessera.schema import (
     default_policy_data,
 )
 from custom_components.tessera.state import default_state_data, snapshot_to_state_data
+from homeassistant.exceptions import HomeAssistantError, Unauthorized
 
 
 class FakeServices:
@@ -31,11 +35,21 @@ class FakeServices:
     def __init__(self) -> None:
         """Initialize registered handlers and removal calls."""
         self.handlers: dict[tuple[str, str], Any] = {}
+        self.schemas: dict[tuple[str, str], Any] = {}
         self.removed: list[tuple[str, str]] = []
 
-    def async_register(self, domain: str, service: str, handler: Any) -> None:
+    def async_register(
+        self,
+        domain: str,
+        service: str,
+        handler: Any,
+        schema: Any = None,
+        *_args: Any,
+        **_kwargs: Any,
+    ) -> None:
         """Register one fake service handler."""
         self.handlers[(domain, service)] = handler
+        self.schemas[(domain, service)] = schema
 
     def async_remove(self, domain: str, service: str) -> None:
         """Record service removal and drop the fake handler."""
@@ -201,11 +215,65 @@ class E35Store:
         return deepcopy(self.state)
 
 
+class AckStore(E35Store):
+    """Store double for D9 ack service tests."""
+
+    def __init__(self, *, fail_save: bool = False) -> None:
+        """Initialize an off-mode config store with optional save failure."""
+        super().__init__("off")
+        self.fail_save = fail_save
+        self.save_calls = 0
+
+    async def async_save_config(self, config: dict[str, Any]) -> None:
+        """Persist fake config or inject a write failure."""
+        self.save_calls += 1
+        if self.fail_save:
+            raise RuntimeError("write failed")
+        await super().async_save_config(config)
+
+
 @dataclass(frozen=True)
 class FakeEntry:
     """Minimal config entry double."""
 
     entry_id: str
+
+
+@dataclass(frozen=True)
+class FakeServiceCall:
+    """Minimal service call double carrying service data and admin state."""
+
+    data: dict[str, Any]
+    is_admin: bool = True
+
+
+def _patch_admin_service_registration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> list[tuple[str, str]]:
+    """Replace HA's admin-service helper with an enforcing fake."""
+    admin_services: list[tuple[str, str]] = []
+
+    def fake_register_admin_service(
+        hass: Any,
+        domain: str,
+        service: str,
+        handler: Any,
+        *,
+        schema: Any = None,
+    ) -> None:
+        admin_services.append((domain, service))
+
+        async def admin_wrapped(call: FakeServiceCall) -> None:
+            if not call.is_admin:
+                raise Unauthorized
+            await handler(call)
+
+        hass.services.async_register(domain, service, admin_wrapped, schema=schema)
+
+    monkeypatch.setattr(
+        tessera_init, "async_register_admin_service", fake_register_admin_service
+    )
+    return admin_services
 
 
 @pytest.mark.asyncio
@@ -254,7 +322,12 @@ async def test_unload_entry_keeps_bucket_and_removes_service_after_last_entry(
     assert DOMAIN in hass.data
     assert "entry-2" not in hass.data[DOMAIN]
     assert DATA_SERVICE_REGISTERED not in hass.data[DOMAIN]
-    assert hass.services.removed == [(DOMAIN, SERVICE_RECOMPILE)]
+    assert DATA_ACK_SERVICES_REGISTERED not in hass.data[DOMAIN]
+    assert hass.services.removed == [
+        (DOMAIN, SERVICE_RECOMPILE),
+        (DOMAIN, SERVICE_ACK_COMPONENT),
+        (DOMAIN, SERVICE_REVOKE_COMPONENT_ACK),
+    ]
 
 
 @pytest.mark.asyncio
@@ -457,6 +530,158 @@ async def test_recompile_service_runs_enforce_apply_path(
     assert events == ["compute", "snapshot", "set_snapshot", "mark", "apply", "clear"]
     assert store.state["apply_in_progress"] is False
     assert entry_data["mode"] == "enforce"
+
+
+@pytest.mark.asyncio
+async def test_d9_ack_services_are_admin_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D9 ack services are registered through HA's admin-only service helper."""
+    hass = FakeHass()
+    admin_services = _patch_admin_service_registration(monkeypatch)
+    store = AckStore()
+    hass.data[DOMAIN] = {"entry-1": {"store": store}}
+
+    async def fake_target(_hass: Any, domain: str) -> dict[str, str | None]:
+        assert domain == "auth_toucher"
+        return {"version": "1.0.0", "content_hash": "a" * 64}
+
+    monkeypatch.setattr(tessera_init, "compute_component_ack_target", fake_target)
+    tessera_init._register_ack_services(hass)
+    handler = hass.services.handlers[(DOMAIN, SERVICE_ACK_COMPONENT)]
+
+    with pytest.raises(Unauthorized):
+        await handler(FakeServiceCall({"domain": "auth_toucher"}, is_admin=False))
+    await handler(FakeServiceCall({"domain": "auth_toucher"}, is_admin=True))
+
+    assert admin_services == [
+        (DOMAIN, SERVICE_ACK_COMPONENT),
+        (DOMAIN, SERVICE_REVOKE_COMPONENT_ACK),
+    ]
+    assert hass.data[DOMAIN][DATA_ACK_SERVICES_REGISTERED] is True
+    assert store.config["d9_acks"]["auth_toucher"]["content_hash"] == "a" * 64
+
+
+@pytest.mark.asyncio
+async def test_d9_ack_service_persists_and_recompiles(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Acknowledge writes a hash-bound ack and immediately recompiles safely."""
+    hass = FakeHass()
+    _patch_admin_service_registration(monkeypatch)
+    store = AckStore()
+    entry_data: dict[str, Any] = {"store": store}
+    hass.data[DOMAIN] = {"entry-1": entry_data}
+    compile_calls: list[tuple[str, dict[str, Any]]] = []
+
+    async def fake_target(_hass: Any, domain: str) -> dict[str, str | None]:
+        assert domain == "auth_toucher"
+        return {"version": "1.0.0", "content_hash": "b" * 64}
+
+    async def fake_compile(
+        _hass: Any, entry_id: str, compiled_entry_data: dict[str, Any]
+    ) -> None:
+        compile_calls.append((entry_id, compiled_entry_data))
+
+    monkeypatch.setattr(tessera_init, "compute_component_ack_target", fake_target)
+    monkeypatch.setattr(tessera_init, "_compile_for_mode_safely", fake_compile)
+    tessera_init._register_ack_services(hass)
+
+    handler = hass.services.handlers[(DOMAIN, SERVICE_ACK_COMPONENT)]
+    await handler(FakeServiceCall({"domain": "auth_toucher"}))
+
+    ack = store.config["d9_acks"]["auth_toucher"]
+    assert ack["version"] == "1.0.0"
+    assert ack["content_hash"] == "b" * 64
+    assert isinstance(ack["accepted_at"], str)
+    assert ack["accepted_at"]
+    assert compile_calls == [("entry-1", entry_data)]
+
+
+@pytest.mark.asyncio
+async def test_d9_ack_service_unknown_domain_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unknown/non-disk domains cannot be acknowledged."""
+    hass = FakeHass()
+    _patch_admin_service_registration(monkeypatch)
+    store = AckStore()
+    hass.data[DOMAIN] = {"entry-1": {"store": store}}
+
+    async def fake_target(_hass: Any, _domain: str) -> None:
+        return None
+
+    monkeypatch.setattr(tessera_init, "compute_component_ack_target", fake_target)
+    tessera_init._register_ack_services(hass)
+
+    handler = hass.services.handlers[(DOMAIN, SERVICE_ACK_COMPONENT)]
+    with pytest.raises(HomeAssistantError, match="unknown or non-disk component"):
+        await handler(FakeServiceCall({"domain": "missing"}))
+
+    assert store.config["d9_acks"] == {}
+    assert store.save_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_d9_ack_service_save_failure_leaves_store_unchanged(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Save failures bubble and do not mutate the persisted ack state."""
+    hass = FakeHass()
+    _patch_admin_service_registration(monkeypatch)
+    store = AckStore(fail_save=True)
+    hass.data[DOMAIN] = {"entry-1": {"store": store}}
+
+    async def fake_target(_hass: Any, _domain: str) -> dict[str, str | None]:
+        return {"version": "1.0.0", "content_hash": "c" * 64}
+
+    async def fail_compile(*_args: Any, **_kwargs: Any) -> None:
+        raise AssertionError("compile must not run after save failure")
+
+    monkeypatch.setattr(tessera_init, "compute_component_ack_target", fake_target)
+    monkeypatch.setattr(tessera_init, "_compile_for_mode_safely", fail_compile)
+    tessera_init._register_ack_services(hass)
+
+    handler = hass.services.handlers[(DOMAIN, SERVICE_ACK_COMPONENT)]
+    with pytest.raises(RuntimeError, match="write failed"):
+        await handler(FakeServiceCall({"domain": "auth_toucher"}))
+
+    assert store.config["d9_acks"] == {}
+
+
+@pytest.mark.asyncio
+async def test_d9_revoke_ack_is_idempotent_and_recompiles_on_change(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Revoke removes an existing ack, recompiles, and tolerates missing acks."""
+    hass = FakeHass()
+    _patch_admin_service_registration(monkeypatch)
+    store = AckStore()
+    store.config["d9_acks"] = {
+        "auth_toucher": {
+            "version": "1.0.0",
+            "content_hash": "d" * 64,
+            "accepted_at": "2026-07-01T00:00:00Z",
+        }
+    }
+    entry_data: dict[str, Any] = {"store": store}
+    hass.data[DOMAIN] = {"entry-1": entry_data}
+    compile_calls: list[str] = []
+
+    async def fake_compile(
+        _hass: Any, entry_id: str, _entry_data: dict[str, Any]
+    ) -> None:
+        compile_calls.append(entry_id)
+
+    monkeypatch.setattr(tessera_init, "_compile_for_mode_safely", fake_compile)
+    tessera_init._register_ack_services(hass)
+    handler = hass.services.handlers[(DOMAIN, SERVICE_REVOKE_COMPONENT_ACK)]
+
+    await handler(FakeServiceCall({"domain": "auth_toucher"}))
+    await handler(FakeServiceCall({"domain": "auth_toucher"}))
+
+    assert store.config["d9_acks"] == {}
+    assert compile_calls == ["entry-1", "entry-1"]
 
 
 @pytest.mark.asyncio

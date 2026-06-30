@@ -48,6 +48,8 @@ aus **realistischen Fixtures, getesteten Invarianten und unabhängigen Perspekti
 | fail-safe-to-monitor bei jedem Fehler | `test_mode_switch_restore_failure_fails_safe_to_monitor`, `test_enforce_clean_plan_snapshots_journals_applies_and_clears` |
 | Persistierter Recovery-State wird validiert | `test_rejects_malformed_snapshot_container`, `test_rejects_snapshot_user_missing_user_id`, `test_rejects_duplicate_snapshot_user_id` (test_state.py) |
 | D9 auth-scoped Veto + Ack-Override | `test_auth_mutating_component_is_vetoed`, `test_admin_ack_overrides_auth_surface_veto`, `test_compiled_artifact_is_vetoed` |
+| D9-Ack nur durch Admin schreibbar | `test_d9_ack_services_are_admin_only` |
+| D9-Ack matcht exakt aktuelle Version + Content-Hash (Service↔Gate-Konsistenz) | `test_computed_ack_target_matches_gate_then_revoke_blocks_again`, `test_d9_ack_service_persists_and_recompiles` |
 | Panel/Matrix nur für Admins | `test_matrix_websocket_requires_admin`, `test_panel_registers_admin_only_and_is_idempotent` |
 
 ## Mechanismen

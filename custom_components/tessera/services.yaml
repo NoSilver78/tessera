@@ -4,3 +4,15 @@
 # read-only preview in off/monitor, and a native re-apply (auth-store writes)
 # in enforce.
 recompile:
+acknowledge_component:
+  fields:
+    domain:
+      required: true
+      selector:
+        text:
+revoke_component_ack:
+  fields:
+    domain:
+      required: true
+      selector:
+        text:
