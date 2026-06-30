@@ -36,7 +36,10 @@ Verdikt je installierte Custom-Komponente ∈ `{ALLOW, DENY, TIER-2, UNKNOWN_BLO
 - **ALLOW** (via gebündelter Tabelle ODER User-Ack) **nur**, wenn alle drei exakt matchen **und** Surface-Veto nicht griff. Gleiche `version` + geänderter Code ⇒ Hash kippt ⇒ Ack/Tabelle erlischt ⇒ UNKNOWN. Schließt „gleiche Version, neuer Code" **und** Domain-Squat (identität via name+version ohne Integritätsbindung war die Wurzel).
 - **Versions-Vergleich** immer via `AwesomeVersion(...)`, nie roh-`str`; `version` ist `None`-fähig.
 
-**(3) Quellen** (Präzedenz): gebündelte **Klassifikations-Tabelle** (`d9_classification.py`, kuratiert, `domain → {version, content_hash} → Verdikt`) → **User-Ack-Liste** (`config.d9_acks`, s. C2: auditiert + ablaufend) → sonst **UNKNOWN**.
+**(3) Quellen** (Präzedenz, alle fail-closed — Codex-Review 2026-06-30 eingearbeitet):
+- **Klassifikations-Tabelle** (`d9_classification.py`): jeder ALLOW-Eintrag trägt einen **expliziten Belegtyp** (`runtime_verified_allow` / `no_surface_verified` / `tier2_accepted`) + `version` + `content_hash` + Grund. **Ohne Belegtyp ⇒ fail-closed** (wie UNKNOWN). Zeigt die Komponente eine im Eintrag **nicht erwartete Oberfläche** ⇒ fail-closed, auch bei Hash-Match.
+- **User-Ack** (`config.d9_acks`, auditiert + ablaufend, C2-Stil) — gilt **NUR für `UNKNOWN_BLOCK_ENFORCE`**, versions+hash-gebunden. **`DENY` ist NICHT per Admin-Ack freischaltbar** (sonst = UNKNOWN unter anderem Namen) → DENY bleibt blockierend bzw. braucht einen separaten, höherwertigen Sign-off (Tier-2/Out-of-scope, dokumentiert).
+- sonst **UNKNOWN**.
 
 ### A.4 Re-Evaluation & ehrliche Grenze (Gate-Befund)
 - **Frischer Bestand pro Apply:** vor jedem Enforce-Apply/`recompile` den `custom_components/`-Bestand **frisch von Platte** scannen (Executor) — **nicht** allein das gecachte `async_get_custom_components`-Dict.
@@ -48,7 +51,7 @@ Verdikt je installierte Custom-Komponente ∈ `{ALLOW, DENY, TIER-2, UNKNOWN_BLO
 
 ### A.6 DoD (Codex-Task E2.5) — mit den Loader-Quirks als Adversarial-Tests
 - `d9_gate.py` + `d9_classification.py` (Tabelle) + Schema `config.d9_acks`.
-- **Adversarial-Tests (Pflicht):** (a) Komponente mit runtime-registrierten Services **ohne** `services.yaml` ⇒ UNKNOWN; (b) `integration_type="entity"` aber mit View/WS-Marker ⇒ UNKNOWN; (c) gleiche `version`, geänderter `content_hash` ⇒ Ack erlischt ⇒ UNKNOWN; (d) post-apply-Install ⇒ fail-safe-to-monitor. Plus: `async_get_custom_components` + Scan gemockt (HA-frei). · **Adversarial-Panel** vor Merge.
+- **Adversarial-Tests (Pflicht):** (a) Komponente mit runtime-registrierten Services **ohne** `services.yaml` ⇒ UNKNOWN; (b) `integration_type="entity"` aber mit View/WS-Marker ⇒ UNKNOWN; (c) gleiche `version`, geänderter `content_hash` ⇒ Ack erlischt ⇒ UNKNOWN; (d) post-apply-Install ⇒ fail-safe-to-monitor; (e) Tabellen-ALLOW + neu erkannte/nicht-deklarierte Oberfläche ⇒ UNKNOWN; (f) Ack überschreibt `DENY` **nicht**; (g) Tabellen-Eintrag ohne Belegtyp ⇒ fail-closed. Plus: `async_get_custom_components` + Scan gemockt (HA-frei). · **Adversarial-Panel** vor Merge.
 
 ---
 
