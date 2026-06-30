@@ -4,7 +4,7 @@ Stand 2026-06-30 (Architekt: Claude) · **Löst `spec-e3-enforce.md` §6 (Design
 
 > **Adversarial-gegated** (Gate `wb77hllxb`, 4 Reviewer): Verdikt **SOUND-MIT-FIXES** — Skelett trägt, aber der D9-Gate hatte echte Löcher (fälschbare Surface-Heuristik, fehlende Integritätsbindung, Cache/Re-Eval-Lücke, A.1/C1/C2-Overclaims). **Diese Fassung arbeitet alle 16 Befunde ein.**
 
-> **Status:** Teil A (E2.5) = Codex-baubar (read-only). Teil B = Apply-Konzept. **Teil C = Empfehlungen, die dein OK brauchen** (verschieben Trust-Boundaries).
+> **Status:** Teil A (E2.5) = Codex-baubar (read-only). Teil B = Apply-Konzept. **Teil C = ENTSCHIEDEN** (Sign-off Michael 2026-06-30 — C1/C2/C3 alle „so festschreiben").
 
 ---
 
@@ -79,7 +79,7 @@ In `_validate_full_group_superset` ergänzen: **`system-admin` im neuen Set ist 
 
 ---
 
-## Teil C — §6-Design-Entscheidungen (Empfehlungen — brauchen dein OK)
+## Teil C — §6-Design-Entscheidungen — ENTSCHIEDEN (Sign-off 2026-06-30)
 
 ### C1 · System-Kontext `Context(user_id=None)` — differenziert (Gate-Befund)
 **Empfehlung, zweigeteilt:**
@@ -100,5 +100,5 @@ In `_validate_full_group_superset` ergänzen: **`system-admin` im neuen Set ist 
 
 ## Was das freischaltet
 - **Sofort baubar (non-scharf, Codex):** Teil A → `d9_gate.py` (E2.5), in der **gehärteten** Fassung (Hard-Veto-Scan + content_hash + frischer Bestand). Nach Panel-Gate mergebar.
-- **Braucht dein OK (Teil C):** die 3 Empfehlungen verschieben Trust-Boundaries → festschreiben in `concept.md`/`spec-e3-enforce.md` erst nach Sign-off.
+- **Teil C entschieden** (Sign-off 2026-06-30): in `spec-e3-enforce.md` §6 festgeschrieben; bei E3-Bau in `concept.md` §6.5/§11 + §8 einarbeiten.
 - **Bleibt gesperrt:** der E3-Scharf-Schritt — weiterhin **D10 + Human-Go + Soak**.

@@ -30,14 +30,14 @@ volles Superset (kein Delta) · ≥1 Owner/Admin behält Zugang · Version-fail-
 ## 5. Gating
 E3 als **mehrere kleine Codex-Schritte** (Mode-Manager-Skelett → Write-Sequenz mit Gates → Restore → E2E), **jeder enforce-kritisch → Adversarial-Panel**. **Erst nach D10-PASS + explizitem Human-Go.** Default-Mode bleibt `monitor` bis bewusst auf `enforce` gestellt + Soak.
 
-## 6. Offene Design-Fragen (für die D10/Morgen-Runde)
-- `Context(user_id=None)`-Systemkontext (D6-Bypass): in v1 dokumentierter Trust-Boundary-Ausschluss **oder** eigene Behandlung? → explizite Entscheidung nötig (concept §-Update).
-- Apply/Ack-UX des Linters: Repairs-Issue vs. blockierender Config-Flow-Schritt.
-- Snapshot-Persistenz: in `tessera.state` (two-phase-apply, concept §8) vs. in-memory.
+## 6. Design-Fragen — ENTSCHIEDEN (2026-06-30, Sign-off Michael; Vollfassung: `spec-e3-design.md` Teil C)
+- **C1 · `Context(user_id=None)`-Systemkontext:** dokumentierter Trust-Boundary-Ausschluss (patchfrei unschließbar). **Assist NICHT pauschal** — via nativem `exposed_entities` für non-admins teil-scopebar (v1-Option).
+- **C2 · Linter-Ack-UX:** die **Apply-Sequenz blockt** (Schritt 4 = das Gate); Repairs-Issue = nur Notification; Ack = **ablaufendes Breakglass-Artefakt** mit Konflikt-Fingerprint (Fingerprint ändert sich → Ack erlischt → erneuter Block).
+- **C3 · Snapshot-Persistenz:** persistent in `.storage/tessera.state` (`pre_install_snapshot` IMMUTABLE, Two-Phase-Journal), **nicht** in-memory.
 
-## 7. ⚠️ Lücken in diesem Plan (Claude-Selbstkritik 2026-06-29 nacht — VOR E3 zu lösen)
-- **D9-Produkt-Gate fehlt.** Die D9-Klassifikation (`ALLOW/DENY/TIER-2/UNKNOWN_BLOCK_ENFORCE`) existiert nur im **Spike** (Welle D). Schritt 3 der Schreib-Sequenz braucht einen **produktseitigen** Mechanismus, der installierte Custom-Components prüft + bei `UNKNOWN_BLOCK_ENFORCE` enforce blockt (fail-closed). → eigener Vorarbeits-Schritt **E2.5** (Produkt-D9-Gate) vor E3-Scharf.
-- **User→Native-Gruppen-Mapping + Gruppen-Lifecycle unter-spezifiziert.** E3 muss pro Tessera-Rolle eine **native HA-Gruppe** mit kompilierter Policy erzeugen/aktualisieren/löschen (`AuthPolicyStoreAdapter`) und User an ihre Rollen-Gruppen binden (`UserBindingAdapter`, volles Superset = alle Rollen-Gruppen + zu erhaltende System-Gruppen). Offen: **Gruppen-Naming + Lifecycle** (Rolle umbenannt/gelöscht → was passiert mit der nativen Gruppe + den Bindungen?). Braucht ein sauberes Konzept VOR der Implementierung — sonst verwaiste native Gruppen / Lockout-Risiko.
+## 7. Plan-Lücken — SPEZIFIZIERT (Vollfassung: `spec-e3-design.md` Teil A/B; adversarial-gegated `wb77hllxb`)
+- **D9-Produkt-Gate → E2.5 spec'd** (`spec-e3-design.md` Teil A): fail-closed Klassifikation installierter Custom-Components, **Surface-Scan als Hard-Veto** (nicht die fälschbare `has_services`-Heuristik), `content_hash`-Trust-Anchor, frischer Platten-Scan gegen den `async_get_custom_components`-Cache. **Read-only, baubar JETZT** (Codex-Task E2.5).
+- **Gruppen-Lifecycle → spec'd** (`spec-e3-design.md` Teil B): `role_id` immutable (Rename = nativer No-Op), Delete = **Rebind→Remove** (No-Drop §8.2), **Empty-Union → `default_role`** (NIE zurück in system-users = Eskalation), Promotion-Guard, `tessera:`-Prefix-Schema-Guard.
 
 ## 8. Vor-E3-Auflagen aus dem Foundation-Security-Audit (2026-06-29 nacht)
 Gesamt-Urteil des holistischen Audits: **SOLIDE-MIT-AUFLAGEN** (allow-only/operate-control/fail-safe/Determinismus halten unter 6000+/200k-Fuzz; Dormanz bestätigt).
