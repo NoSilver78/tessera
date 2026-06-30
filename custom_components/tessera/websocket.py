@@ -12,7 +12,7 @@ from homeassistant.components.websocket_api.connection import ActiveConnection
 from homeassistant.helpers import area_registry as ar
 
 from .config_flow import add_area_grant, encode_grant, remove_area_grant
-from .const import DOMAIN
+from .const import DOMAIN, MODE_ENFORCE
 from .linter import LintReport
 from .monitor import (
     MonitorPreview,
@@ -173,6 +173,16 @@ async def async_set_matrix_grant(
 
     await store.async_save_policy(policy)
     preview = await _refresh_preview(hass, entry_id, entry_data, store, config, policy)
+    if config["mode"] == MODE_ENFORCE:
+        # CXR-02: in enforce a saved grant must re-apply to the native auth store,
+        # not merely refresh the read-only preview. Route through the central
+        # fail-safe mode handler (the same path the options flow uses) so the
+        # change runs the full guarded plan (lockout/D9/allow-only) and falls safe
+        # to monitor on error. Late import breaks the cycle (__init__ imports this
+        # module, not the reverse).
+        from . import _compile_for_mode_safely
+
+        await _compile_for_mode_safely(hass, entry_id, entry_data)
     return _matrix_response(hass, config, policy, preview)
 
 
