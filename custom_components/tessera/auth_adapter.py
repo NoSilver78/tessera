@@ -252,8 +252,9 @@ class UserBindingAdapter:
         """Restore one managed user to an exact pre-install group set.
 
         Unlike enforce binding, restore must be allowed to drop current
-        ``tessera:*`` groups. It still rejects owner/system-generated users,
-        forbidden group ids, and admin demotion.
+        ``tessera:*`` groups and re-apply the captured original (including
+        ``system-users``). It still rejects owner/system-generated users and
+        refuses admin demotion.
         """
         self._assert_supported_version()
         sorted_group_ids = _validate_exact_restore_binding(user, group_ids)
@@ -285,7 +286,7 @@ class UserBindingAdapter:
             snapshots.append(
                 UserGroupSnapshot(
                     user_id=_user_id(user),
-                    group_ids=tuple(_validate_restore_group_ids(user)),
+                    group_ids=tuple(_capture_managed_group_ids(user)),
                 )
             )
         return AuthRecoverySnapshot(users=tuple(snapshots))
@@ -436,21 +437,31 @@ def _validate_full_group_superset(
     return sorted(group_ids)
 
 
-def _validate_restore_group_ids(user: Any) -> list[str]:
-    """Validate a recovery snapshot group set for one managed user."""
+def _capture_managed_group_ids(user: Any) -> list[str]:
+    """Capture one managed user's CURRENT group ids for the recovery snapshot.
+
+    Records the pre-install state verbatim — it must NOT apply the
+    forward-binding allow-list (``_assert_allowed_binding_group_id``). Normal
+    non-admin HA users carry ``system-users`` (the allow-all group); rejecting
+    it here raised on the first such user and silently fail-safed enforce to
+    monitor on every real install. The allow-list belongs on the FORWARD
+    enforce binding (``_validate_full_group_superset``) only.
+    """
     _assert_managed_user(user)
-    group_ids = _user_group_ids(user)
-    for group_id in group_ids:
-        _assert_allowed_binding_group_id(group_id)
-    return sorted(group_ids)
+    return sorted(_user_group_ids(user))
 
 
 def _validate_exact_restore_binding(user: Any, group_ids: Collection[str]) -> list[str]:
-    """Validate an exact restore replacement group set."""
+    """Validate an exact restore replacement group set.
+
+    Restore writes the captured pre-install snapshot back verbatim, so it must
+    NOT apply the forward-binding allow-list — the original legitimately
+    contains ``system-users`` (or other native groups) for normal users.
+    Snapshot integrity itself is validated on load (``validate_state_data``);
+    here only the managed-user guard and the admin-demotion lockout guard apply.
+    """
     _assert_managed_user(user)
     target_group_ids = set(group_ids)
-    for group_id in target_group_ids:
-        _assert_allowed_binding_group_id(group_id)
     current_group_ids = set(_user_group_ids(user))
     if GROUP_ID_ADMIN in current_group_ids and GROUP_ID_ADMIN not in target_group_ids:
         raise LockoutRisk("refusing to remove system-admin from an admin user")

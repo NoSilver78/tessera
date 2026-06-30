@@ -512,6 +512,42 @@ async def test_recovery_snapshot_skips_unmanaged_users() -> None:
 
 
 @pytest.mark.asyncio
+async def test_recovery_snapshot_captures_system_users_member_verbatim() -> None:
+    """Pre-install snapshot records a normal user's ``system-users`` group verbatim.
+
+    Regression (CRITICAL): every normal non-admin HA user carries ``system-users``
+    (the allow-all group). The capture path used to validate it as a write target
+    and raised UnsafeAuthTarget on the first such user, silently fail-safing enforce
+    to monitor on every real install. The ha-tessera-dev E2E missed this because its
+    test user had empty group_ids.
+    """
+    hass = FakeHass()
+    recovery = RecoveryController(hass, UserBindingAdapter(hass, ha_version="2026.6.4"))
+
+    snapshot = await recovery.async_snapshot(
+        [FakeUser("normal", ["system-users"])],
+        include_without_tessera=True,
+    )
+
+    assert snapshot == AuthRecoverySnapshot(
+        users=(UserGroupSnapshot("normal", ("system-users",)),)
+    )
+
+
+@pytest.mark.asyncio
+async def test_user_binding_restore_exact_allows_system_users() -> None:
+    """Pre-install restore writes the captured original back, incl. ``system-users``."""
+    hass = FakeHass()
+    user = FakeUser("user-1", ["tessera:viewer"])
+    adapter = UserBindingAdapter(hass, ha_version="2026.6.4")
+
+    await adapter.async_restore_exact_groups(user, ["system-users"])
+
+    assert hass.auth.update_calls == [(user, ["system-users"])]
+    assert user.group_ids == ["system-users"]
+
+
+@pytest.mark.asyncio
 async def test_recovery_restore_rejects_unsafe_groups_and_admin_demotion() -> None:
     """Recovery restore keeps namespace and no-lockout guards fail-closed."""
     hass = FakeHass()
