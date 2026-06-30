@@ -339,6 +339,19 @@ async def _apply_enforce_mode(
         entry_data["mode"] = MODE_ENFORCE
         return
 
+    # Apply failed partway: native auth may be half-written. Roll back to the
+    # pre-install snapshot IMMEDIATELY rather than leaving a half-enforced state
+    # behind a monitor facade until the next startup recovery (a window in which
+    # some users carry half-applied permissions). _restore_pre_install_safely
+    # clears the journal on a clean rollback, or records a repair and leaves it
+    # open (for startup recovery to retry) if the rollback itself fails.
+    await _restore_pre_install_safely(
+        hass,
+        entry_id,
+        entry_data,
+        reason=f"apply_failed:{result['refused_reason'] or result['status']}",
+        clear_apply_in_progress=True,
+    )
     await _fail_safe_to_monitor(
         hass,
         entry_id,

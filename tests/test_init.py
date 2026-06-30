@@ -460,10 +460,16 @@ async def test_recompile_service_runs_enforce_apply_path(
 
 
 @pytest.mark.asyncio
-async def test_enforce_apply_failure_fails_safe_and_leaves_journal_open(
+async def test_enforce_apply_failure_rolls_back_and_clears_journal(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Apply refusal persists monitor and leaves the recovery journal open."""
+    """Apply failure rolls the half-applied auth back immediately + clears journal.
+
+    Invariant: enforce must never leave half-applied native auth behind a monitor
+    facade. On apply failure the pre-install snapshot is restored at once (not
+    deferred to the next startup recovery), so the journal is cleared and no
+    half-enforced window remains. (Codex CXR-01.)
+    """
     events: list[str] = []
     issues: list[tuple[str, str]] = []
     store = E35Store("enforce", events=events)
@@ -490,6 +496,16 @@ async def test_enforce_apply_failure_fails_safe_and_leaves_journal_open(
         events.append("apply")
         return _apply_result("failed", "write-error")
 
+    async def fake_restore_ok(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        events.append("restore")
+        return {
+            "status": "restored",
+            "refused_reason": None,
+            "restored_user_ids": [],
+            "group_ids_removed": [],
+            "detail": [],
+        }
+
     async def fake_issue(
         _hass: Any, _entry_id: str, issue_id: str, *, reason: str
     ) -> None:
@@ -498,6 +514,7 @@ async def test_enforce_apply_failure_fails_safe_and_leaves_journal_open(
     monkeypatch.setattr(tessera_init, "compute_enforce_plan", fake_compute)
     monkeypatch.setattr(tessera_init, "RecoveryController", FakeRecovery)
     monkeypatch.setattr(tessera_init, "apply_enforce_plan", fake_apply)
+    monkeypatch.setattr(tessera_init, "async_restore_to_pre_install", fake_restore_ok)
     monkeypatch.setattr(tessera_init, "_record_repair_issue", fake_issue)
     _patch_noop_adapters(monkeypatch)
     _patch_monitor_preview(monkeypatch, events)
@@ -510,11 +527,79 @@ async def test_enforce_apply_failure_fails_safe_and_leaves_journal_open(
         "set_snapshot",
         "mark",
         "apply",
+        "restore",
+        "clear",
         "monitor_preview",
     ]
     assert store.config["mode"] == "monitor"
-    assert store.state["apply_in_progress"] is True
+    assert store.state["apply_in_progress"] is False  # rollback cleared the journal
     assert issues == [(tessera_init.REPAIR_ENFORCE_FAIL_SAFE, "apply:write-error")]
+
+
+@pytest.mark.asyncio
+async def test_enforce_apply_failure_rollback_failure_leaves_journal_open(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If the immediate rollback itself fails, leave the journal open + escalate.
+
+    Startup recovery then retries the rollback; the visible mode is still monitor.
+    """
+    events: list[str] = []
+    issues: list[tuple[str, str]] = []
+    store = E35Store("enforce", events=events)
+    hass = AuthHass([FakeUser("admin", ["system-admin"], is_owner=True)])
+    entry_data: dict[str, Any] = {"store": store}
+
+    async def fake_compute(_hass: Any, _store: Any) -> dict[str, Any]:
+        events.append("compute")
+        return _clean_plan()
+
+    class FakeRecovery:
+        """Recovery double returning a snapshot."""
+
+        def __init__(self, _hass: Any, _binding: Any) -> None:
+            pass
+
+        async def async_snapshot(
+            self, *_args: Any, **_kwargs: Any
+        ) -> AuthRecoverySnapshot:
+            events.append("snapshot")
+            return _snapshot()
+
+    async def fake_apply(*_args: Any) -> dict[str, Any]:
+        events.append("apply")
+        return _apply_result("failed", "write-error")
+
+    async def fake_restore_fail(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        events.append("restore")
+        return {
+            "status": "failed",
+            "refused_reason": "write-error",
+            "restored_user_ids": [],
+            "group_ids_removed": [],
+            "detail": ["WriteError"],
+        }
+
+    async def fake_issue(
+        _hass: Any, _entry_id: str, issue_id: str, *, reason: str
+    ) -> None:
+        issues.append((issue_id, reason))
+
+    monkeypatch.setattr(tessera_init, "compute_enforce_plan", fake_compute)
+    monkeypatch.setattr(tessera_init, "RecoveryController", FakeRecovery)
+    monkeypatch.setattr(tessera_init, "apply_enforce_plan", fake_apply)
+    monkeypatch.setattr(tessera_init, "async_restore_to_pre_install", fake_restore_fail)
+    monkeypatch.setattr(tessera_init, "_record_repair_issue", fake_issue)
+    _patch_noop_adapters(monkeypatch)
+    _patch_monitor_preview(monkeypatch, events)
+
+    await tessera_init._compile_for_mode(hass, "entry-1", entry_data)
+
+    assert store.config["mode"] == "monitor"
+    assert store.state["apply_in_progress"] is True  # left open for startup recovery
+    issue_ids = [issue_id for issue_id, _ in issues]
+    assert tessera_init.REPAIR_RESTORE_FAIL_SAFE in issue_ids
+    assert tessera_init.REPAIR_ENFORCE_FAIL_SAFE in issue_ids
 
 
 @pytest.mark.asyncio
