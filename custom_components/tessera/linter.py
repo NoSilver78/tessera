@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
 from typing import Literal, TypedDict
 
-from .compiler import CompiledPolicies, compile_policies
+from .compiler import BY_GROUP_PROJECTION_MODE, CompiledPolicies, compile_policies
 from .resolver import AreaEntityResolver
 from .schema import (
     PermissionLeaf,
@@ -17,6 +16,10 @@ from .schema import (
 
 LintLevel = Literal["read", "control"]
 LINT_SEVERITY_ERROR = "error"
+# Permission levels in two orders. Read-first is for order-insensitive scans;
+# control-first is load-bearing in _conflicts_for_user (see comment there).
+LEVELS_READ_FIRST: tuple[LintLevel, ...] = ("read", "control")
+LEVELS_CONTROL_FIRST: tuple[LintLevel, ...] = ("control", "read")
 
 
 class LintConflict(TypedDict):
@@ -87,7 +90,7 @@ def lint_cross_role(
         "users": users,
         "conflicts_total": conflicts_total,
         "blocking_conflicts": conflicts_total > 0,
-        "by_group_projection_mode": "v1-inert",
+        "by_group_projection_mode": BY_GROUP_PROJECTION_MODE,
     }
 
 
@@ -102,7 +105,7 @@ def empty_lint_report() -> LintReport:
         "users": {},
         "conflicts_total": 0,
         "blocking_conflicts": False,
-        "by_group_projection_mode": "v1-inert",
+        "by_group_projection_mode": BY_GROUP_PROJECTION_MODE,
     }
 
 
@@ -124,7 +127,10 @@ def _conflicts_for_user(
     )
     for entity_id in entity_ids:
         control_restricting_roles: set[str] = set()
-        for level in ("control", "read"):
+        # Control before read: a read conflict is suppressed when the same
+        # roles already raised a control conflict on this entity (control
+        # implies read), so control_restricting_roles must be filled first.
+        for level in LEVELS_CONTROL_FIRST:
             exposing_roles = [
                 role_id
                 for role_id in roles
@@ -229,13 +235,10 @@ def _leaf_levels(leaf: PermissionLeaf) -> set[LintLevel]:
 def _explicit_false_levels(leaf: PermissionLeaf) -> set[LintLevel]:
     """Return levels explicitly carved out by a policy override leaf."""
     return {
-        level for level in _iter_levels() if level in leaf and leaf.get(level) is False
+        level
+        for level in LEVELS_READ_FIRST
+        if level in leaf and leaf.get(level) is False
     }
-
-
-def _iter_levels() -> Iterable[LintLevel]:
-    """Yield levels in deterministic order."""
-    return ("read", "control")
 
 
 def _add_levels(

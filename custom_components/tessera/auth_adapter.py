@@ -1,4 +1,12 @@
-"""Dormant native-auth adapters for Tessera enforce E1."""
+"""Dormant native-auth adapters for Tessera's enforce path (E1).
+
+These adapters encapsulate the *only* code that would mutate Home Assistant's
+native auth store. In phase 1 they are dormant: no product code path calls
+them (they are imported only by tests). Every write is fail-closed behind a
+version guard (``SUPPORTED_HA_AUTH_VERSION``), the ``tessera:`` namespace
+guard, and an owner/admin lockout check. They are wired in only at E3, after
+the D10 benchmark and a panel review — see docs/spec-e3-enforce.md.
+"""
 
 from __future__ import annotations
 
@@ -204,11 +212,19 @@ class UserBindingAdapter:
     ) -> None:
         """Bind a managed user to the full intended native group superset.
 
+        REPLACE semantics: ``full_group_ids`` wholly replaces the user's native
+        ``group_ids``. The no-drop guarantee is *caller-asserted*: this method
+        only verifies that every id in ``expected_tessera_group_ids`` is present
+        in ``full_group_ids``. It cannot detect a Tessera group the caller
+        forgot to list, so the E3 caller MUST compute ``expected`` from the
+        user's full current Tessera membership (docs/spec-e3-enforce.md §8).
+
         Args:
             user: HA user or test double to update.
             full_group_ids: Complete replacement set for ``user.group_ids``.
-            expected_tessera_group_ids: Tessera role groups that must be present in
-                ``full_group_ids``; this catches delta writes intrinsically.
+            expected_tessera_group_ids: Tessera role groups that must be present
+                in ``full_group_ids``. Guards against an under-computed set, not
+                against over-dropping groups outside this set.
         """
         self._assert_supported_version()
         sorted_group_ids = _validate_full_group_superset(
@@ -251,9 +267,13 @@ class PermissionProbeAdapter:
     def check_entity(
         self, user: Any, entity_id: str, level: Literal["read", "control"]
     ) -> bool:
-        """Return whether ``user`` has the requested entity permission."""
-        permission = level
-        return bool(user.permissions.check_entity(entity_id, permission))
+        """Return whether ``user`` may access ``entity_id`` at ``level``.
+
+        ``level`` is passed straight through to Home Assistant: the Tessera
+        levels ``"read"`` and ``"control"`` are exactly HA's native entity
+        permission keys (``POLICY_READ`` / ``POLICY_CONTROL``).
+        """
+        return bool(user.permissions.check_entity(entity_id, level))
 
 
 class RecoveryController:
