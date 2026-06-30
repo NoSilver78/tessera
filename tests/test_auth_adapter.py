@@ -14,7 +14,6 @@ from custom_components.tessera.auth_adapter import (
     IncompleteSuperset,
     LockoutRisk,
     PermissionProbeAdapter,
-    PromotionRisk,
     RecoveryController,
     UnsafeAuthTarget,
     UnsupportedAuthVersion,
@@ -367,20 +366,28 @@ async def test_user_binding_rejects_delta_and_forbidden_groups() -> None:
 
 
 @pytest.mark.asyncio
-async def test_user_binding_refuses_admin_promotion() -> None:
-    """Forward binding refuses to escalate a non-admin user to system-admin (#10)."""
+async def test_user_binding_allows_admin_role_promotion() -> None:
+    """Forward binding accepts system-admin for a non-admin user (the `change` tier).
+
+    Admin assignment is governed by the PLAN (`_has_admin_role`), not the choke
+    point: the structural binding validator has no role context and must not
+    second-guess a legitimate is_admin-role promotion. Regression: an earlier
+    choke-point promotion guard blocked exactly this and silently broke enforce
+    for every admin-role assignment (caught by the verification panel).
+    """
     hass = FakeHass()
-    user = FakeUser("user-1", ["tessera:viewer"])
+    user = FakeUser("user-1", ["system-read-only", "tessera:viewer"])
     adapter = UserBindingAdapter(hass, ha_version="2026.6.4")
 
-    with pytest.raises(PromotionRisk):
-        await adapter.async_bind_full_superset(
-            user,
-            ["system-admin", "tessera:viewer"],
-            expected_tessera_group_ids=["tessera:viewer"],
-        )
+    await adapter.async_bind_full_superset(
+        user,
+        ["system-admin", "system-read-only", "tessera:viewer"],
+        expected_tessera_group_ids=["tessera:viewer"],
+    )
 
-    assert hass.auth.update_calls == []
+    assert hass.auth.update_calls == [
+        (user, ["system-admin", "system-read-only", "tessera:viewer"])
+    ]
 
 
 @pytest.mark.asyncio
