@@ -161,8 +161,8 @@ class E35Store:
         self.events = events if events is not None else []
 
     async def async_load_config(self) -> dict[str, Any]:
-        """Load fake config."""
-        return self.config
+        """Load fake config (copy-on-load, mirroring the real store)."""
+        return deepcopy(self.config)
 
     async def async_save_config(self, config: dict[str, Any]) -> None:
         """Persist fake config."""
