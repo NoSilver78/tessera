@@ -247,7 +247,7 @@ def _validate_grant_matrix(
         roles = _require_mapping(role_map, f"{path}.{target_id}")
         result[target_id] = {}
         for role_id, leaf in roles.items():
-            role_key = _require_non_empty_string(role_id, f"{path}.{target_id} role")
+            role_key = _require_role_id(role_id, f"{path}.{target_id} role")
             result[target_id][role_key] = _validate_permission_leaf(
                 leaf, f"{path}.{target_id}.{role_key}"
             )
@@ -300,6 +300,7 @@ def _require_non_empty_string(value: object, path: str) -> str:
 
 
 def _require_role_id(value: object, path: str) -> str:
+    """Validate internal Tessera role ids cannot overlap native group ids."""
     role_id = _require_non_empty_string(value, path)
     if ":" in role_id or role_id.lower().startswith("tessera"):
         raise TesseraSchemaError(

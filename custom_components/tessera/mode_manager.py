@@ -17,7 +17,7 @@ from .monitor import compile_current
 from .resolver import AreaEntityResolver
 from .schema import TesseraConfigData, TesseraPolicyData
 
-BlockReason = Literal["version", "compile", "d9", "linter"]
+BlockReason = Literal["version", "resolver", "store", "compile", "d9", "linter"]
 
 
 class GroupPlan(TypedDict):
@@ -63,16 +63,25 @@ async def compute_enforce_plan(hass: object, store: _StoreLike) -> EnforcePlan:
 
     Returns:
         A deterministic group-policy plan, or an empty blocked plan when any
-        gate refuses enforce.
+        gate or read-only infrastructure step refuses enforce. Compile is a
+        deliberately broad fail-closed catch; task cancellation still
+        propagates because only ``Exception`` is caught.
     """
     try:
         _assert_supported_auth_version(_homeassistant_version())
     except UnsupportedAuthVersion as error:
         return _blocked("version", [str(error)])
 
-    resolver = AreaEntityResolver.from_hass(cast(Any, hass))
-    config = await store.async_load_config()
-    policy = await store.async_load_policy()
+    try:
+        resolver = AreaEntityResolver.from_hass(cast(Any, hass))
+    except Exception as error:
+        return _blocked("resolver", [f"{type(error).__name__}: {error}"])
+
+    try:
+        config = await store.async_load_config()
+        policy = await store.async_load_policy()
+    except Exception as error:
+        return _blocked("store", [f"{type(error).__name__}: {error}"])
 
     try:
         compiled = await compile_current(
@@ -81,7 +90,10 @@ async def compute_enforce_plan(hass: object, store: _StoreLike) -> EnforcePlan:
     except Exception as error:
         return _blocked("compile", [f"{type(error).__name__}: {error}"])
 
-    d9 = await evaluate_d9_gate(hass, config)  # type: ignore[arg-type]
+    try:
+        d9 = await evaluate_d9_gate(hass, config)  # type: ignore[arg-type]
+    except Exception as error:
+        return _blocked("d9", [f"{type(error).__name__}: {error}"])
     if d9["enforce_blocked"]:
         return _blocked("d9", list(d9["blocking"]))
 

@@ -14,6 +14,7 @@ from custom_components.tessera.schema import (
     default_config_data,
     default_policy_data,
     validate_config_data,
+    validate_policy_data,
 )
 
 
@@ -48,6 +49,15 @@ class FakeStore:
         """Load fake policy."""
         self.policy_loads += 1
         return self.policy
+
+
+class ConfigLoadFailureStore(FakeStore):
+    """Store double that simulates a corrupt persisted config payload."""
+
+    async def async_load_config(self) -> dict[str, Any]:
+        """Raise as if store validation rejected the persisted config."""
+        self.config_loads += 1
+        raise TesseraSchemaError("corrupt config")
 
 
 class AuthTrapHass:
@@ -190,6 +200,76 @@ async def test_compile_failure_blocks_before_d9_and_linter(
 
 
 @pytest.mark.asyncio
+async def test_store_load_failure_blocks_without_propagating() -> None:
+    """Corrupt persisted store data fails closed before compile/D9/linter."""
+    store = ConfigLoadFailureStore(_config("viewer"), _policy("viewer"))
+
+    result = await compute_enforce_plan(AuthTrapHass(), store)
+
+    assert result == {
+        "groups": [],
+        "blocked": True,
+        "block_reason": "store",
+        "block_detail": ["TesseraSchemaError: corrupt config"],
+    }
+    assert store.config_loads == 1
+    assert store.policy_loads == 0
+
+
+@pytest.mark.asyncio
+async def test_resolver_failure_blocks_without_store_load(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Resolver construction is an infrastructure gate and fails closed."""
+    store = FakeStore(_config("viewer"), _policy("viewer"))
+    monkeypatch.setattr(
+        mode_manager.AreaEntityResolver,
+        "from_hass",
+        classmethod(
+            lambda cls, hass: (_ for _ in ()).throw(RuntimeError("no registries"))
+        ),
+    )
+
+    result = await compute_enforce_plan(AuthTrapHass(), store)
+
+    assert result == {
+        "groups": [],
+        "blocked": True,
+        "block_reason": "resolver",
+        "block_detail": ["RuntimeError: no registries"],
+    }
+    assert store.config_loads == 0
+    assert store.policy_loads == 0
+
+
+@pytest.mark.asyncio
+async def test_d9_exception_blocks_without_propagating(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D9 infra/read errors fail closed and drop any compiled partial plan."""
+    store = FakeStore(_config("viewer"), _policy("viewer"))
+    monkeypatch.setattr(
+        mode_manager,
+        "lint_cross_role",
+        lambda *args, **kwargs: pytest.fail("linter must not run after D9 error"),
+    )
+    monkeypatch.setattr(
+        mode_manager,
+        "evaluate_d9_gate",
+        AsyncMock(side_effect=OSError("permission denied")),
+    )
+
+    result = await compute_enforce_plan(AuthTrapHass(), store)
+
+    assert result == {
+        "groups": [],
+        "blocked": True,
+        "block_reason": "d9",
+        "block_detail": ["OSError: permission denied"],
+    }
+
+
+@pytest.mark.asyncio
 async def test_linter_conflict_blocks_after_d9_passes() -> None:
     """Cross-role conflicts block enforce planning after D9 passes."""
     config = _config("restricted", "operator")
@@ -243,15 +323,28 @@ def test_schema_role_id_namespace_guard(role_id: str) -> None:
         validate_config_data(config)
 
 
+@pytest.mark.parametrize("membership_key", ["by_user", "by_group"])
 @pytest.mark.parametrize("role_id", ["tessera:x", "a:b", "TesseraAdmin"])
-def test_schema_membership_role_id_namespace_guard(role_id: str) -> None:
+def test_schema_membership_role_id_namespace_guard(
+    membership_key: str, role_id: str
+) -> None:
     """Membership role values use the same role-id namespace guard."""
     config = default_config_data()
     config["roles"] = {"viewer": {"name": "Viewer"}}
-    config["membership"]["by_user"] = {"user-1": [role_id]}
+    config["membership"][membership_key] = {"subject-1": [role_id]}
 
     with pytest.raises(TesseraSchemaError, match="reserved"):
         validate_config_data(config)
+
+
+@pytest.mark.parametrize("role_id", ["tessera:x", "a:b", "TesseraAdmin"])
+def test_schema_grant_matrix_role_id_namespace_guard(role_id: str) -> None:
+    """Policy grant role keys use the same role-id namespace guard."""
+    policy = default_policy_data()
+    policy["area_grants"] = {"living": {role_id: {"read": True}}}
+
+    with pytest.raises(TesseraSchemaError, match="reserved"):
+        validate_policy_data(policy)
 
 
 @pytest.mark.asyncio
