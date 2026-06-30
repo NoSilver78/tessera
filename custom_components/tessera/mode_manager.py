@@ -5,6 +5,9 @@ from __future__ import annotations
 from typing import Any, Literal, Protocol, TypedDict, cast
 
 from .auth_adapter import (
+    GROUP_ID_ADMIN,
+    GROUP_ID_READ_ONLY,
+    GROUP_ID_USER,
     TESSERA_GROUP_PREFIX,
     UnsupportedAuthVersion,
     _assert_supported_auth_version,
@@ -17,7 +20,9 @@ from .monitor import compile_current
 from .resolver import AreaEntityResolver
 from .schema import TesseraConfigData, TesseraPolicyData
 
-BlockReason = Literal["version", "resolver", "store", "compile", "d9", "linter"]
+BlockReason = Literal["version", "resolver", "store", "compile", "d9", "linter", "auth"]
+DEFAULT_ROLE_ID = "__default__"
+_PRESERVED_SYSTEM_GROUP_IDS = frozenset({GROUP_ID_ADMIN, GROUP_ID_READ_ONLY})
 
 
 class GroupPlan(TypedDict):
@@ -28,10 +33,19 @@ class GroupPlan(TypedDict):
     policy: NativePolicy
 
 
+class UserBindingPlan(TypedDict):
+    """Read-only target native group superset for one managed HA user."""
+
+    user_id: str
+    target_group_ids: list[str]
+
+
 class EnforcePlan(TypedDict):
     """Read-only E3 enforce plan, blocked before any native write surface."""
 
     groups: list[GroupPlan]
+    bindings: list[UserBindingPlan]
+    orphan_group_ids: list[str]
     blocked: bool
     block_reason: BlockReason | None
     block_detail: list[str]
@@ -50,12 +64,12 @@ class _StoreLike(Protocol):
 
 
 async def compute_enforce_plan(hass: object, store: _StoreLike) -> EnforcePlan:
-    """Compute the read-only E3.1 enforce plan without touching ``hass.auth``.
+    """Compute the read-only E3 enforce plan without native auth writes.
 
     The gate sequence is fail-closed and intentionally dormant: it is not wired
     into setup, websocket, config-flow, or monitor paths. It performs no native
-    auth writes and does not enumerate native HA users. E3.2/E3.3 own those
-    later surfaces.
+    auth writes. E3.2 reads native HA users and group ids only after all gates
+    pass, so off/monitor paths remain free of ``hass.auth`` access.
 
     Args:
         hass: Home Assistant instance or test double.
@@ -101,24 +115,50 @@ async def compute_enforce_plan(hass: object, store: _StoreLike) -> EnforcePlan:
     if has_blocking_conflicts(lint_report):
         return _blocked("linter", _lint_block_detail(lint_report))
 
-    return {
-        "groups": [
+    try:
+        binding_plan = await _compute_user_bindings_and_orphans(cast(Any, hass), config)
+    except Exception as error:
+        return _blocked("auth", [f"{type(error).__name__}: {error}"])
+
+    groups: list[GroupPlan] = [
+        {
+            "group_id": f"{TESSERA_GROUP_PREFIX}{role_id}",
+            "role_id": role_id,
+            "policy": compiled[role_id],
+        }
+        for role_id in sorted(compiled)
+    ]
+    if binding_plan["needs_default_role"]:
+        groups.append(
             {
-                "group_id": f"{TESSERA_GROUP_PREFIX}{role_id}",
-                "role_id": role_id,
-                "policy": compiled[role_id],
+                "group_id": f"{TESSERA_GROUP_PREFIX}{DEFAULT_ROLE_ID}",
+                "role_id": DEFAULT_ROLE_ID,
+                "policy": _empty_policy(),
             }
-            for role_id in sorted(compiled)
-        ],
+        )
+        groups.sort(key=lambda group: group["role_id"])
+
+    return {
+        "groups": groups,
+        "bindings": binding_plan["bindings"],
+        "orphan_group_ids": binding_plan["orphan_group_ids"],
         "blocked": False,
         "block_reason": None,
         "block_detail": [],
     }
 
 
+class _BindingAndOrphanPlan(TypedDict):
+    bindings: list[UserBindingPlan]
+    orphan_group_ids: list[str]
+    needs_default_role: bool
+
+
 def _blocked(reason: BlockReason, detail: list[str]) -> EnforcePlan:
     return {
         "groups": [],
+        "bindings": [],
+        "orphan_group_ids": [],
         "blocked": True,
         "block_reason": reason,
         "block_detail": sorted(detail),
@@ -142,3 +182,97 @@ def _lint_block_detail(report: LintReport) -> list[str]:
                 )
             )
     return details
+
+
+async def _compute_user_bindings_and_orphans(
+    hass: Any, config: TesseraConfigData
+) -> _BindingAndOrphanPlan:
+    users = await hass.auth.async_get_users()
+    existing_group_ids = await _existing_native_group_ids(hass)
+    known_role_ids = set(config["roles"])
+    bindings: list[UserBindingPlan] = []
+    needs_default_role = False
+
+    for user in sorted(users, key=_user_id):
+        if _is_unmanaged_user(user):
+            continue
+        role_ids = [
+            role_id
+            for role_id in config["membership"]["by_user"].get(_user_id(user), [])
+            if role_id in known_role_ids
+        ]
+        target_group_ids = _target_group_ids_for_user(user, role_ids, config)
+        if not role_ids:
+            needs_default_role = True
+            target_group_ids.add(f"{TESSERA_GROUP_PREFIX}{DEFAULT_ROLE_ID}")
+        bindings.append(
+            {
+                "user_id": _user_id(user),
+                "target_group_ids": sorted(target_group_ids),
+            }
+        )
+
+    managed_group_ids = {
+        f"{TESSERA_GROUP_PREFIX}{role_id}" for role_id in known_role_ids
+    } | {f"{TESSERA_GROUP_PREFIX}{DEFAULT_ROLE_ID}"}
+    orphan_group_ids = sorted(
+        group_id
+        for group_id in existing_group_ids
+        if group_id.startswith(TESSERA_GROUP_PREFIX)
+        and group_id not in managed_group_ids
+    )
+
+    return {
+        "bindings": bindings,
+        "orphan_group_ids": orphan_group_ids,
+        "needs_default_role": needs_default_role,
+    }
+
+
+async def _existing_native_group_ids(hass: Any) -> set[str]:
+    groups = await hass.auth._store.async_get_groups()
+    return {str(group.id) for group in groups}
+
+
+def _target_group_ids_for_user(
+    user: Any, role_ids: list[str], config: TesseraConfigData
+) -> set[str]:
+    current_group_ids = set(_user_group_ids(user))
+    target_group_ids = {f"{TESSERA_GROUP_PREFIX}{role_id}" for role_id in role_ids}
+    for group_id in current_group_ids:
+        if group_id in _PRESERVED_SYSTEM_GROUP_IDS:
+            target_group_ids.add(group_id)
+    if GROUP_ID_USER in target_group_ids:
+        target_group_ids.remove(GROUP_ID_USER)
+    if _has_admin_role(role_ids, config):
+        target_group_ids.add(GROUP_ID_ADMIN)
+    elif GROUP_ID_ADMIN not in current_group_ids:
+        target_group_ids.discard(GROUP_ID_ADMIN)
+    return target_group_ids
+
+
+def _has_admin_role(role_ids: list[str], config: TesseraConfigData) -> bool:
+    return any(config["roles"][role_id].get("is_admin") is True for role_id in role_ids)
+
+
+def _is_unmanaged_user(user: Any) -> bool:
+    return bool(getattr(user, "is_owner", False)) or bool(
+        getattr(user, "system_generated", False)
+    )
+
+
+def _user_group_ids(user: Any) -> list[str]:
+    if hasattr(user, "group_ids"):
+        return sorted(str(group_id) for group_id in user.group_ids)
+    return sorted(str(group.id) for group in user.groups)
+
+
+def _user_id(user: Any) -> str:
+    user_id = getattr(user, "id", None)
+    if not isinstance(user_id, str) or not user_id:
+        raise ValueError("managed users require a stable id")
+    return user_id
+
+
+def _empty_policy() -> NativePolicy:
+    return {"entities": {"entity_ids": {}}}
