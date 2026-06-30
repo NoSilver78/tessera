@@ -1,0 +1,33 @@
+name: Validate
+
+# HACS- und hassfest-Validierung. Ergänzt (ersetzt nicht) ci.yml (Lint/Typ/Test).
+# Aktuelle Action-Refs: hacs/action@main, home-assistant/actions/hassfest@master, actions/checkout@v4.
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  hacs:
+    name: HACS
+    runs-on: ubuntu-latest
+    steps:
+      - name: HACS validation
+        uses: hacs/action@main
+        with:
+          category: integration
+          comment: "false"
+          # 'brands' ignorieren, bis custom_components/tessera/brand/icon.png existiert -> dann entfernen.
+          ignore: brands
+
+  hassfest:
+    name: hassfest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: home-assistant/actions/hassfest@master
