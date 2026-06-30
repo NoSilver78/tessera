@@ -188,11 +188,7 @@ class AuthPolicyStoreAdapter:
 
     def _assert_supported_version(self) -> None:
         """Raise before writes when the current HA version is unsupported."""
-        if self._ha_version != SUPPORTED_HA_AUTH_VERSION:
-            raise UnsupportedAuthVersion(
-                f"unsupported HA auth version {self._ha_version}; "
-                f"expected {SUPPORTED_HA_AUTH_VERSION}"
-            )
+        _assert_supported_auth_version(self._ha_version)
 
 
 class UserBindingAdapter:
@@ -254,11 +250,7 @@ class UserBindingAdapter:
 
     def _assert_supported_version(self) -> None:
         """Raise before writes when the current HA version is unsupported."""
-        if self._ha_version != SUPPORTED_HA_AUTH_VERSION:
-            raise UnsupportedAuthVersion(
-                f"unsupported HA auth version {self._ha_version}; "
-                f"expected {SUPPORTED_HA_AUTH_VERSION}"
-            )
+        _assert_supported_auth_version(self._ha_version)
 
 
 class PermissionProbeAdapter:
@@ -390,6 +382,15 @@ def _validate_restore_group_ids(user: Any) -> list[str]:
     for group_id in group_ids:
         _assert_allowed_binding_group_id(group_id)
     return sorted(group_ids)
+
+
+def _assert_supported_auth_version(ha_version: str) -> None:
+    """Raise before writes when the current HA auth version is unsupported."""
+    if ha_version != SUPPORTED_HA_AUTH_VERSION:
+        raise UnsupportedAuthVersion(
+            f"unsupported HA auth version {ha_version}; "
+            f"expected {SUPPORTED_HA_AUTH_VERSION}"
+        )
 
 
 def _assert_managed_user(user: Any) -> None:
