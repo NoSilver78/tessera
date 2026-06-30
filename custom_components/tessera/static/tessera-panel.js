@@ -1,3 +1,12 @@
+/**
+ * Tessera matrix panel — a custom element (<tessera-matrix-panel>) for the
+ * admin-only Tessera sidebar page. Home Assistant assigns the `hass` property;
+ * the panel renders the Area x Role grant matrix and persists edits over two
+ * WebSocket commands:
+ *   - `tessera/matrix/get`       load areas, roles, grants, monitor preview
+ *   - `tessera/matrix/set_grant` persist one cell, return the refreshed matrix
+ * Each grant cell cycles none -> read -> read+control -> none on click.
+ */
 class TesseraMatrixPanel extends HTMLElement {
   constructor() {
     super();
@@ -6,6 +15,7 @@ class TesseraMatrixPanel extends HTMLElement {
     this._data = undefined;
     this._error = "";
     this._pending = "";
+    this._loading = false;
   }
 
   set hass(hass) {
@@ -35,14 +45,13 @@ class TesseraMatrixPanel extends HTMLElement {
     }
   }
 
+  /** Advance one Area x Role cell to its next grant state and persist it. */
   async _toggle(areaId, roleId) {
     if (!this._hass || this._pending) {
       return;
     }
-    const current = this._data?.grants?.[areaId]?.[roleId] || {
-      read: false,
-      control: false,
-    };
+    const current = this._grantFor(areaId, roleId);
+    // Cycle the cell: none -> read -> read+control -> none.
     const next =
       current.control
         ? { read: false, control: false }
@@ -67,6 +76,13 @@ class TesseraMatrixPanel extends HTMLElement {
       this._pending = "";
       this._render();
     }
+  }
+
+  /** Return the current grant for a cell, defaulting to no permission. */
+  _grantFor(areaId, roleId) {
+    return (
+      this._data?.grants?.[areaId]?.[roleId] || { read: false, control: false }
+    );
   }
 
   _messageFromError(err) {
@@ -300,12 +316,9 @@ class TesseraMatrixPanel extends HTMLElement {
   }
 
   _grantCell(area, role) {
-    const grant = this._data?.grants?.[area.id]?.[role.id] || {
-      read: false,
-      control: false,
-    };
+    const grant = this._grantFor(area.id, role.id);
+    // The cell's CSS class and its visible label are the same token.
     const state = grant.control ? "control" : grant.read ? "read" : "none";
-    const label = grant.control ? "control" : grant.read ? "read" : "none";
     const pending = this._pending === `${area.id}::${role.id}`;
     return `
       <td>
@@ -317,7 +330,7 @@ class TesseraMatrixPanel extends HTMLElement {
           ${this._disabledAttr(pending)}
           title="Toggle ${this._escape(area.name)} / ${this._escape(role.name)}"
         >
-          ${pending ? "Saving..." : label}
+          ${pending ? "Saving..." : state}
         </button>
       </td>
     `;

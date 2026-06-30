@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 import pytest
 from custom_components.tessera.config_flow import (
     TesseraConfigFlow,
+    TesseraOptionsFlow,
     _compile_preview,
     add_area_grant,
     add_role,
@@ -55,6 +57,54 @@ class FakeHass:
     def auth(self) -> object:
         """Fail if config-flow basics touch native auth."""
         raise AssertionError("config UI must not touch hass.auth")
+
+
+@dataclass(frozen=True)
+class FakeEntry:
+    """Minimal config entry double for options-flow tests."""
+
+    entry_id: str
+
+
+class RecordingStore:
+    """Store double that records saved config and policy for options tests."""
+
+    def __init__(
+        self,
+        config: dict[str, Any] | None = None,
+        policy: dict[str, Any] | None = None,
+    ) -> None:
+        """Initialize preloaded stores and empty save sinks."""
+        self._config = config or default_config_data()
+        self._policy = policy or default_policy_data()
+        self.saved_config: dict[str, Any] | None = None
+        self.saved_policy: dict[str, Any] | None = None
+
+    async def async_load_config(self) -> dict[str, Any]:
+        """Return the preloaded config."""
+        return self._config
+
+    async def async_load_policy(self) -> dict[str, Any]:
+        """Return the preloaded policy."""
+        return self._policy
+
+    async def async_save_config(self, config: dict[str, Any]) -> None:
+        """Record a saved config."""
+        self.saved_config = config
+
+    async def async_save_policy(self, policy: dict[str, Any]) -> None:
+        """Record a saved policy."""
+        self.saved_policy = policy
+
+
+def _options_flow(store: RecordingStore) -> TesseraOptionsFlow:
+    """Build an options flow wired to a fake hass and store double."""
+    flow = TesseraOptionsFlow(FakeEntry("entry-1"))
+    flow.hass = FakeHass()
+    flow.handler = DOMAIN
+    flow.flow_id = "test-options-flow"
+    flow._store = store
+    return flow
 
 
 @pytest.mark.asyncio
@@ -284,3 +334,62 @@ async def test_compile_preview_off_clears_stale_preview() -> None:
 
     assert "compiled" not in hass.data[DOMAIN]["entry-1"]
     assert "preview" not in hass.data[DOMAIN]["entry-1"]
+
+
+@pytest.mark.asyncio
+async def test_options_flow_init_shows_action_form() -> None:
+    """The options entry step presents the action selection form."""
+    result = await _options_flow(RecordingStore()).async_step_init()
+
+    assert result["type"] == data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "init"
+
+
+@pytest.mark.asyncio
+async def test_options_flow_unknown_action_aborts() -> None:
+    """An unrecognized action aborts instead of failing silently."""
+    result = await _options_flow(RecordingStore()).async_step_action({"action": "nope"})
+
+    assert result["type"] == data_entry_flow.FlowResultType.ABORT
+    assert result["reason"] == "unknown_action"
+
+
+@pytest.mark.asyncio
+async def test_options_flow_set_mode_saves_and_finishes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A valid mode persists config and finishes the flow without native writes."""
+    monkeypatch.setattr(
+        "custom_components.tessera.config_flow.AreaEntityResolver.from_hass",
+        classmethod(lambda cls, hass: FakeResolver()),
+    )
+    store = RecordingStore()
+
+    result = await _options_flow(store).async_step_set_mode({"mode": "monitor"})
+
+    assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+    assert store.saved_config is not None
+    assert store.saved_config["mode"] == "monitor"
+
+
+@pytest.mark.asyncio
+async def test_options_flow_set_mode_invalid_shows_error() -> None:
+    """An invalid mode re-renders the form with a base error and saves nothing."""
+    store = RecordingStore()
+
+    result = await _options_flow(store).async_step_set_mode({"mode": "banana"})
+
+    assert result["type"] == data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "set_mode"
+    assert result["errors"] == {"base": "invalid"}
+    assert store.saved_config is None
+
+
+@pytest.mark.asyncio
+async def test_options_flow_remove_role_without_roles_shows_no_roles() -> None:
+    """Removing a role with none present surfaces a no_roles hint, not a crash."""
+    result = await _options_flow(RecordingStore()).async_step_remove_role()
+
+    assert result["type"] == data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "remove_role"
+    assert result["errors"] == {"base": "no_roles"}

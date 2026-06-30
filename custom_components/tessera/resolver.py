@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Protocol, cast
+from typing import TYPE_CHECKING, Any, Protocol, Self, cast
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -48,7 +48,7 @@ class AreaEntityResolver:
         self._device_registry = device_registry
 
     @classmethod
-    def from_hass(cls, hass: HomeAssistant) -> AreaEntityResolver:
+    def from_hass(cls, hass: HomeAssistant) -> Self:
         """Create a resolver from Home Assistant's live registries."""
         from homeassistant.helpers import device_registry as dr
         from homeassistant.helpers import entity_registry as er
@@ -96,42 +96,6 @@ class AreaEntityResolver:
             device_id: _entry_str_value(device, "area_id")
             for device_id, device in self._device_registry.devices.items()
         }
-
-
-def resolve_area_entities(
-    area_id: str,
-    entity_registry: EntityRegistryLike,
-    device_registry: DeviceRegistryLike,
-) -> set[str]:
-    """Resolve one area id to entity ids.
-
-    This function is the narrow compiler-facing contract. The class API remains
-    available for callers that need deterministic ordering or multi-area output.
-    """
-    resolver = AreaEntityResolver(entity_registry, device_registry)
-    return set(resolver.entity_ids_for_area(area_id))
-
-
-def resolve_all(
-    entity_registry: EntityRegistryLike,
-    device_registry: DeviceRegistryLike,
-) -> dict[str, set[str]]:
-    """Resolve all effective areas present in the registries."""
-    resolver = AreaEntityResolver(entity_registry, device_registry)
-    device_areas = resolver._device_area_by_id()
-    area_ids = {
-        area_id
-        for entry in entity_registry.entities.values()
-        if not _is_disabled(entry)
-        for area_id in [_effective_area_id(entry, device_areas)]
-        if area_id is not None
-    }
-    return {
-        area_id: set(entity_ids)
-        for area_id, entity_ids in resolver.entity_ids_for_areas(
-            area_ids
-        ).by_area.items()
-    }
 
 
 def _effective_area_id(

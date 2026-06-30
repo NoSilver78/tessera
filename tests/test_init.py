@@ -47,6 +47,27 @@ class FakeHass:
         raise AssertionError("hass.auth must not be touched")
 
 
+class FakeHttp:
+    """Minimal HA HTTP double recording static-path registrations."""
+
+    def __init__(self) -> None:
+        """Initialize the recorded static-path list."""
+        self.static_paths: list[Any] = []
+
+    async def async_register_static_paths(self, configs: list[Any]) -> None:
+        """Record registered static paths."""
+        self.static_paths.extend(configs)
+
+
+class PanelHass(FakeHass):
+    """FakeHass that also exposes an HTTP server for panel registration."""
+
+    def __init__(self) -> None:
+        """Initialize HA-like state with an HTTP double."""
+        super().__init__()
+        self.http = FakeHttp()
+
+
 class RaisingStore:
     """Store double whose config load simulates an internal failure."""
 
@@ -121,3 +142,54 @@ async def test_unload_entry_keeps_bucket_and_removes_service_after_last_entry(
     assert "entry-2" not in hass.data[DOMAIN]
     assert DATA_SERVICE_REGISTERED not in hass.data[DOMAIN]
     assert hass.services.removed == [(DOMAIN, SERVICE_RECOMPILE)]
+
+
+@pytest.mark.asyncio
+async def test_compile_for_mode_safely_drops_stale_projection(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A later compile failure discards a previously cached projection.
+
+    The bucket is pre-seeded with stale ``compiled``/``preview`` values so the
+    test proves they are *removed* (not merely absent), catching a regression
+    that left a stale projection behind on the fail-safe-to-off path.
+    """
+    hass = FakeHass()
+    entry_data: dict[str, Any] = {
+        "store": RaisingStore(),
+        "compiled": {"STALE": 1},
+        "preview": {"STALE": 1},
+    }
+
+    await tessera_init._compile_for_mode_safely(hass, "entry-1", entry_data)
+
+    assert "compiled" not in entry_data
+    assert "preview" not in entry_data
+    assert "Tessera compile failed for entry entry-1" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_panel_registers_admin_only_and_is_idempotent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The matrix panel registers admin-only (require_admin) and only once."""
+    hass = PanelHass()
+    panel_calls: list[dict[str, Any]] = []
+
+    async def fake_register_panel(_hass: Any, **kwargs: Any) -> None:
+        panel_calls.append(kwargs)
+
+    monkeypatch.setattr(tessera_init, "async_register_panel", fake_register_panel)
+    monkeypatch.setattr(tessera_init, "StaticPathConfig", lambda *args: args)
+
+    await tessera_init._async_register_matrix_panel(hass)
+
+    assert len(panel_calls) == 1
+    assert panel_calls[0]["require_admin"] is True
+    assert panel_calls[0]["frontend_url_path"] == tessera_init.PANEL_URL_PATH
+    assert panel_calls[0]["webcomponent_name"] == tessera_init.PANEL_WEBCOMPONENT
+    assert len(hass.http.static_paths) == 1
+    assert hass.data[DOMAIN][tessera_init.DATA_PANEL_REGISTERED] is True
+
+    await tessera_init._async_register_matrix_panel(hass)
+    assert len(panel_calls) == 1

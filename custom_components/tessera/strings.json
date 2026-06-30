@@ -9,5 +9,81 @@
         "title": "Tessera"
       }
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Tessera options",
+        "description": "Choose what to configure.",
+        "data": {
+          "action": "Action"
+        }
+      },
+      "set_mode": {
+        "title": "Set mode",
+        "description": "off does nothing; monitor compiles a read-only preview; enforce currently falls back to monitor (no native permission writes yet).",
+        "data": {
+          "mode": "Mode"
+        }
+      },
+      "add_role": {
+        "title": "Add role",
+        "description": "Create a Tessera role. The id is permanent; name and description are optional.",
+        "data": {
+          "role_id": "Role id",
+          "name": "Name",
+          "description": "Description"
+        }
+      },
+      "remove_role": {
+        "title": "Remove role",
+        "description": "Remove a role together with all of its grants and memberships.",
+        "data": {
+          "role_id": "Role"
+        }
+      },
+      "add_area_grant": {
+        "title": "Add area grant",
+        "description": "Grant a role read and/or control on every entity in an area.",
+        "data": {
+          "area_id": "Area",
+          "role_id": "Role",
+          "read": "Read",
+          "control": "Control"
+        }
+      },
+      "remove_area_grant": {
+        "title": "Remove area grant",
+        "description": "Remove one Area x Role grant.",
+        "data": {
+          "grant": "Grant"
+        }
+      }
+    },
+    "error": {
+      "invalid": "That input is not valid. Please check it and try again.",
+      "no_roles": "Add a Tessera role first.",
+      "no_area_grants": "There are no area grants to remove."
+    },
+    "abort": {
+      "unknown_action": "Unknown action."
+    }
+  },
+  "selector": {
+    "action": {
+      "options": {
+        "set_mode": "Set mode",
+        "add_role": "Add role",
+        "remove_role": "Remove role",
+        "add_area_grant": "Add area grant",
+        "remove_area_grant": "Remove area grant"
+      }
+    }
+  },
+  "services": {
+    "recompile": {
+      "name": "Recompile",
+      "description": "Recompiles the read-only Tessera monitor preview for all loaded entries. Takes no input and performs no native permission writes."
+    }
   }
 }

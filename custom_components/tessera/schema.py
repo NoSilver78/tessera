@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Literal, TypedDict, cast
+from typing import Any, TypedDict, cast
 
 from .const import MODE_OFF, MODES, STORAGE_VERSION
-
-PermissionKey = Literal["read", "control"]
 
 
 class PermissionLeaf(TypedDict, total=False):
@@ -51,6 +49,9 @@ class _TesseraPolicyRequiredData(TypedDict):
 class TesseraPolicyData(_TesseraPolicyRequiredData, total=False):
     """Tessera policy store payload."""
 
+    # Draft-policy buffer reserved for the phase-2/3 stage->apply workflow
+    # (docs/concept.md). It is validated and persisted, but intentionally
+    # inert: no phase-1 module reads it (mirrors the ``by_group`` approach).
     staging: dict[str, Any]
 
 

@@ -1,0 +1,5 @@
+# Tessera service definitions. Human-readable names and descriptions live in
+# strings.json (and translations/) under "services". The recompile service
+# takes no fields: it refreshes the read-only monitor preview for all loaded
+# entries and performs no native permission writes.
+recompile:

@@ -47,7 +47,13 @@ def compile_policies(
     Returns:
         A role-id keyed mapping of native HA policy structures. The returned
         structure contains only allow grants and never HA shortcut booleans.
+        An entity override that resolves to no permission (all-false or empty)
+        REMOVES the entity from that role even if an area grant exposed it:
+        a negative override beats an area grant.
     """
+    # Re-validate (and deep-copy) inputs as fail-closed defense in depth:
+    # callers may pass raw store dicts, so this guarantees the compiler only
+    # ever operates on schema-checked data. Do not remove this revalidation.
     config_data = validate_config_data(config)
     policy_data = validate_policy_data(policy)
     _validate_referenced_roles(config_data, policy_data)
@@ -75,6 +81,8 @@ def compile_policies(
             if normalized := _normalize_leaf(leaf):
                 role_entities[entity_id] = normalized
             else:
+                # Negative/empty override removes the entity from this role,
+                # even if an area grant added it above (override beats area).
                 role_entities.pop(entity_id, None)
 
     return {
