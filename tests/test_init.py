@@ -414,6 +414,52 @@ async def test_enforce_clean_plan_snapshots_journals_applies_and_clears(
 
 
 @pytest.mark.asyncio
+async def test_recompile_service_runs_enforce_apply_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The recompile service drives the native enforce apply path for an entry."""
+    events: list[str] = []
+    store = E35Store("enforce", events=events)
+    hass = AuthHass([FakeUser("admin", ["system-admin"], is_owner=True)])
+    entry_data: dict[str, Any] = {"store": store}
+
+    tessera_init._register_recompile_service(hass)
+    hass.data[DOMAIN]["entry-1"] = entry_data
+
+    async def fake_compute(_hass: Any, _store: Any) -> dict[str, Any]:
+        events.append("compute")
+        return _clean_plan()
+
+    class FakeRecovery:
+        """Recovery double recording snapshot calls."""
+
+        def __init__(self, _hass: Any, _binding: Any) -> None:
+            pass
+
+        async def async_snapshot(
+            self, _users: Any, *, include_without_tessera: bool
+        ) -> AuthRecoverySnapshot:
+            events.append("snapshot")
+            return _snapshot()
+
+    async def fake_apply(*_args: Any) -> dict[str, Any]:
+        events.append("apply")
+        return _apply_result("applied")
+
+    monkeypatch.setattr(tessera_init, "compute_enforce_plan", fake_compute)
+    monkeypatch.setattr(tessera_init, "RecoveryController", FakeRecovery)
+    monkeypatch.setattr(tessera_init, "apply_enforce_plan", fake_apply)
+    _patch_noop_adapters(monkeypatch)
+
+    handler = hass.services.handlers[(DOMAIN, SERVICE_RECOMPILE)]
+    await handler(object())
+
+    assert events == ["compute", "snapshot", "set_snapshot", "mark", "apply", "clear"]
+    assert store.state["apply_in_progress"] is False
+    assert entry_data["mode"] == "enforce"
+
+
+@pytest.mark.asyncio
 async def test_enforce_apply_failure_fails_safe_and_leaves_journal_open(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
