@@ -22,8 +22,6 @@ jobs:
         with:
           category: integration
           comment: "false"
-          # 'brands' ignorieren, bis custom_components/tessera/brand/icon.png existiert -> dann entfernen.
-          ignore: brands
 
   hassfest:
     name: hassfest
