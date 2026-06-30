@@ -1,4 +1,4 @@
-"""Tests for dormant Tessera native-auth adapters."""
+"""Tests for Tessera native-auth adapters."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ from custom_components.tessera.auth_adapter import (
     IncompleteSuperset,
     LockoutRisk,
     PermissionProbeAdapter,
+    PromotionRisk,
     RecoveryController,
     UnsafeAuthTarget,
     UnsupportedAuthVersion,
@@ -108,7 +109,7 @@ class AuthTrapHass:
     def auth(self) -> object:
         """Record and fail if setup touches native auth."""
         self.auth_access_count += 1
-        raise AssertionError("hass.auth must not be touched while adapters are dormant")
+        raise AssertionError("hass.auth must not be touched during off/monitor setup")
 
 
 class FakeServices:
@@ -359,6 +360,23 @@ async def test_user_binding_rejects_delta_and_forbidden_groups() -> None:
         await adapter.async_bind_full_superset(
             user,
             ["custom-group", "tessera:viewer"],
+            expected_tessera_group_ids=["tessera:viewer"],
+        )
+
+    assert hass.auth.update_calls == []
+
+
+@pytest.mark.asyncio
+async def test_user_binding_refuses_admin_promotion() -> None:
+    """Forward binding refuses to escalate a non-admin user to system-admin (#10)."""
+    hass = FakeHass()
+    user = FakeUser("user-1", ["tessera:viewer"])
+    adapter = UserBindingAdapter(hass, ha_version="2026.6.4")
+
+    with pytest.raises(PromotionRisk):
+        await adapter.async_bind_full_superset(
+            user,
+            ["system-admin", "tessera:viewer"],
             expected_tessera_group_ids=["tessera:viewer"],
         )
 
@@ -620,7 +638,7 @@ async def test_recovery_treats_falsey_active_flag_as_inactive() -> None:
 async def test_setup_entry_modes_do_not_touch_native_auth(
     monkeypatch: pytest.MonkeyPatch, mode: str
 ) -> None:
-    """E1 adapters are dormant: setup in off/monitor never touches hass.auth."""
+    """Setup in off/monitor never touches hass.auth (adapters are enforce-only)."""
     hass = AuthTrapHass()
 
     async def fake_compile_current(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
@@ -651,7 +669,7 @@ async def test_setup_entry_modes_do_not_touch_native_auth(
 async def test_auth_trap_records_swallowed_auth_access(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Prove the dormant boundary guard catches swallowed hass.auth access."""
+    """Prove the off/monitor boundary guard catches swallowed hass.auth access."""
     hass = AuthTrapHass()
 
     monkeypatch.setattr(

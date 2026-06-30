@@ -1,4 +1,4 @@
-"""Tests for dormant E3.4 restore orchestration."""
+"""Tests for E3.4 restore orchestration."""
 
 from __future__ import annotations
 

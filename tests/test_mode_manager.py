@@ -1,4 +1,4 @@
-"""Tests for Tessera's dormant E3.1 mode manager."""
+"""Tests for Tessera's E3 mode manager."""
 
 from __future__ import annotations
 

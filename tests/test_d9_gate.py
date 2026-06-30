@@ -1,4 +1,4 @@
-"""Tests for Tessera's dormant D9 custom-component gate."""
+"""Tests for Tessera's D9 custom-component gate."""
 
 from __future__ import annotations
 

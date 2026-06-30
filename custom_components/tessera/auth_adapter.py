@@ -49,6 +49,10 @@ class LockoutRisk(AuthAdapterError):
     """Raised when a write could remove owner/admin recovery access."""
 
 
+class PromotionRisk(AuthAdapterError):
+    """Raised when a forward binding would escalate a non-admin to system-admin."""
+
+
 class AuthGroupLike(Protocol):
     """Small mutable subset of Home Assistant auth group objects."""
 
@@ -433,6 +437,11 @@ def _validate_full_group_superset(
         )
     if GROUP_ID_ADMIN in current_group_ids and GROUP_ID_ADMIN not in group_ids:
         raise LockoutRisk("refusing to remove system-admin from an admin user")
+    if GROUP_ID_ADMIN in group_ids and GROUP_ID_ADMIN not in current_group_ids:
+        # Defense-in-depth at the choke point: a forward enforce binding is the
+        # user's current groups plus tessera:* roles, so it never legitimately
+        # adds system-admin to a non-admin. Refuse a buggy/forged escalation.
+        raise PromotionRisk("refusing to add system-admin to a non-admin user")
     return sorted(group_ids)
 
 
