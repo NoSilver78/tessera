@@ -21,6 +21,7 @@ class RoleData(TypedDict, total=False):
 
     name: str
     description: str
+    is_admin: bool
 
 
 class MembershipData(TypedDict):
@@ -138,6 +139,13 @@ def validate_config_data(data: object) -> TesseraConfigData:
                     f"config.roles.{role_key}.description must be a string"
                 )
             role["description"] = description
+        if "is_admin" in role_payload:
+            is_admin = role_payload["is_admin"]
+            if not isinstance(is_admin, bool):
+                raise TesseraSchemaError(
+                    f"config.roles.{role_key}.is_admin must be boolean"
+                )
+            role["is_admin"] = is_admin
         roles[role_key] = role
 
     membership_raw = _require_mapping(payload.get("membership"), "config.membership")
@@ -302,7 +310,11 @@ def _require_non_empty_string(value: object, path: str) -> str:
 def _require_role_id(value: object, path: str) -> str:
     """Validate internal Tessera role ids cannot overlap native group ids."""
     role_id = _require_non_empty_string(value, path)
-    if ":" in role_id or role_id.lower().startswith("tessera"):
+    if (
+        ":" in role_id
+        or role_id.lower().startswith("tessera")
+        or role_id.startswith("__")
+    ):
         raise TesseraSchemaError(
             f"{path} is reserved for native Tessera group namespace"
         )

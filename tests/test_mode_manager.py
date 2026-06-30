@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 from unittest.mock import AsyncMock
 
 import custom_components.tessera.mode_manager as mode_manager
 import pytest
 from custom_components.tessera.auth_adapter import SUPPORTED_HA_AUTH_VERSION
-from custom_components.tessera.mode_manager import compute_enforce_plan
+from custom_components.tessera.mode_manager import (
+    DEFAULT_ROLE_ID,
+    compute_enforce_plan,
+)
 from custom_components.tessera.schema import (
     TesseraSchemaError,
     default_config_data,
@@ -58,6 +62,103 @@ class ConfigLoadFailureStore(FakeStore):
         """Raise as if store validation rejected the persisted config."""
         self.config_loads += 1
         raise TesseraSchemaError("corrupt config")
+
+
+@dataclass
+class FakeNativeGroup:
+    """Native HA group read double."""
+
+    id: str
+
+
+@dataclass
+class FakeUser:
+    """Native HA user read double."""
+
+    id: str
+    group_ids: list[str]
+    is_owner: bool = False
+    system_generated: bool = False
+
+
+class WriteTrapStore:
+    """Auth store double that allows reads and traps native persistence."""
+
+    def __init__(
+        self,
+        groups: list[FakeNativeGroup] | None = None,
+        *,
+        fail_get_groups: Exception | None = None,
+    ) -> None:
+        """Initialize native groups."""
+        self._groups = {group.id: group for group in groups or []}
+        self.fail_get_groups = fail_get_groups
+        self.get_groups_calls = 0
+        self.save_calls = 0
+        self._store = self
+
+    async def async_get_groups(self) -> list[FakeNativeGroup]:
+        """Read native groups without mutating them."""
+        self.get_groups_calls += 1
+        if self.fail_get_groups is not None:
+            raise self.fail_get_groups
+        return list(self._groups.values())
+
+    async def async_save(self, data: dict[str, Any]) -> None:
+        """Trap any accidental native auth-store persistence."""
+        self.save_calls += 1
+        raise AssertionError("compute_enforce_plan must not persist auth store")
+
+
+class FakeAuth:
+    """Native HA auth read double with write traps."""
+
+    def __init__(
+        self,
+        users: list[FakeUser] | None = None,
+        groups: list[FakeNativeGroup] | None = None,
+        *,
+        fail_get_users: Exception | None = None,
+        fail_get_groups: Exception | None = None,
+    ) -> None:
+        """Initialize native users and groups."""
+        self.users = users or []
+        self.fail_get_users = fail_get_users
+        self._store = WriteTrapStore(groups, fail_get_groups=fail_get_groups)
+        self.get_users_calls = 0
+        self.update_calls = 0
+
+    async def async_get_users(self) -> list[FakeUser]:
+        """Read native users without mutating them."""
+        self.get_users_calls += 1
+        if self.fail_get_users is not None:
+            raise self.fail_get_users
+        return self.users
+
+    async def async_update_user(self, user: FakeUser, **kwargs: Any) -> None:
+        """Trap any accidental native user update."""
+        self.update_calls += 1
+        raise AssertionError("compute_enforce_plan must not update native users")
+
+
+class FakeHass:
+    """HA-like fake for E3.2 read-only auth planning."""
+
+    def __init__(
+        self,
+        users: list[FakeUser] | None = None,
+        groups: list[FakeNativeGroup] | None = None,
+        *,
+        fail_get_users: Exception | None = None,
+        fail_get_groups: Exception | None = None,
+    ) -> None:
+        """Initialize fake auth state."""
+        self.auth = FakeAuth(
+            users,
+            groups,
+            fail_get_users=fail_get_users,
+            fail_get_groups=fail_get_groups,
+        )
 
 
 class AuthTrapHass:
@@ -114,7 +215,7 @@ async def test_clean_store_returns_deterministic_group_plan() -> None:
     config["membership"]["by_user"] = {}
     store = FakeStore(config, _policy("operator", "viewer"))
 
-    result = await compute_enforce_plan(AuthTrapHass(), store)
+    result = await compute_enforce_plan(FakeHass(), store)
 
     assert result == {
         "groups": [
@@ -133,6 +234,8 @@ async def test_clean_store_returns_deterministic_group_plan() -> None:
                 "policy": {"entities": {"entity_ids": {"light.sofa": {"read": True}}}},
             },
         ],
+        "bindings": [],
+        "orphan_group_ids": [],
         "blocked": False,
         "block_reason": None,
         "block_detail": [],
@@ -167,6 +270,8 @@ async def test_d9_block_returns_no_partial_plan(
 
     assert result == {
         "groups": [],
+        "bindings": [],
+        "orphan_group_ids": [],
         "blocked": True,
         "block_reason": "d9",
         "block_detail": ["unknown_component", "unsafe_component"],
@@ -208,6 +313,8 @@ async def test_store_load_failure_blocks_without_propagating() -> None:
 
     assert result == {
         "groups": [],
+        "bindings": [],
+        "orphan_group_ids": [],
         "blocked": True,
         "block_reason": "store",
         "block_detail": ["TesseraSchemaError: corrupt config"],
@@ -234,6 +341,8 @@ async def test_resolver_failure_blocks_without_store_load(
 
     assert result == {
         "groups": [],
+        "bindings": [],
+        "orphan_group_ids": [],
         "blocked": True,
         "block_reason": "resolver",
         "block_detail": ["RuntimeError: no registries"],
@@ -263,6 +372,8 @@ async def test_d9_exception_blocks_without_propagating(
 
     assert result == {
         "groups": [],
+        "bindings": [],
+        "orphan_group_ids": [],
         "blocked": True,
         "block_reason": "d9",
         "block_detail": ["OSError: permission denied"],
@@ -293,6 +404,224 @@ async def test_linter_conflict_blocks_after_d9_passes() -> None:
     assert result["block_detail"] == [
         "user-1:light.sofa:control:restricted:blocked-by:operator"
     ]
+    assert result["bindings"] == []
+    assert result["orphan_group_ids"] == []
+
+
+@pytest.mark.asyncio
+async def test_binding_plan_uses_full_multi_role_superset_and_admin_role() -> None:
+    """Multi-role users get every Tessera role group plus allowed system groups."""
+    config = _config("admin", "auditor", "viewer")
+    config["roles"]["admin"]["is_admin"] = True
+    config["membership"]["by_user"] = {"user-1": ["viewer", "auditor", "admin"]}
+    hass = FakeHass(
+        users=[
+            FakeUser(
+                "user-1",
+                ["system-read-only", "system-users", "tessera:stale"],
+            )
+        ],
+        groups=[
+            FakeNativeGroup("tessera:admin"),
+            FakeNativeGroup("tessera:auditor"),
+            FakeNativeGroup("tessera:viewer"),
+        ],
+    )
+
+    result = await compute_enforce_plan(
+        hass, FakeStore(config, _policy("admin", "auditor", "viewer"))
+    )
+
+    assert result["bindings"] == [
+        {
+            "user_id": "user-1",
+            "target_group_ids": [
+                "system-admin",
+                "system-read-only",
+                "tessera:admin",
+                "tessera:auditor",
+                "tessera:viewer",
+            ],
+        }
+    ]
+    assert "system-users" not in result["bindings"][0]["target_group_ids"]
+    assert hass.auth.update_calls == 0
+    assert hass.auth._store.save_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_binding_plan_no_drop_keeps_both_role_groups() -> None:
+    """A two-role user receives both target Tessera groups, never a delta."""
+    config = _config("auditor", "viewer")
+    config["membership"]["by_user"] = {"user-1": ["viewer", "auditor"]}
+
+    result = await compute_enforce_plan(
+        FakeHass(users=[FakeUser("user-1", [])]),
+        FakeStore(config, _policy("auditor", "viewer")),
+    )
+
+    assert result["bindings"] == [
+        {
+            "user_id": "user-1",
+            "target_group_ids": ["tessera:auditor", "tessera:viewer"],
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_binding_plan_empty_union_uses_default_role_not_system_users() -> None:
+    """Users without a valid role get the deny-by-omission default group."""
+    config = _config("viewer")
+    config["membership"]["by_user"] = {"user-1": ["missing-role"]}
+
+    result = await compute_enforce_plan(
+        FakeHass(users=[FakeUser("user-1", ["system-users"])]),
+        FakeStore(config, _policy("viewer")),
+    )
+
+    assert result["bindings"] == [
+        {
+            "user_id": "user-1",
+            "target_group_ids": [f"tessera:{DEFAULT_ROLE_ID}"],
+        }
+    ]
+    assert result["groups"][0] == {
+        "group_id": f"tessera:{DEFAULT_ROLE_ID}",
+        "role_id": DEFAULT_ROLE_ID,
+        "policy": {"entities": {"entity_ids": {}}},
+    }
+    assert "system-users" not in result["bindings"][0]["target_group_ids"]
+
+
+@pytest.mark.asyncio
+async def test_binding_plan_promotion_guard_and_existing_admin_retention() -> None:
+    """Only admin roles promote; existing system-admin membership is preserved."""
+    config = _config("viewer")
+    config["membership"]["by_user"] = {
+        "plain": ["viewer"],
+        "existing-admin": ["viewer"],
+    }
+
+    result = await compute_enforce_plan(
+        FakeHass(
+            users=[
+                FakeUser("plain", ["system-users"]),
+                FakeUser("existing-admin", ["system-admin"]),
+            ]
+        ),
+        FakeStore(config, _policy("viewer")),
+    )
+
+    assert result["bindings"] == [
+        {
+            "user_id": "existing-admin",
+            "target_group_ids": ["system-admin", "tessera:viewer"],
+        },
+        {"user_id": "plain", "target_group_ids": ["tessera:viewer"]},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_binding_plan_skips_owner_and_system_generated_users() -> None:
+    """Owner and system-generated users are structurally unmanaged."""
+    config = _config("viewer")
+    config["membership"]["by_user"] = {
+        "owner": ["viewer"],
+        "generated": ["viewer"],
+        "managed": ["viewer"],
+    }
+
+    result = await compute_enforce_plan(
+        FakeHass(
+            users=[
+                FakeUser("owner", ["system-admin"], is_owner=True),
+                FakeUser("generated", ["tessera:viewer"], system_generated=True),
+                FakeUser("managed", []),
+            ]
+        ),
+        FakeStore(config, _policy("viewer")),
+    )
+
+    assert result["bindings"] == [
+        {"user_id": "managed", "target_group_ids": ["tessera:viewer"]}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_binding_plan_reports_orphan_tessera_groups() -> None:
+    """Existing unmanaged tessera:* groups are reported as sorted orphans."""
+    config = _config("viewer")
+    config["membership"]["by_user"] = {}
+
+    result = await compute_enforce_plan(
+        FakeHass(
+            groups=[
+                FakeNativeGroup("system-admin"),
+                FakeNativeGroup("tessera:viewer"),
+                FakeNativeGroup("tessera:ghost-b"),
+                FakeNativeGroup("tessera:ghost-a"),
+                FakeNativeGroup(f"tessera:{DEFAULT_ROLE_ID}"),
+            ]
+        ),
+        FakeStore(config, _policy("viewer")),
+    )
+
+    assert result["orphan_group_ids"] == ["tessera:ghost-a", "tessera:ghost-b"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("hass", "expected_detail"),
+    [
+        (
+            FakeHass(fail_get_users=RuntimeError("users unavailable")),
+            "RuntimeError: users unavailable",
+        ),
+        (
+            FakeHass(
+                users=[FakeUser("user-1", [])],
+                fail_get_groups=OSError("groups unavailable"),
+            ),
+            "OSError: groups unavailable",
+        ),
+    ],
+)
+async def test_binding_plan_auth_read_errors_fail_closed(
+    hass: FakeHass, expected_detail: str
+) -> None:
+    """Auth user/group read failures block and never propagate."""
+    result = await compute_enforce_plan(
+        hass, FakeStore(_config("viewer"), _policy("viewer"))
+    )
+
+    assert result == {
+        "groups": [],
+        "bindings": [],
+        "orphan_group_ids": [],
+        "blocked": True,
+        "block_reason": "auth",
+        "block_detail": [expected_detail],
+    }
+    assert hass.auth.update_calls == 0
+    assert hass.auth._store.save_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_binding_plan_empty_user_id_fails_closed() -> None:
+    """Invalid managed user ids are auth-plan failures, not propagated errors."""
+    result = await compute_enforce_plan(
+        FakeHass(users=[FakeUser("", [])]),
+        FakeStore(_config("viewer"), _policy("viewer")),
+    )
+
+    assert result == {
+        "groups": [],
+        "bindings": [],
+        "orphan_group_ids": [],
+        "blocked": True,
+        "block_reason": "auth",
+        "block_detail": ["ValueError: managed users require a stable id"],
+    }
 
 
 @pytest.mark.asyncio
@@ -313,11 +642,24 @@ async def test_unsupported_ha_version_blocks_before_store_load(
     assert store.policy_loads == 0
 
 
-@pytest.mark.parametrize("role_id", ["tessera:x", "a:b", "TesseraAdmin"])
+@pytest.mark.parametrize(
+    "role_id", ["tessera:x", "a:b", "TesseraAdmin", "__default__", "__x"]
+)
 def test_schema_role_id_namespace_guard(role_id: str) -> None:
     """Role ids cannot collide with native ``tessera:<role>`` group ids."""
     config = default_config_data()
     config["roles"] = {role_id: {"name": "bad"}}
+
+    with pytest.raises(TesseraSchemaError, match="reserved"):
+        validate_config_data(config)
+
+
+def test_schema_default_role_sentinel_prevents_duplicate_group_plan() -> None:
+    """The internal default-role sentinel cannot be configured as a real role."""
+    config = default_config_data()
+    config["mode"] = "enforce"
+    config["roles"] = {DEFAULT_ROLE_ID: {"name": "Default"}}
+    config["membership"]["by_user"] = {"user-1": []}
 
     with pytest.raises(TesseraSchemaError, match="reserved"):
         validate_config_data(config)
@@ -348,10 +690,17 @@ def test_schema_grant_matrix_role_id_namespace_guard(role_id: str) -> None:
 
 
 @pytest.mark.asyncio
-async def test_compute_enforce_plan_never_touches_hass_auth() -> None:
-    """AuthTrapHass would raise if E3.1 touched native auth."""
+async def test_version_block_never_touches_hass_auth(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pre-auth gate blocks still return empty E3.2 fields without auth access."""
+    monkeypatch.setattr(mode_manager, "_homeassistant_version", lambda: "1900.1.1")
+
     result = await compute_enforce_plan(
         AuthTrapHass(), FakeStore(_config("viewer"), _policy("viewer"))
     )
 
-    assert result["block_reason"] is None
+    assert result["groups"] == []
+    assert result["bindings"] == []
+    assert result["orphan_group_ids"] == []
+    assert result["block_reason"] == "version"
