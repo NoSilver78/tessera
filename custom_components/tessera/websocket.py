@@ -11,7 +11,7 @@ from homeassistant.components.websocket_api import decorators as websocket_decor
 from homeassistant.components.websocket_api.connection import ActiveConnection
 from homeassistant.helpers import area_registry as ar
 
-from .config_flow import add_area_grant, remove_area_grant
+from .config_flow import add_area_grant, encode_grant, remove_area_grant
 from .const import DOMAIN
 from .linter import LintReport
 from .monitor import (
@@ -169,7 +169,7 @@ async def async_set_matrix_grant(
             control=control,
         )
     else:
-        policy = remove_area_grant(policy, f"{area_id}::{role_id}")
+        policy = remove_area_grant(policy, encode_grant(area_id, role_id))
 
     await store.async_save_policy(policy)
     preview = await _refresh_preview(hass, entry_id, entry_data, store, config, policy)

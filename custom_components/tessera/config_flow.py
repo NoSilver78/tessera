@@ -36,6 +36,25 @@ ACTION_ADD_ROLE = "add_role"
 ACTION_REMOVE_ROLE = "remove_role"
 ACTION_ADD_AREA_GRANT = "add_area_grant"
 ACTION_REMOVE_AREA_GRANT = "remove_area_grant"
+# Separator for the ``area::role`` keys used by the remove-grant selector.
+GRANT_SEPARATOR = "::"
+
+
+def encode_grant(area_id: str, role_id: str) -> str:
+    """Encode an area/role pair into a stable ``area::role`` selection key."""
+    return f"{area_id}{GRANT_SEPARATOR}{role_id}"
+
+
+def decode_grant(encoded_grant: str) -> tuple[str, str]:
+    """Decode an ``area::role`` selection key into its area and role ids.
+
+    Raises:
+        TesseraSchemaError: If the key is not a well-formed ``area::role`` pair.
+    """
+    area_id, separator, role_id = encoded_grant.partition(GRANT_SEPARATOR)
+    if not area_id or separator != GRANT_SEPARATOR or not role_id:
+        raise TesseraSchemaError("area grant selection must use area::role")
+    return area_id, role_id
 
 
 def _role_options(config: TesseraConfigData) -> list[str]:
@@ -46,7 +65,7 @@ def _role_options(config: TesseraConfigData) -> list[str]:
 def _area_grant_options(policy: TesseraPolicyData) -> list[str]:
     """Return stable grant choices encoded as area::role."""
     return [
-        f"{area_id}::{role_id}"
+        encode_grant(area_id, role_id)
         for area_id, role_map in sorted(policy["area_grants"].items())
         for role_id in sorted(role_map)
     ]
@@ -143,10 +162,7 @@ def remove_area_grant(
     policy: TesseraPolicyData, encoded_grant: str
 ) -> TesseraPolicyData:
     """Return policy with one encoded area::role grant removed."""
-    area_id, separator, role_id = encoded_grant.partition("::")
-    if not area_id or separator != "::" or not role_id:
-        raise TesseraSchemaError("area grant selection must use area::role")
-
+    area_id, role_id = decode_grant(encoded_grant)
     next_policy = validate_policy_data(policy)
     role_map = next_policy["area_grants"].get(area_id)
     if role_map is not None:
