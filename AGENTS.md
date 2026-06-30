@@ -6,6 +6,7 @@ Du bist hier der **Implementierer**: kleine, klar begrenzte Codeänderungen, Tes
 - **Eine Aufgabe = ein Thema.** Keine Architektur-/Richtungsentscheidungen allein, keine breitflächigen Refactorings, keine Scope-Ausweitung.
 - Jede Aufgabe nach Vorlage: **Aufgabe · betroffene Dateien · Regeln/„was nicht ändern" · erwartete Umsetzung · Tests · Definition of Done · Abschlussbericht** (geänderte Dateien · Zusammenfassung · Tests+Ergebnis · Risiken/Annahmen).
 - **Tests:** Happy Path + relevante Fehlerfälle + Grenzfälle + Regressionen. Tests nie entfernen/abschwächen.
+- **Qualitäts-Charta verbindlich** ([docs/QUALITY.md](docs/QUALITY.md), R1–R7): Tests behaupten das sichere Soll, nie das Ist (R1); reale Auth-Fixtures (`system-users`, nie `[]`) (R2); jede `SECURITY.md`-Zusage hat einen Test (R3); verdrahtetes Modul ⇒ Docstring im selben Commit (R4, CI-erzwungen); Failure-Injection-Test bei jedem Native-Write-Pfad (R5).
 - **Bei Unklarheit/Risiko:** fail-closed, nichts schreiben, Michael fragen.
 
 ## Ablage & Benennung

@@ -24,3 +24,12 @@ jobs:
       - name: pytest
         # exit code 5 = "no tests collected" (ok solange noch keine Tests existieren)
         run: pytest -q || [ $? -eq 5 ]
+      - name: stale-marker check (docs/QUALITY.md R4)
+        # Verdrahteter Code darf sich nicht "dormant/not wired" nennen
+        # (by-design `v1-inert`/`by_group` ist nicht betroffen).
+        run: |
+          if grep -rniE 'dormant|not wired|not yet wired|deliberately dormant' \
+              --include='*.py' custom_components/tessera/; then
+            echo "::error::Verdrahteter Code nennt sich dormant/not-wired — Docstring aktualisieren (docs/QUALITY.md R4)."
+            exit 1
+          fi

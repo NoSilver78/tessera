@@ -29,6 +29,8 @@ durchlaufen dieselbe Review-Sorgfalt.
    Richtung und Scope abstimmen.
 2. **Fork → Branch → PR** gegen `main`. Kleine, fokussierte PRs sind leichter zu reviewen.
 3. **Qualitäts-Tor:** Code muss `ruff`, `black` und `mypy --strict` bestehen und Tests mitbringen.
+   Verbindlich sind zudem die **[Qualitäts-Regeln R1–R7](docs/QUALITY.md)** (sichere-Soll-Tests, reale
+   `system-users`-Fixtures, jede Sicherheits-Invariante = ein benannter Test).
    Die CI (`ci.yml`) führt zusätzlich Home-Assistant-Tests aus; sie ist auf `main` grün. *(Hinweis: Der
    HACS-Datei-Check in `validate.yml` ist `continue-on-error`, bis das Repo öffentlich ist — er liest
    `hacs.json`/`manifest` unauthentifiziert und schlägt am privaten Repo fehl.)*
