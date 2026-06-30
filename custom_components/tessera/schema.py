@@ -124,7 +124,7 @@ def validate_config_data(data: object) -> TesseraConfigData:
     roles_raw = _require_mapping(payload.get("roles"), "config.roles")
     roles: dict[str, RoleData] = {}
     for role_id, role_data in roles_raw.items():
-        role_key = _require_non_empty_string(role_id, "role id")
+        role_key = _require_role_id(role_id, "role id")
         role_payload = _require_mapping(role_data, f"config.roles.{role_key}")
         role: RoleData = {}
         if "name" in role_payload:
@@ -197,7 +197,7 @@ def _validate_membership_map(data: object, path: str) -> dict[str, list[str]]:
         if not isinstance(role_ids, list):
             raise TesseraSchemaError(f"{path}.{subject_id} must be a list")
         result[subject_id] = [
-            _require_non_empty_string(role_id, f"{path}.{subject_id} role")
+            _require_role_id(role_id, f"{path}.{subject_id} role")
             for role_id in role_ids
         ]
     return result
@@ -297,6 +297,15 @@ def _require_non_empty_string(value: object, path: str) -> str:
     if not isinstance(value, str) or not value:
         raise TesseraSchemaError(f"{path} must be a non-empty string")
     return value
+
+
+def _require_role_id(value: object, path: str) -> str:
+    role_id = _require_non_empty_string(value, path)
+    if ":" in role_id or role_id.lower().startswith("tessera"):
+        raise TesseraSchemaError(
+            f"{path} is reserved for native Tessera group namespace"
+        )
+    return role_id
 
 
 def _require_sha256_hex(value: object, path: str) -> str:
