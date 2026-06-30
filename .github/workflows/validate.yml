@@ -1,7 +1,9 @@
 name: Validate
 
-# HACS- und hassfest-Validierung. Ergänzt (ersetzt nicht) ci.yml (Lint/Typ/Test).
-# Aktuelle Action-Refs: hacs/action@main, home-assistant/actions/hassfest@master, actions/checkout@v4.
+# HACS- und hassfest-Validierung. Ergaenzt (ersetzt nicht) ci.yml (Lint/Typ/Test).
+# Hinweis: vollstaendig gruen erst zum Release — erfordert ein OEFFENTLICHES Repo
+# und einen 'tessera'-Eintrag in home-assistant/brands. Bis dahin schlaegt die
+# Brand-Pruefung (besonders hassfest) erwartungsgemaess fehl; PR #27 ist bewusst gehalten.
 
 on:
   push:
@@ -10,7 +12,8 @@ on:
     - cron: "0 0 * * *"
   workflow_dispatch:
 
-permissions: {}
+permissions:
+  contents: read
 
 jobs:
   hacs:
@@ -22,6 +25,9 @@ jobs:
         with:
           category: integration
           comment: "false"
+          # 'brands' ignorieren, bis 'tessera' in home-assistant/brands eingetragen ist
+          # (Inline custom_components/tessera/brand/ deckt nur HAs Icon-Rendering).
+          ignore: brands
 
   hassfest:
     name: hassfest
