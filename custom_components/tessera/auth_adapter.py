@@ -38,6 +38,10 @@ class UnsafeAuthTarget(AuthAdapterError):
     """Raised when a write target violates Tessera namespace guards."""
 
 
+class AllowOnlyPolicyViolation(UnsafeAuthTarget):
+    """Raised when a native policy is not Tessera's allow-only shape."""
+
+
 class IncompleteSuperset(AuthAdapterError):
     """Raised when a user binding omits expected Tessera role groups."""
 
@@ -161,6 +165,7 @@ class AuthPolicyStoreAdapter:
         """
         self._assert_supported_version()
         _assert_tessera_group_id(group_id)
+        _assert_allow_only_policy(policy)
         store = self._hass.auth._store
         await store.async_get_groups()
         policy_copy = deepcopy(dict(policy))
@@ -360,16 +365,25 @@ def _validate_full_group_superset(
     for group_id in group_ids:
         _assert_allowed_binding_group_id(group_id)
     expected_group_ids = set(expected_tessera_group_ids)
-    if not expected_group_ids:
-        raise IncompleteSuperset("expected_tessera_group_ids must not be empty")
     for group_id in expected_group_ids:
         _assert_tessera_group_id(group_id)
+    current_group_ids = set(_user_group_ids(user))
+    current_tessera_group_ids = {
+        group_id
+        for group_id in current_group_ids
+        if group_id.startswith(TESSERA_GROUP_PREFIX)
+    }
+    unasserted_current = current_tessera_group_ids - expected_group_ids
+    if unasserted_current:
+        raise IncompleteSuperset(
+            "expected_tessera_group_ids missing current Tessera groups: "
+            f"{sorted(unasserted_current)}"
+        )
     missing = expected_group_ids - group_ids
     if missing:
         raise IncompleteSuperset(
             f"full_group_ids missing expected Tessera groups: {sorted(missing)}"
         )
-    current_group_ids = set(_user_group_ids(user))
     if GROUP_ID_ADMIN in current_group_ids and GROUP_ID_ADMIN not in group_ids:
         raise LockoutRisk("refusing to remove system-admin from an admin user")
     return sorted(group_ids)
@@ -391,6 +405,25 @@ def _assert_supported_auth_version(ha_version: str) -> None:
             f"unsupported HA auth version {ha_version}; "
             f"expected {SUPPORTED_HA_AUTH_VERSION}"
         )
+
+
+def _assert_allow_only_policy(policy: Mapping[str, Any]) -> None:
+    """Reject native policy shapes outside Tessera's entity allow-list subset."""
+    if not isinstance(policy, Mapping) or set(policy) != {"entities"}:
+        raise AllowOnlyPolicyViolation("allow-only")
+    entities = policy["entities"]
+    if not isinstance(entities, Mapping) or set(entities) != {"entity_ids"}:
+        raise AllowOnlyPolicyViolation("allow-only")
+    entity_ids = entities["entity_ids"]
+    if not isinstance(entity_ids, Mapping):
+        raise AllowOnlyPolicyViolation("allow-only")
+    for leaf in entity_ids.values():
+        if not isinstance(leaf, Mapping):
+            raise AllowOnlyPolicyViolation("allow-only")
+        if any(key not in {"read", "control"} for key in leaf):
+            raise AllowOnlyPolicyViolation("allow-only")
+        if any(not isinstance(value, bool) for value in leaf.values()):
+            raise AllowOnlyPolicyViolation("allow-only")
 
 
 def _assert_managed_user(user: Any) -> None:
