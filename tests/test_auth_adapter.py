@@ -488,6 +488,30 @@ async def test_recovery_snapshot_restore_and_no_admin_lockout() -> None:
 
 
 @pytest.mark.asyncio
+async def test_recovery_snapshot_skips_unmanaged_users() -> None:
+    """Pre-install snapshot skips owner/system-generated users without raising.
+
+    Regression: real HA always has system-generated users; snapshotting them
+    raised UnsafeAuthTarget and blocked enforce (caught by the ha-tessera-dev E2E).
+    """
+    hass = FakeHass()
+    recovery = RecoveryController(hass, UserBindingAdapter(hass, ha_version="2026.6.4"))
+
+    snapshot = await recovery.async_snapshot(
+        [
+            FakeUser("managed", ["system-read-only"]),
+            FakeUser("owner", ["system-admin"], is_owner=True),
+            FakeUser("sysgen", ["system-users"], system_generated=True),
+        ],
+        include_without_tessera=True,
+    )
+
+    assert snapshot == AuthRecoverySnapshot(
+        users=(UserGroupSnapshot("managed", ("system-read-only",)),)
+    )
+
+
+@pytest.mark.asyncio
 async def test_recovery_restore_rejects_unsafe_groups_and_admin_demotion() -> None:
     """Recovery restore keeps namespace and no-lockout guards fail-closed."""
     hass = FakeHass()
