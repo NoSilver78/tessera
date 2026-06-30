@@ -14,6 +14,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol, cast
 
+from ._user_helpers import _user_group_ids
 from .const import MODE_OFF
 from .schema import TesseraConfigData
 
@@ -530,17 +531,11 @@ def _assert_allowed_binding_group_id(group_id: str) -> None:
     _assert_tessera_group_id(group_id)
 
 
-def _user_group_ids(user: Any) -> list[str]:
-    """Return sorted group ids from HA user or test double objects."""
-    if hasattr(user, "group_ids"):
-        return sorted(str(group_id) for group_id in user.group_ids)
-    return sorted(str(group.id) for group in user.groups)
-
-
 def _user_id(user: Any) -> str:
     """Return a stable user id from HA user or test double objects."""
     user_id = getattr(user, "id", None)
     if not isinstance(user_id, str) or not user_id:
+        # Layer-specific: auth writes use UnsafeAuthTarget; do not consolidate.
         raise UnsafeAuthTarget("managed users require a stable id")
     return user_id
 

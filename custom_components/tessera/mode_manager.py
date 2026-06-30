@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, Literal, Protocol, TypedDict, cast
 
+from ._user_helpers import _is_unmanaged_user, _user_group_ids
 from .auth_adapter import (
     GROUP_ID_ADMIN,
     GROUP_ID_READ_ONLY,
@@ -462,21 +463,10 @@ def _has_admin_role(role_ids: list[str], config: TesseraConfigData) -> bool:
     return any(config["roles"][role_id].get("is_admin") is True for role_id in role_ids)
 
 
-def _is_unmanaged_user(user: Any) -> bool:
-    return bool(getattr(user, "is_owner", False)) or bool(
-        getattr(user, "system_generated", False)
-    )
-
-
-def _user_group_ids(user: Any) -> list[str]:
-    if hasattr(user, "group_ids"):
-        return sorted(str(group_id) for group_id in user.group_ids)
-    return sorted(str(group.id) for group in user.groups)
-
-
 def _user_id(user: Any) -> str:
     user_id = getattr(user, "id", None)
     if not isinstance(user_id, str) or not user_id:
+        # Layer-specific: plan failures use ValueError; do not consolidate.
         raise ValueError("managed users require a stable id")
     return user_id
 
