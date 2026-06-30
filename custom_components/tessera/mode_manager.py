@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any, Literal, Protocol, TypedDict, cast
 
 from .auth_adapter import (
@@ -9,7 +10,10 @@ from .auth_adapter import (
     GROUP_ID_READ_ONLY,
     GROUP_ID_USER,
     TESSERA_GROUP_PREFIX,
+    AllowOnlyPolicyViolation,
+    LockoutRisk,
     UnsupportedAuthVersion,
+    _assert_allow_only_policy,
     _assert_supported_auth_version,
     _homeassistant_version,
 )
@@ -21,6 +25,8 @@ from .resolver import AreaEntityResolver
 from .schema import TesseraConfigData, TesseraPolicyData
 
 BlockReason = Literal["version", "resolver", "store", "compile", "d9", "linter", "auth"]
+ApplyStatus = Literal["applied", "blocked", "failed"]
+RefusedReason = Literal["blocked", "version", "lockout", "allow-only", "write-error"]
 DEFAULT_ROLE_ID = "__default__"
 _PRESERVED_SYSTEM_GROUP_IDS = frozenset({GROUP_ID_ADMIN, GROUP_ID_READ_ONLY})
 
@@ -51,6 +57,17 @@ class EnforcePlan(TypedDict):
     block_detail: list[str]
 
 
+class ApplyResult(TypedDict):
+    """Dormant E3.3 native-apply result with redacted write accounting."""
+
+    status: ApplyStatus
+    refused_reason: RefusedReason | None
+    groups_written: list[str]
+    bindings_written: list[str]
+    orphan_group_ids_removed: list[str]
+    detail: list[str]
+
+
 class _StoreLike(Protocol):
     """Small store subset needed by the dormant mode manager."""
 
@@ -60,6 +77,34 @@ class _StoreLike(Protocol):
 
     async def async_load_policy(self) -> TesseraPolicyData:
         """Load Tessera policy."""
+        ...
+
+
+class _PolicyStoreAdapterLike(Protocol):
+    """Writable native group-policy adapter subset used by E3.3."""
+
+    async def async_set_group_policy(
+        self, group_id: str, name: str, policy: Mapping[str, Any]
+    ) -> None:
+        """Create or replace one native group policy."""
+        ...
+
+    async def async_remove_group(self, group_id: str) -> None:
+        """Remove one native group."""
+        ...
+
+
+class _UserBindingAdapterLike(Protocol):
+    """Writable native user-binding adapter subset used by E3.3."""
+
+    async def async_bind_full_superset(
+        self,
+        user: Any,
+        full_group_ids: list[str],
+        *,
+        expected_tessera_group_ids: list[str],
+    ) -> None:
+        """Replace one user's native group ids with the complete target set."""
         ...
 
 
@@ -148,10 +193,170 @@ async def compute_enforce_plan(hass: object, store: _StoreLike) -> EnforcePlan:
     }
 
 
+async def apply_enforce_plan(
+    plan: EnforcePlan,
+    policy_store: _PolicyStoreAdapterLike,
+    binding_adapter: _UserBindingAdapterLike,
+    users_by_id: Mapping[str, Any],
+) -> ApplyResult:
+    """Apply an already-computed enforce plan through guarded native adapters.
+
+    This is the first native-write E3.3 surface, but remains dormant: no setup,
+    websocket, config-flow, or monitor code calls it. It writes only when a
+    caller explicitly passes a non-blocked plan and adapter instances.
+
+    E3.3 intentionally has no rollback journal yet. On a mid-apply adapter
+    failure it stops, reports redacted write accounting, and leaves an
+    idempotently re-applyable half-state; two-phase rollback is E3.4. Exception
+    messages are not copied into ``detail`` so auth payloads cannot leak through
+    adapter errors.
+    """
+    if plan["blocked"]:
+        return _apply_result(
+            "blocked",
+            refused_reason="blocked",
+            detail=[
+                f"{plan['block_reason']}: {detail}" for detail in plan["block_detail"]
+            ]
+            or [str(plan["block_reason"])],
+        )
+
+    try:
+        _assert_apply_policies_allow_only(plan)
+        binding_operations = _validated_binding_operations(plan, users_by_id)
+        _assert_owner_or_admin_survives(plan, users_by_id)
+    except LockoutRisk as error:
+        return _apply_result(
+            "failed", refused_reason="lockout", detail=_redacted_error_detail(error)
+        )
+    except AllowOnlyPolicyViolation as error:
+        return _apply_result(
+            "failed",
+            refused_reason="allow-only",
+            detail=_redacted_error_detail(error),
+        )
+    except Exception as error:
+        return _apply_result(
+            "failed",
+            refused_reason="write-error",
+            detail=_redacted_error_detail(error),
+        )
+
+    result = _apply_result("applied")
+    try:
+        for group in plan["groups"]:
+            _assert_owner_or_admin_survives(plan, users_by_id)
+            await policy_store.async_set_group_policy(
+                group["group_id"],
+                group["group_id"],
+                group["policy"],
+            )
+            result["groups_written"].append(group["group_id"])
+
+        for binding, user, expected_group_ids in binding_operations:
+            _assert_owner_or_admin_survives(plan, users_by_id)
+            await binding_adapter.async_bind_full_superset(
+                user,
+                binding["target_group_ids"],
+                expected_tessera_group_ids=expected_group_ids,
+            )
+            result["bindings_written"].append(binding["user_id"])
+
+        for group_id in plan["orphan_group_ids"]:
+            _assert_owner_or_admin_survives(plan, users_by_id)
+            await policy_store.async_remove_group(group_id)
+            result["orphan_group_ids_removed"].append(group_id)
+    except UnsupportedAuthVersion as error:
+        result["status"] = "failed"
+        result["refused_reason"] = "version"
+        result["detail"] = _redacted_error_detail(error)
+    except LockoutRisk as error:
+        result["status"] = "failed"
+        result["refused_reason"] = "lockout"
+        result["detail"] = _redacted_error_detail(error)
+    except AllowOnlyPolicyViolation as error:
+        result["status"] = "failed"
+        result["refused_reason"] = "allow-only"
+        result["detail"] = _redacted_error_detail(error)
+    except Exception as error:
+        result["status"] = "failed"
+        result["refused_reason"] = "write-error"
+        result["detail"] = _redacted_error_detail(error)
+    return result
+
+
 class _BindingAndOrphanPlan(TypedDict):
     bindings: list[UserBindingPlan]
     orphan_group_ids: list[str]
     needs_default_role: bool
+
+
+_BindingOperation = tuple[UserBindingPlan, Any, list[str]]
+
+
+def _apply_result(
+    status: ApplyStatus,
+    *,
+    refused_reason: RefusedReason | None = None,
+    detail: list[str] | None = None,
+) -> ApplyResult:
+    return {
+        "status": status,
+        "refused_reason": refused_reason,
+        "groups_written": [],
+        "bindings_written": [],
+        "orphan_group_ids_removed": [],
+        "detail": detail or [],
+    }
+
+
+def _validated_binding_operations(
+    plan: EnforcePlan, users_by_id: Mapping[str, Any]
+) -> list[_BindingOperation]:
+    operations: list[_BindingOperation] = []
+    for binding in plan["bindings"]:
+        user_id = binding["user_id"]
+        if user_id not in users_by_id:
+            raise ValueError(f"missing native user for binding {user_id}")
+        expected_group_ids = [
+            group_id
+            for group_id in _user_group_ids(users_by_id[user_id])
+            if group_id.startswith(TESSERA_GROUP_PREFIX)
+        ]
+        operations.append((binding, users_by_id[user_id], expected_group_ids))
+    return operations
+
+
+def _assert_apply_policies_allow_only(plan: EnforcePlan) -> None:
+    """Validate every planned group policy before the first native write."""
+    for group in plan["groups"]:
+        _assert_allow_only_policy(group["policy"])
+
+
+def _assert_owner_or_admin_survives(
+    plan: EnforcePlan, users_by_id: Mapping[str, Any]
+) -> None:
+    """Fail closed if the planned binding set leaves no active owner/admin."""
+    target_group_ids_by_user = {
+        binding["user_id"]: set(binding["target_group_ids"])
+        for binding in plan["bindings"]
+    }
+    for user_id, user in users_by_id.items():
+        if getattr(user, "is_active", True) is False:
+            continue
+        if getattr(user, "system_generated", False):
+            continue
+        if getattr(user, "is_owner", False):
+            return
+        group_ids = target_group_ids_by_user.get(user_id, set(_user_group_ids(user)))
+        if GROUP_ID_ADMIN in group_ids:
+            return
+    raise LockoutRisk("lockout")
+
+
+def _redacted_error_detail(error: Exception) -> list[str]:
+    """Return exception type only, avoiding auth payloads in apply details."""
+    return [type(error).__name__]
 
 
 def _blocked(reason: BlockReason, detail: list[str]) -> EnforcePlan:

@@ -8,6 +8,7 @@ from typing import Any
 import custom_components.tessera as tessera_init
 import pytest
 from custom_components.tessera.auth_adapter import (
+    AllowOnlyPolicyViolation,
     AuthPolicyStoreAdapter,
     AuthRecoverySnapshot,
     IncompleteSuperset,
@@ -251,10 +252,39 @@ async def test_policy_store_writes_only_tessera_namespaced_groups() -> None:
 
 
 @pytest.mark.asyncio
+async def test_policy_store_rejects_non_allow_only_policy_shapes() -> None:
+    """Native policies are fail-closed to Tessera's entity allow-list shape."""
+    hass = FakeHass()
+    adapter = AuthPolicyStoreAdapter(
+        hass, ha_version="2026.6.4", group_factory=fake_group_factory
+    )
+
+    with pytest.raises(AllowOnlyPolicyViolation):
+        await adapter.async_set_group_policy(
+            "tessera:viewer", "Viewer", {"entities": True}
+        )
+    with pytest.raises(AllowOnlyPolicyViolation):
+        await adapter.async_set_group_policy(
+            "tessera:viewer",
+            "Viewer",
+            {"entities": {"entity_ids": {"light.a": True}}},
+        )
+    with pytest.raises(AllowOnlyPolicyViolation):
+        await adapter.async_set_group_policy(
+            "tessera:viewer",
+            "Viewer",
+            {"entities": {"entity_ids": {}}, "domains": {"light": True}},
+        )
+
+    assert hass.auth._store._groups == {}
+    assert hass.auth._store._store.saved_payloads == []
+
+
+@pytest.mark.asyncio
 async def test_user_binding_writes_full_superset_and_invalidates_cache() -> None:
     """User binding uses HA's public REPLACE API with the full superset."""
     hass = FakeHass()
-    user = FakeUser("user-1", ["tessera:old"])
+    user = FakeUser("user-1", [])
     adapter = UserBindingAdapter(hass, ha_version="2026.6.4")
 
     await adapter.async_bind_full_superset(

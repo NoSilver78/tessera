@@ -8,9 +8,13 @@ from unittest.mock import AsyncMock
 
 import custom_components.tessera.mode_manager as mode_manager
 import pytest
-from custom_components.tessera.auth_adapter import SUPPORTED_HA_AUTH_VERSION
+from custom_components.tessera.auth_adapter import (
+    SUPPORTED_HA_AUTH_VERSION,
+    IncompleteSuperset,
+)
 from custom_components.tessera.mode_manager import (
     DEFAULT_ROLE_ID,
+    apply_enforce_plan,
     compute_enforce_plan,
 )
 from custom_components.tessera.schema import (
@@ -161,6 +165,56 @@ class FakeHass:
         )
 
 
+class SpyPolicyStoreAdapter:
+    """Policy-store adapter spy for HA-free E3.3 apply tests."""
+
+    def __init__(self, *, fail_on_set: str | None = None) -> None:
+        """Initialize call tracking."""
+        self.fail_on_set = fail_on_set
+        self.set_calls: list[tuple[str, str, dict[str, Any]]] = []
+        self.remove_calls: list[str] = []
+
+    async def async_set_group_policy(
+        self, group_id: str, name: str, policy: dict[str, Any]
+    ) -> None:
+        """Record one native group-policy write."""
+        if group_id == self.fail_on_set:
+            raise RuntimeError(f"set failed for {group_id}")
+        self.set_calls.append((group_id, name, policy))
+
+    async def async_remove_group(self, group_id: str) -> None:
+        """Record one native group removal."""
+        self.remove_calls.append(group_id)
+
+
+class SpyBindingAdapter:
+    """User-binding adapter spy for HA-free E3.3 apply tests."""
+
+    def __init__(
+        self, *, fail_on_user: str | None = None, reject_incomplete: bool = False
+    ) -> None:
+        """Initialize call tracking."""
+        self.fail_on_user = fail_on_user
+        self.reject_incomplete = reject_incomplete
+        self.bind_calls: list[tuple[Any, list[str], list[str]]] = []
+
+    async def async_bind_full_superset(
+        self,
+        user: Any,
+        full_group_ids: list[str],
+        *,
+        expected_tessera_group_ids: list[str],
+    ) -> None:
+        """Record one native user binding write."""
+        if user.id == self.fail_on_user:
+            raise RuntimeError(f"bind failed for {user.id}")
+        if self.reject_incomplete and not set(expected_tessera_group_ids).issubset(
+            set(full_group_ids)
+        ):
+            raise IncompleteSuperset("incomplete superset")
+        self.bind_calls.append((user, full_group_ids, expected_tessera_group_ids))
+
+
 class AuthTrapHass:
     """HA-like fake that fails if E3.1 touches native auth."""
 
@@ -186,6 +240,37 @@ def _policy(*roles: str) -> dict[str, Any]:
             {"control": True} if role == "operator" else {"read": True}
         )
     return policy
+
+
+def _apply_plan() -> dict[str, Any]:
+    return {
+        "groups": [
+            {
+                "group_id": "tessera:admin",
+                "role_id": "admin",
+                "policy": {"entities": {"entity_ids": {"light.sofa": {"read": True}}}},
+            },
+            {
+                "group_id": "tessera:viewer",
+                "role_id": "viewer",
+                "policy": {"entities": {"entity_ids": {}}},
+            },
+        ],
+        "bindings": [
+            {
+                "user_id": "user-1",
+                "target_group_ids": [
+                    "system-admin",
+                    "tessera:admin",
+                    "tessera:viewer",
+                ],
+            }
+        ],
+        "orphan_group_ids": ["tessera:ghost"],
+        "blocked": False,
+        "block_reason": None,
+        "block_detail": [],
+    }
 
 
 @pytest.fixture(autouse=True)
@@ -406,6 +491,223 @@ async def test_linter_conflict_blocks_after_d9_passes() -> None:
     ]
     assert result["bindings"] == []
     assert result["orphan_group_ids"] == []
+
+
+@pytest.mark.asyncio
+async def test_apply_enforce_plan_writes_groups_bindings_then_orphans() -> None:
+    """E3.3 apply writes policies, then user bindings, then orphan removals."""
+    policy_store = SpyPolicyStoreAdapter()
+    binding = SpyBindingAdapter()
+    user = FakeUser("user-1", ["tessera:admin", "tessera:viewer"])
+
+    result = await apply_enforce_plan(
+        _apply_plan(),
+        policy_store,
+        binding,
+        {"user-1": user},
+    )
+
+    assert result == {
+        "status": "applied",
+        "refused_reason": None,
+        "groups_written": ["tessera:admin", "tessera:viewer"],
+        "bindings_written": ["user-1"],
+        "orphan_group_ids_removed": ["tessera:ghost"],
+        "detail": [],
+    }
+    assert policy_store.set_calls == [
+        (
+            "tessera:admin",
+            "tessera:admin",
+            {"entities": {"entity_ids": {"light.sofa": {"read": True}}}},
+        ),
+        ("tessera:viewer", "tessera:viewer", {"entities": {"entity_ids": {}}}),
+    ]
+    assert binding.bind_calls == [
+        (
+            user,
+            ["system-admin", "tessera:admin", "tessera:viewer"],
+            ["tessera:admin", "tessera:viewer"],
+        )
+    ]
+    assert policy_store.remove_calls == ["tessera:ghost"]
+
+
+@pytest.mark.asyncio
+async def test_apply_enforce_plan_blocked_plan_does_not_write() -> None:
+    """A blocked plan is reported without touching native write adapters."""
+    plan = _apply_plan()
+    plan["blocked"] = True
+    plan["block_reason"] = "d9"
+    plan["block_detail"] = ["unknown custom component"]
+    policy_store = SpyPolicyStoreAdapter()
+    binding = SpyBindingAdapter()
+
+    result = await apply_enforce_plan(plan, policy_store, binding, {"user-1": object()})
+
+    assert result == {
+        "status": "blocked",
+        "refused_reason": "blocked",
+        "groups_written": [],
+        "bindings_written": [],
+        "orphan_group_ids_removed": [],
+        "detail": ["d9: unknown custom component"],
+    }
+    assert policy_store.set_calls == []
+    assert binding.bind_calls == []
+    assert policy_store.remove_calls == []
+
+
+@pytest.mark.asyncio
+async def test_apply_enforce_plan_missing_user_fails_before_writes() -> None:
+    """Apply pre-validates bindings before any native write."""
+    policy_store = SpyPolicyStoreAdapter()
+    binding = SpyBindingAdapter()
+
+    result = await apply_enforce_plan(_apply_plan(), policy_store, binding, {})
+
+    assert result == {
+        "status": "failed",
+        "refused_reason": "write-error",
+        "groups_written": [],
+        "bindings_written": [],
+        "orphan_group_ids_removed": [],
+        "detail": ["ValueError"],
+    }
+    assert policy_store.set_calls == []
+    assert binding.bind_calls == []
+    assert policy_store.remove_calls == []
+
+
+@pytest.mark.asyncio
+async def test_apply_enforce_plan_group_write_failure_stops_before_bindings() -> None:
+    """Group-policy write errors stop the apply before user bindings."""
+    policy_store = SpyPolicyStoreAdapter(fail_on_set="tessera:viewer")
+    binding = SpyBindingAdapter()
+
+    result = await apply_enforce_plan(
+        _apply_plan(),
+        policy_store,
+        binding,
+        {"user-1": FakeUser("user-1", [])},
+    )
+
+    assert result == {
+        "status": "failed",
+        "refused_reason": "write-error",
+        "groups_written": ["tessera:admin"],
+        "bindings_written": [],
+        "orphan_group_ids_removed": [],
+        "detail": ["RuntimeError"],
+    }
+    assert binding.bind_calls == []
+    assert policy_store.remove_calls == []
+
+
+@pytest.mark.asyncio
+async def test_apply_enforce_plan_binding_failure_stops_before_orphan_removal() -> None:
+    """User binding errors stop the apply before orphan group removals."""
+    policy_store = SpyPolicyStoreAdapter()
+    binding = SpyBindingAdapter(fail_on_user="user-1")
+
+    result = await apply_enforce_plan(
+        _apply_plan(),
+        policy_store,
+        binding,
+        {"user-1": FakeUser("user-1", [])},
+    )
+
+    assert result == {
+        "status": "failed",
+        "refused_reason": "write-error",
+        "groups_written": ["tessera:admin", "tessera:viewer"],
+        "bindings_written": [],
+        "orphan_group_ids_removed": [],
+        "detail": ["RuntimeError"],
+    }
+    assert policy_store.remove_calls == []
+
+
+@pytest.mark.asyncio
+async def test_apply_enforce_plan_allow_only_guard_blocks_all_writes() -> None:
+    """Invalid native policy shapes are refused before any group write."""
+    plan = _apply_plan()
+    plan["groups"][1]["policy"] = {"entities": True}
+    policy_store = SpyPolicyStoreAdapter()
+    binding = SpyBindingAdapter()
+
+    result = await apply_enforce_plan(
+        plan,
+        policy_store,
+        binding,
+        {"user-1": FakeUser("user-1", ["system-admin"])},
+    )
+
+    assert result == {
+        "status": "failed",
+        "refused_reason": "allow-only",
+        "groups_written": [],
+        "bindings_written": [],
+        "orphan_group_ids_removed": [],
+        "detail": ["AllowOnlyPolicyViolation"],
+    }
+    assert policy_store.set_calls == []
+    assert binding.bind_calls == []
+    assert policy_store.remove_calls == []
+
+
+@pytest.mark.asyncio
+async def test_apply_enforce_plan_lockout_guard_blocks_all_writes() -> None:
+    """A plan that removes the last active admin survivor is refused upfront."""
+    plan = _apply_plan()
+    plan["bindings"][0]["target_group_ids"] = ["tessera:viewer"]
+    policy_store = SpyPolicyStoreAdapter()
+    binding = SpyBindingAdapter()
+
+    result = await apply_enforce_plan(
+        plan,
+        policy_store,
+        binding,
+        {"user-1": FakeUser("user-1", ["system-admin"])},
+    )
+
+    assert result == {
+        "status": "failed",
+        "refused_reason": "lockout",
+        "groups_written": [],
+        "bindings_written": [],
+        "orphan_group_ids_removed": [],
+        "detail": ["LockoutRisk"],
+    }
+    assert policy_store.set_calls == []
+    assert binding.bind_calls == []
+    assert policy_store.remove_calls == []
+
+
+@pytest.mark.asyncio
+async def test_apply_enforce_plan_expected_uses_current_tessera_groups() -> None:
+    """Expected Tessera groups come from current membership, not target groups."""
+    plan = _apply_plan()
+    plan["bindings"][0]["target_group_ids"] = ["system-admin", "tessera:admin"]
+    policy_store = SpyPolicyStoreAdapter()
+    binding = SpyBindingAdapter(reject_incomplete=True)
+
+    result = await apply_enforce_plan(
+        plan,
+        policy_store,
+        binding,
+        {"user-1": FakeUser("user-1", ["system-admin", "tessera:viewer"])},
+    )
+
+    assert result == {
+        "status": "failed",
+        "refused_reason": "write-error",
+        "groups_written": ["tessera:admin", "tessera:viewer"],
+        "bindings_written": [],
+        "orphan_group_ids_removed": [],
+        "detail": ["IncompleteSuperset"],
+    }
+    assert policy_store.remove_calls == []
 
 
 @pytest.mark.asyncio
