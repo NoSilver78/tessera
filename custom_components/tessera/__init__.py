@@ -23,10 +23,13 @@ from .store import TesseraStore
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
-    from homeassistant.core import HomeAssistant
+    from homeassistant.core import HomeAssistant, ServiceCall
 
 LOGGER = logging.getLogger(__name__)
 SERVICE_RECOMPILE = "recompile"
+# Bookkeeping sentinels stored in the domain bucket alongside per-entry dicts.
+# Their values are non-dict (bool), so the isinstance(dict) filter in
+# _has_loaded_entries cleanly distinguishes them from real entry data.
 DATA_SERVICE_REGISTERED = "__recompile_service_registered"
 DATA_WEBSOCKET_REGISTERED = "__websocket_registered"
 DATA_PANEL_REGISTERED = "__panel_registered"
@@ -84,9 +87,9 @@ def _register_recompile_service(hass: HomeAssistant) -> None:
     if domain_data.get(DATA_SERVICE_REGISTERED) is True:
         return
 
-    async def _handle_recompile(call: object) -> None:
+    async def _handle_recompile(call: ServiceCall) -> None:
         """Recompile all loaded Tessera entries without native writes."""
-        del call
+        del call  # parameterless service; the call carries no Tessera input
         for key, entry_data in list(_domain_data(hass).items()):
             if key == DATA_SERVICE_REGISTERED or not isinstance(entry_data, dict):
                 continue
@@ -185,7 +188,12 @@ def _domain_data(hass: HomeAssistant) -> dict[str, Any]:
 
 
 def _has_loaded_entries(domain_data: dict[str, Any]) -> bool:
-    """Return whether the domain bucket still contains entry data."""
+    """Return whether the domain bucket still contains entry data.
+
+    Entry-data values are dicts; bookkeeping sentinels are not, so the
+    ``isinstance(value, dict)`` test already excludes them. The explicit
+    ``key != DATA_SERVICE_REGISTERED`` guard is kept as defensive redundancy.
+    """
     return any(
         key != DATA_SERVICE_REGISTERED and isinstance(value, dict)
         for key, value in domain_data.items()
