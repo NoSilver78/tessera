@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from copy import deepcopy
 from typing import Any, TypedDict, cast
 
@@ -30,7 +31,11 @@ class MembershipData(TypedDict):
 
 
 class D9AckData(TypedDict):
-    """Admin acknowledgement for one D9 unknown custom component."""
+    """Admin acknowledgement for one D9 unknown custom component.
+
+    ``accepted_at`` is audit-only in dormant E2.5; acknowledgements do not expire
+    here and are revalidated by domain, version, and content hash.
+    """
 
     version: str | None
     content_hash: str
@@ -295,10 +300,9 @@ def _require_non_empty_string(value: object, path: str) -> str:
 
 
 def _require_sha256_hex(value: object, path: str) -> str:
-    if not isinstance(value, str) or len(value) != 64:
+    if not isinstance(value, str):
         raise TesseraSchemaError(f"{path} must be a sha256 hex string")
-    try:
-        int(value, 16)
-    except ValueError as error:
-        raise TesseraSchemaError(f"{path} must be a sha256 hex string") from error
-    return value
+    normalized = value.lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", normalized):
+        raise TesseraSchemaError(f"{path} must be a sha256 hex string")
+    return normalized

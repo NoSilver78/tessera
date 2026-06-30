@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 import json
 from collections.abc import Mapping
 from pathlib import Path
@@ -13,6 +14,7 @@ import pytest
 from custom_components.tessera.d9_classification import (
     D9_VERDICT_ALLOW,
     D9_VERDICT_DENY,
+    D9_VERDICT_TIER_2,
     D9_VERDICT_UNKNOWN,
     D9ClassificationEntry,
 )
@@ -204,6 +206,52 @@ async def test_clean_component_allows_with_table_hash_match(
     assert result["enforce_blocked"] is False
 
 
+async def test_table_version_mismatch_is_unknown(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Table trust anchor requires the pinned version as well as the hash."""
+    component = _write_component(tmp_path, "version_mismatch", version="2.0.0")
+    monkeypatch.setattr(
+        d9_gate,
+        "CLASSIFICATIONS",
+        {
+            "version_mismatch": (
+                D9ClassificationEntry(
+                    version="1.0.0",
+                    content_hash=compute_component_hash(component),
+                    verdict=D9_VERDICT_ALLOW,
+                    evidence_type="no_surface_verified",
+                    reason="stale version",
+                ),
+            )
+        },
+    )
+
+    result = await evaluate_d9_gate(FakeHass(tmp_path), default_config_data())
+
+    component_result = result["by_component"]["version_mismatch"]
+    assert component_result["verdict"] == D9_VERDICT_UNKNOWN
+    assert component_result["source"] == "default"
+
+
+async def test_ack_version_none_vs_string_is_unknown(tmp_path: Path) -> None:
+    """Ack version ``None`` must not match a concrete manifest version."""
+    component = _write_component(tmp_path, "ack_version_mismatch", version="1.0.0")
+
+    result = await evaluate_d9_gate(
+        FakeHass(tmp_path),
+        _config_with_ack(
+            "ack_version_mismatch",
+            version=None,
+            content_hash=compute_component_hash(component),
+        ),
+    )
+
+    component_result = result["by_component"]["ack_version_mismatch"]
+    assert component_result["verdict"] == D9_VERDICT_UNKNOWN
+    assert component_result["source"] == "default"
+
+
 async def test_version_none_can_be_pinned_by_table(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -296,6 +344,61 @@ async def test_ack_does_not_override_deny(
     assert result["blocking"] == ["known_bad"]
 
 
+async def test_tier2_blocks_enforce(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """TIER-2 rows need extra controls and block v1 enforce."""
+    component = _write_component(tmp_path, "tier2_component")
+    monkeypatch.setattr(
+        d9_gate,
+        "CLASSIFICATIONS",
+        {
+            "tier2_component": (
+                D9ClassificationEntry(
+                    version="1.0.0",
+                    content_hash=compute_component_hash(component),
+                    verdict=D9_VERDICT_TIER_2,
+                    evidence_type="tier2_accepted",
+                    reason="requires separate control path",
+                ),
+            )
+        },
+    )
+
+    result = await evaluate_d9_gate(FakeHass(tmp_path), default_config_data())
+
+    assert result["by_component"]["tier2_component"]["verdict"] == D9_VERDICT_TIER_2
+    assert result["blocking"] == ["tier2_component"]
+    assert result["enforce_blocked"] is True
+
+
+async def test_tier2_without_evidence_is_unknown(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """TIER-2 rows also require an explicit evidence type."""
+    component = _write_component(tmp_path, "tier2_without_evidence")
+    monkeypatch.setattr(
+        d9_gate,
+        "CLASSIFICATIONS",
+        {
+            "tier2_without_evidence": (
+                D9ClassificationEntry(
+                    version="1.0.0",
+                    content_hash=compute_component_hash(component),
+                    verdict=D9_VERDICT_TIER_2,
+                    reason="missing evidence type",
+                ),
+            )
+        },
+    )
+
+    result = await evaluate_d9_gate(FakeHass(tmp_path), default_config_data())
+
+    component_result = result["by_component"]["tier2_without_evidence"]
+    assert component_result["verdict"] == D9_VERDICT_UNKNOWN
+    assert component_result["source"] == "classification"
+
+
 async def test_table_allow_without_evidence_type_fails_closed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -320,6 +423,188 @@ async def test_table_allow_without_evidence_type_fails_closed(
 
     assert result["by_component"]["missing_evidence"]["verdict"] == D9_VERDICT_UNKNOWN
     assert result["by_component"]["missing_evidence"]["source"] == "classification"
+
+
+async def test_aliased_view_import_is_surface(tmp_path: Path) -> None:
+    """AST detection catches aliased HomeAssistantView imports."""
+    _write_component(
+        tmp_path,
+        "aliased_http",
+        py_source=(
+            "from homeassistant.components.http import HomeAssistantView as HV\n"
+            "class View(HV):\n"
+            "    pass\n"
+        ),
+    )
+
+    result = await evaluate_d9_gate(FakeHass(tmp_path), default_config_data())
+
+    component_result = result["by_component"]["aliased_http"]
+    assert component_result["verdict"] == D9_VERDICT_UNKNOWN
+    assert component_result["source"] == "surface_veto"
+
+
+async def test_getattr_string_marker_is_surface(tmp_path: Path) -> None:
+    """AST detection catches simple string-marker dynamic calls."""
+    _write_component(
+        tmp_path,
+        "getattr_http",
+        py_source=(
+            "async def async_setup(hass, config):\n"
+            '    getattr(hass.http, "register_view")(object())\n'
+        ),
+    )
+
+    result = await evaluate_d9_gate(FakeHass(tmp_path), default_config_data())
+
+    component_result = result["by_component"]["getattr_http"]
+    assert component_result["verdict"] == D9_VERDICT_UNKNOWN
+    assert component_result["source"] == "surface_veto"
+
+
+async def test_unparseable_py_is_surface(tmp_path: Path) -> None:
+    """Unparseable Python fails closed because static analysis is incomplete."""
+    _write_component(tmp_path, "broken_python", py_source="def broken(:\n")
+
+    result = await evaluate_d9_gate(FakeHass(tmp_path), default_config_data())
+
+    component_result = result["by_component"]["broken_python"]
+    assert component_result["verdict"] == D9_VERDICT_UNKNOWN
+    assert component_result["source"] == "surface_veto"
+
+
+def test_hash_covers_non_source_files(tmp_path: Path) -> None:
+    """Non-source payload files are part of the D9 trust anchor."""
+    component = _write_component(tmp_path, "payload_component")
+    before = compute_component_hash(component)
+    (component / "payload.bin").write_bytes(b"opaque payload")
+
+    assert compute_component_hash(component) != before
+
+
+async def test_compiled_artifact_is_surface(tmp_path: Path) -> None:
+    """Compiled or extension artifacts fail closed as executable surfaces."""
+    component = _write_component(tmp_path, "compiled_component")
+    (component / "native.so").write_bytes(b"opaque native code")
+
+    result = await evaluate_d9_gate(FakeHass(tmp_path), default_config_data())
+
+    assert compute_component_hash(component)
+    assert result["by_component"]["compiled_component"]["verdict"] == D9_VERDICT_UNKNOWN
+    assert result["by_component"]["compiled_component"]["source"] == "surface_veto"
+
+
+def test_pycache_excluded_from_hash(tmp_path: Path) -> None:
+    """Regenerated Python bytecode caches do not churn the content hash."""
+    component = _write_component(tmp_path, "cache_component")
+    before = compute_component_hash(component)
+    pycache = component / "__pycache__"
+    pycache.mkdir()
+    (pycache / "__init__.cpython-313.pyc").write_bytes(b"unstable bytecode")
+
+    assert compute_component_hash(component) == before
+
+
+def test_compute_hash_is_stable(tmp_path: Path) -> None:
+    """Hashing the same component twice is deterministic."""
+    component = _write_component(tmp_path, "stable_component")
+
+    assert compute_component_hash(component) == compute_component_hash(component)
+
+
+def test_path_swap_changes_hash(tmp_path: Path) -> None:
+    """Relative paths are part of the hash to prevent path-swap collisions."""
+    component = _write_component(tmp_path, "path_swap")
+    (component / "a.txt").write_text("one", encoding="utf-8")
+    (component / "b.txt").write_text("two", encoding="utf-8")
+    first_hash = compute_component_hash(component)
+    (component / "a.txt").write_text("two", encoding="utf-8")
+    (component / "b.txt").write_text("one", encoding="utf-8")
+
+    assert compute_component_hash(component) != first_hash
+
+
+async def test_loader_path_merges_and_version_precedence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Loader entries merge with disk entries and override disk versions."""
+    _write_component(tmp_path, "loader_and_disk", version="1.0.0")
+    monkeypatch.setattr(
+        d9_gate,
+        "_async_get_custom_components",
+        AsyncMock(
+            return_value={
+                "loader_and_disk": type("Integration", (), {"version": "9.9.9"})(),
+                "loader_only": type("Integration", (), {"version": "3.0.0"})(),
+            }
+        ),
+    )
+
+    result = await evaluate_d9_gate(FakeHass(tmp_path), default_config_data())
+
+    assert result["by_component"]["loader_and_disk"]["version"] == "9.9.9"
+    assert result["by_component"]["loader_and_disk"]["verdict"] == D9_VERDICT_UNKNOWN
+    assert result["by_component"]["loader_only"] == {
+        "verdict": D9_VERDICT_UNKNOWN,
+        "version": "3.0.0",
+        "content_hash": None,
+        "source": "default",
+        "reason": "no matching classification or ack",
+    }
+
+
+async def test_fresh_disk_hash_beats_stale_table(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fresh disk hash prevents stale table entries from matching."""
+    _write_component(tmp_path, "fresh_hash")
+    monkeypatch.setattr(
+        d9_gate,
+        "CLASSIFICATIONS",
+        {
+            "fresh_hash": (
+                D9ClassificationEntry(
+                    version="1.0.0",
+                    content_hash="0" * 64,
+                    verdict=D9_VERDICT_ALLOW,
+                    evidence_type="no_surface_verified",
+                    reason="stale hash",
+                ),
+            )
+        },
+    )
+
+    result = await evaluate_d9_gate(FakeHass(tmp_path), default_config_data())
+
+    component_result = result["by_component"]["fresh_hash"]
+    assert component_result["verdict"] == D9_VERDICT_UNKNOWN
+    assert component_result["source"] == "default"
+
+
+def test_versions_equal_trailing_zero_parity(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fallback version comparison mirrors AwesomeVersion trailing-zero behavior."""
+    real_import = builtins.__import__
+
+    def fake_import(name: str, *args: object, **kwargs: object) -> object:
+        if name == "awesomeversion":
+            raise ModuleNotFoundError(name)
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    assert d9_gate._versions_equal("1.0", "1.0.0") is True
+
+
+def test_ack_matches_tolerates_missing_keys() -> None:
+    """Malformed future ack payloads fail closed instead of raising KeyError."""
+    assert (
+        d9_gate._ack_matches(
+            {"version": "1.0.0", "accepted_at": "now"},  # type: ignore[typeddict-item]
+            "1.0.0",
+            "a" * 64,
+        )
+        is False
+    )
 
 
 def test_config_schema_accepts_d9_acks() -> None:
@@ -356,3 +641,12 @@ def test_config_schema_rejects_invalid_d9_acks(
 
     with pytest.raises(TesseraSchemaError, match=match):
         validate_config_data(config)
+
+
+def test_config_schema_normalizes_uppercase_d9_ack_hash() -> None:
+    """Uppercase ack hashes are normalized to the lowercase hexdigest shape."""
+    config = _config_with_ack("component", version="1", content_hash="A" * 64)
+
+    assert validate_config_data(config)["d9_acks"]["component"]["content_hash"] == (
+        "a" * 64
+    )

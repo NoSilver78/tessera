@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import ast
 import asyncio
 import hashlib
 import json
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, TypedDict, cast
@@ -14,6 +15,7 @@ from .d9_classification import (
     CLASSIFICATIONS,
     D9_VERDICT_ALLOW,
     D9_VERDICT_DENY,
+    D9_VERDICT_TIER_2,
     D9_VERDICT_UNKNOWN,
     D9ClassificationEntry,
     D9Verdict,
@@ -26,11 +28,17 @@ SOURCE_DEFAULT = "default"
 SOURCE_SURFACE_VETO = "surface_veto"
 
 SURFACE_HTTP = "http_view_or_panel"
+SURFACE_COMPILED = "compiled_artifact"
+SURFACE_DYNAMIC = "dynamic_or_unparseable_python"
 SURFACE_SERVICE = "service"
 SURFACE_WEBSOCKET = "websocket"
 
-SCAN_SUFFIXES = frozenset({".py", ".yaml"})
-SCAN_FILENAMES = frozenset({"manifest.json"})
+COMPILED_SURFACE_SUFFIXES = frozenset({".so", ".pyd", ".pyx"})
+TEXT_SCAN_SUFFIXES = frozenset({".yaml", ".yml"})
+TEXT_SCAN_FILENAMES = frozenset({"manifest.json"})
+HTTP_MARKERS = frozenset({"HomeAssistantView", "panel", "register_view"})
+SERVICE_MARKERS = frozenset({"async_register"})
+WEBSOCKET_MARKERS = frozenset({"async_register_command", "websocket_command"})
 
 
 class D9ComponentResult(TypedDict):
@@ -105,7 +113,8 @@ async def evaluate_d9_gate(hass: _HassLike, config: TesseraConfigData) -> D9Gate
 
     Returns:
         A deterministic D9 report. ``enforce_blocked`` is true when any custom
-        component remains unknown or is explicitly denied.
+        component remains unknown, needs Tier-2 handling, or is explicitly
+        denied.
     """
     root = Path(hass.config.path("custom_components"))
     disk_components = await _run_executor(hass, _scan_custom_components, root)
@@ -134,7 +143,7 @@ async def evaluate_d9_gate(hass: _HassLike, config: TesseraConfigData) -> D9Gate
     blocking = [
         domain
         for domain, result in by_component.items()
-        if result["verdict"] in {D9_VERDICT_DENY, D9_VERDICT_UNKNOWN}
+        if result["verdict"] in {D9_VERDICT_DENY, D9_VERDICT_TIER_2, D9_VERDICT_UNKNOWN}
     ]
     return {
         "by_component": by_component,
@@ -150,8 +159,8 @@ def compute_component_hash(component_path: Path) -> str:
         component_path: Path to ``custom_components/<domain>``.
 
     Returns:
-        SHA-256 over sorted relevant source/config files, including relative
-        filenames to prevent path-swap collisions.
+        SHA-256 over all stable component files, excluding ``__pycache__``,
+        including relative filenames to prevent path-swap collisions.
     """
     digest = hashlib.sha256()
     for file_path in _iter_hash_files(component_path):
@@ -182,13 +191,16 @@ def _classify_component(
 
     entry = _matching_classification(domain, version, content_hash)
     if entry is not None:
-        if entry.verdict == D9_VERDICT_ALLOW and entry.evidence_type is None:
+        if (
+            entry.verdict in {D9_VERDICT_ALLOW, D9_VERDICT_TIER_2}
+            and entry.evidence_type is None
+        ):
             return _result(
                 D9_VERDICT_UNKNOWN,
                 version,
                 content_hash,
                 SOURCE_CLASSIFICATION,
-                "classification ALLOW is missing evidence_type",
+                f"classification {entry.verdict} is missing evidence_type",
             )
         return _result(
             entry.verdict,
@@ -251,8 +263,8 @@ def _ack_matches(
     return (
         ack is not None
         and content_hash is not None
-        and ack["content_hash"] == content_hash
-        and _versions_equal(version, ack["version"])
+        and ack.get("content_hash") == content_hash
+        and _versions_equal(version, ack.get("version"))
     )
 
 
@@ -266,9 +278,18 @@ def _versions_equal(current: str | None, expected: str | None) -> bool:
     except ModuleNotFoundError:
         # Production HA provides awesomeversion. This fallback keeps HA-free unit
         # tests runnable without silently weakening production behavior.
-        return tuple(current.split(".")) == tuple(expected.split("."))
+        return _normalize_version_segments(current) == _normalize_version_segments(
+            expected
+        )
     except Exception:  # pragma: no cover - awesomeversion-specific parse errors.
         return False
+
+
+def _normalize_version_segments(version: str) -> tuple[str, ...]:
+    segments = version.split(".")
+    while segments and segments[-1] == "0":
+        segments.pop()
+    return tuple(segments)
 
 
 async def _async_get_custom_components(hass: _HassLike) -> dict[str, object]:
@@ -320,19 +341,79 @@ def _load_manifest(component_path: Path) -> dict[str, object] | None:
 
 
 def _detect_static_surfaces(component_path: Path) -> frozenset[str]:
+    """Return static fail-closed D9 surface signals for one component.
+
+    Python files are parsed with AST so aliases and simple string-based
+    ``getattr`` markers are visible. HTTP/WS still have no HA runtime registry
+    backstop here; dynamic registration built via ``exec``/``chr``-style string
+    construction can evade static analysis. For executable Python, a table ALLOW
+    therefore needs ``runtime_verified_allow`` evidence rather than relying on an
+    empty static scan alone.
+    """
     surfaces: set[str] = set()
     for file_path in _iter_hash_files(component_path):
+        if _is_compiled_surface(file_path):
+            surfaces.add(SURFACE_COMPILED)
+            continue
         try:
             text = file_path.read_text(errors="ignore")
         except OSError:
             continue
-        if "async_register" in text and "services" in text:
-            surfaces.add(SURFACE_SERVICE)
-        if "HomeAssistantView" in text or "register_view" in text or "panel" in text:
-            surfaces.add(SURFACE_HTTP)
-        if "websocket_command" in text or "async_register_command" in text:
-            surfaces.add(SURFACE_WEBSOCKET)
+        if file_path.suffix == ".py":
+            surfaces.update(_detect_python_surfaces(text))
+        elif (
+            file_path.suffix in TEXT_SCAN_SUFFIXES
+            or file_path.name in TEXT_SCAN_FILENAMES
+        ):
+            surfaces.update(_detect_text_surfaces(text))
     return frozenset(surfaces)
+
+
+def _detect_python_surfaces(text: str) -> set[str]:
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return {SURFACE_DYNAMIC}
+
+    markers: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute):
+            markers.add(node.attr)
+        elif isinstance(node, ast.Name):
+            markers.add(node.id)
+        elif isinstance(node, ast.alias):
+            markers.add(node.name.rsplit(".", 1)[-1])
+            if node.asname is not None:
+                markers.add(node.asname)
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+            markers.add(node.value)
+    return _markers_to_surfaces(markers)
+
+
+def _detect_text_surfaces(text: str) -> set[str]:
+    return _markers_to_surfaces(
+        marker
+        for marker in HTTP_MARKERS | SERVICE_MARKERS | WEBSOCKET_MARKERS
+        if marker in text
+    )
+
+
+def _markers_to_surfaces(markers: Iterable[str]) -> set[str]:
+    marker_set = set(markers)
+    surfaces: set[str] = set()
+    if marker_set & SERVICE_MARKERS:
+        surfaces.add(SURFACE_SERVICE)
+    if marker_set & HTTP_MARKERS:
+        surfaces.add(SURFACE_HTTP)
+    if marker_set & WEBSOCKET_MARKERS:
+        surfaces.add(SURFACE_WEBSOCKET)
+    return surfaces
+
+
+def _is_compiled_surface(file_path: Path) -> bool:
+    if file_path.suffix in COMPILED_SURFACE_SUFFIXES:
+        return True
+    return file_path.suffix == ".pyc" and "__pycache__" not in file_path.parts
 
 
 def _runtime_service_domains(hass: _HassLike) -> frozenset[str]:
@@ -358,5 +439,5 @@ def _iter_hash_files(component_path: Path) -> list[Path]:
         path
         for path in component_path.rglob("*")
         if path.is_file()
-        and (path.suffix in SCAN_SUFFIXES or path.name in SCAN_FILENAMES)
+        and "__pycache__" not in path.relative_to(component_path).parts
     )
