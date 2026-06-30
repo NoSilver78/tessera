@@ -18,10 +18,11 @@ Schutzschichten.
    Version wird der Enforce-/Schreibpfad **fail-closed blockiert** (`compute_enforce_plan` liefert
    einen `blocked`-Plan) — **kein** nativer Write; wirksam bleibt der read-only `monitor`-Zustand.
    Das ist ein bewusst strenger Fail-closed-Block, kein blindes Weiterschreiben.
-2. **HACS-Mindestversion (mit dem Release).** Sobald `hacs.json` ausgeliefert wird, pinnt der Key
-   `homeassistant` die HA-Mindestversion; HACS blockt dann Installation/Update auf älteren Instanzen.
-   *(Hinweis: Diese Schicht greift erst ab dem ersten Release — bis dahin schützt allein der
-   Code-Guard aus #1.)*
+2. **HACS-Mindestversion (optional, derzeit NICHT gesetzt).** `hacs.json` wird bereits ausgeliefert,
+   enthält aber **keinen** `homeassistant`-Pin: die `hacs/action`-Validierung lehnte den Wert als
+   künftiges Minimum ab. Der **aktive** Schutz ist daher allein der Code-Guard aus #1; ein
+   `hacs.json`-`homeassistant`-Pin (HACS blockt dann Installation/Update auf älteren Instanzen) kann
+   beim Public-Flip als zweite Hürde nachgezogen werden, sobald HACS die Zielversion kennt.
 3. **Fail-safe-to-monitor überall.** Jeder Fehler im Enforce-/Recovery-Pfad fällt auf den
    nicht-eingreifenden `monitor`-Modus zurück (kein Deny-all, kein stiller Halbzustand).
 
@@ -36,7 +37,7 @@ Für **jedes** neue Home-Assistant-Release:
    neues PATCH/MINOR-Release schneiden.
 3. **Bei gebrochener interner API:**
    - den Versions-Guard anpassen (neue HA-Version erkennen, Enforce fail-closed blockieren),
-   - die HACS-Mindestversion in `hacs.json` anheben,
+   - (optional, sobald gesetzt) die `hacs.json`-Mindestversion anheben,
    - eine neue **MAJOR**-Version veröffentlichen (Bruch der Kompatibilität),
    - den Bruch im Changelog + den Release Notes klar benennen.
 
