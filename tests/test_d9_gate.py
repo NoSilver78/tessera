@@ -146,6 +146,33 @@ async def test_entity_component_with_view_or_ws_marker_is_unknown(
     assert "sneaky_http" in result["blocking"]
 
 
+async def test_self_domain_is_excluded_despite_surfaces(tmp_path: Path) -> None:
+    """Tessera's own domain is trusted and never D9-vetoes itself.
+
+    Regression: Tessera legitimately registers a panel/service/websocket. Without
+    excluding its own domain the surface hard-veto blocked enforce on every real
+    install (caught by the ha-tessera-dev E2E).
+    """
+    _write_component(
+        tmp_path,
+        "tessera",
+        py_source=(
+            "from homeassistant.components.http import HomeAssistantView\n"
+            "async def async_setup(hass, config):\n"
+            "    hass.http.register_view(HomeAssistantView())\n"
+            "    hass.components.websocket_api.async_register_command(lambda: None)\n"
+        ),
+    )
+
+    result = await evaluate_d9_gate(
+        FakeHass(tmp_path), default_config_data(), self_domain="tessera"
+    )
+
+    assert "tessera" not in result["by_component"]
+    assert result["blocking"] == []
+    assert result["enforce_blocked"] is False
+
+
 async def test_ack_expires_when_content_hash_changes(tmp_path: Path) -> None:
     """Ack is bound to domain, version, and exact content hash."""
     component = _write_component(tmp_path, "mutable_component")
