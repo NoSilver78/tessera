@@ -99,7 +99,12 @@ class _DiskComponent:
     surfaces: frozenset[str]
 
 
-async def evaluate_d9_gate(hass: _HassLike, config: TesseraConfigData) -> D9GateResult:
+async def evaluate_d9_gate(
+    hass: _HassLike,
+    config: TesseraConfigData,
+    *,
+    self_domain: str | None = None,
+) -> D9GateResult:
     """Evaluate installed custom components for E3 enforce blockers.
 
     The gate is dormant and read-only: it enumerates custom components, scans
@@ -110,6 +115,8 @@ async def evaluate_d9_gate(hass: _HassLike, config: TesseraConfigData) -> D9Gate
     Args:
         hass: Home Assistant instance or test double.
         config: Validated Tessera config containing optional ``d9_acks``.
+        self_domain: Tessera's own integration domain, excluded from evaluation
+            so the trusted enforcer never vetoes its own legitimate surfaces.
 
     Returns:
         A deterministic D9 report. ``enforce_blocked`` is true when any custom
@@ -124,6 +131,10 @@ async def evaluate_d9_gate(hass: _HassLike, config: TesseraConfigData) -> D9Gate
 
     by_component: dict[str, D9ComponentResult] = {}
     for domain in sorted(set(disk_components) | set(loader_components)):
+        if domain == self_domain:
+            # Tessera is the trusted enforcer itself; it must not veto its own
+            # legitimate panel/service/websocket surfaces (would self-block enforce).
+            continue
         disk = disk_components.get(domain)
         integration = loader_components.get(domain)
         version = _component_version(integration, disk)

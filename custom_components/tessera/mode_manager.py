@@ -18,6 +18,7 @@ from .auth_adapter import (
     _homeassistant_version,
 )
 from .compiler import NativePolicy
+from .const import DOMAIN
 from .d9_gate import evaluate_d9_gate
 from .linter import LintReport, has_blocking_conflicts, lint_cross_role
 from .monitor import compile_current
@@ -150,7 +151,7 @@ async def compute_enforce_plan(hass: object, store: _StoreLike) -> EnforcePlan:
         return _blocked("compile", [f"{type(error).__name__}: {error}"])
 
     try:
-        d9 = await evaluate_d9_gate(hass, config)  # type: ignore[arg-type]
+        d9 = await evaluate_d9_gate(hass, config, self_domain=DOMAIN)  # type: ignore[arg-type]
     except Exception as error:
         return _blocked("d9", [f"{type(error).__name__}: {error}"])
     if d9["enforce_blocked"]:
