@@ -329,7 +329,7 @@ async def test_compile_preview_off_clears_stale_preview() -> None:
         hass,
         "entry-1",
         FakeStore(),
-        config=default_config_data(),
+        config=set_mode(default_config_data(), "off"),
         policy=default_policy_data(),
     )
 

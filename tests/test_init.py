@@ -586,6 +586,128 @@ async def test_mode_switch_from_enforce_to_off_restores_pre_install_snapshot(
 
 
 @pytest.mark.asyncio
+async def test_unload_live_enforce_entry_restores_pre_install(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unloading a live enforce entry restores the pre-install snapshot."""
+    events: list[str] = []
+    state = {
+        "pre_install_snapshot": snapshot_to_state_data(_snapshot()),
+        "apply_in_progress": False,
+    }
+    store = E35Store("enforce", state=state, events=events)
+    hass = AuthHass([FakeUser("admin", ["system-admin"], is_owner=True)])
+    entry_data: dict[str, Any] = {"store": store, "mode": "enforce"}
+    hass.data[DOMAIN] = {"entry-1": entry_data}
+
+    async def fake_restore(*_args: Any) -> dict[str, Any]:
+        events.append("restore")
+        return {
+            "status": "restored",
+            "refused_reason": None,
+            "restored_user_ids": ["admin"],
+            "group_ids_removed": ["tessera:viewer"],
+            "detail": [],
+        }
+
+    monkeypatch.setattr(tessera_init, "async_restore_to_pre_install", fake_restore)
+    _patch_noop_adapters(monkeypatch)
+
+    assert await tessera_init.async_unload_entry(hass, FakeEntry("entry-1")) is True
+
+    assert events == ["restore", "clear"]
+    assert "entry-1" not in hass.data[DOMAIN]
+
+
+@pytest.mark.asyncio
+async def test_unload_live_enforce_restore_failure_fails_safe_to_monitor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed restore during unload fails safe to monitor (no silent teardown)."""
+    issues: list[tuple[str, str]] = []
+    state = {
+        "pre_install_snapshot": snapshot_to_state_data(_snapshot()),
+        "apply_in_progress": False,
+    }
+    store = E35Store("enforce", state=state)
+    hass = AuthHass([FakeUser("admin", ["system-admin"], is_owner=True)])
+    entry_data: dict[str, Any] = {"store": store, "mode": "enforce"}
+    hass.data[DOMAIN] = {"entry-1": entry_data}
+
+    async def fake_restore(*_args: Any) -> dict[str, Any]:
+        return {
+            "status": "failed",
+            "refused_reason": "write-error",
+            "restored_user_ids": [],
+            "group_ids_removed": [],
+            "detail": ["RuntimeError"],
+        }
+
+    async def fake_issue(
+        _hass: Any, _entry_id: str, issue_id: str, *, reason: str
+    ) -> None:
+        issues.append((issue_id, reason))
+
+    monkeypatch.setattr(tessera_init, "async_restore_to_pre_install", fake_restore)
+    monkeypatch.setattr(tessera_init, "_record_repair_issue", fake_issue)
+    _patch_noop_adapters(monkeypatch)
+
+    assert await tessera_init.async_unload_entry(hass, FakeEntry("entry-1")) is True
+
+    assert entry_data["mode"] == "monitor"
+    assert issues == [
+        (tessera_init.REPAIR_RESTORE_FAIL_SAFE, "unload:write-error"),
+        (tessera_init.REPAIR_ENFORCE_FAIL_SAFE, "unload_restore_failed"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_mode_switch_restore_failure_fails_safe_to_monitor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed restore while leaving enforce fails safe to monitor, not off."""
+    issues: list[tuple[str, str]] = []
+    state = {
+        "pre_install_snapshot": snapshot_to_state_data(_snapshot()),
+        "apply_in_progress": False,
+    }
+    store = E35Store("off", state=state)
+    hass = AuthHass([FakeUser("admin", ["system-admin"], is_owner=True)])
+    entry_data: dict[str, Any] = {"store": store, "mode": "enforce"}
+
+    async def fake_restore(*_args: Any) -> dict[str, Any]:
+        return {
+            "status": "failed",
+            "refused_reason": "write-error",
+            "restored_user_ids": [],
+            "group_ids_removed": [],
+            "detail": ["RuntimeError"],
+        }
+
+    async def fake_issue(
+        _hass: Any, _entry_id: str, issue_id: str, *, reason: str
+    ) -> None:
+        issues.append((issue_id, reason))
+
+    async def fake_preview(*_args: Any, **_kwargs: Any) -> None:
+        return None
+
+    monkeypatch.setattr(tessera_init, "async_restore_to_pre_install", fake_restore)
+    monkeypatch.setattr(tessera_init, "_record_repair_issue", fake_issue)
+    monkeypatch.setattr(tessera_init, "_compile_monitor_preview", fake_preview)
+    _patch_noop_adapters(monkeypatch)
+
+    await tessera_init._compile_for_mode(hass, "entry-1", entry_data)
+
+    assert entry_data["mode"] == "monitor"
+    assert "off" != entry_data["mode"]
+    assert issues == [
+        (tessera_init.REPAIR_RESTORE_FAIL_SAFE, "mode_switch:write-error"),
+        (tessera_init.REPAIR_ENFORCE_FAIL_SAFE, "mode_switch_restore_failed"),
+    ]
+
+
+@pytest.mark.asyncio
 async def test_second_enforce_run_reuses_pre_install_snapshot(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

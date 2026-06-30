@@ -16,14 +16,23 @@ from homeassistant.components.http import StaticPathConfig
 from homeassistant.components.panel_custom import async_register_panel
 
 from . import websocket as tessera_websocket
-from .auth_adapter import AuthPolicyStoreAdapter, RecoveryController, UserBindingAdapter
+from .auth_adapter import (
+    AuthPolicyStoreAdapter,
+    HassAuthLike,
+    RecoveryController,
+    UserBindingAdapter,
+)
 from .const import DOMAIN, MODE_ENFORCE, MODE_MONITOR, MODE_OFF
 from .mode_manager import apply_enforce_plan, compute_enforce_plan
 from .monitor import compile_current, lint_current_preview, log_monitor_preview
 from .resolver import AreaEntityResolver
 from .restore import async_restore_to_pre_install
 from .schema import TesseraConfigData
-from .state import decide_startup_recovery, snapshot_from_state_data
+from .state import (
+    TesseraStateData,
+    decide_startup_recovery,
+    snapshot_from_state_data,
+)
 from .store import TesseraStore
 
 if TYPE_CHECKING:
@@ -304,8 +313,9 @@ async def _apply_enforce_mode(
         return
 
     users_by_id = await _users_by_id(hass)
-    binding_adapter = UserBindingAdapter(hass)
-    recovery = RecoveryController(hass, binding_adapter)
+    auth_hass = cast(HassAuthLike, hass)
+    binding_adapter = UserBindingAdapter(auth_hass)
+    recovery = RecoveryController(auth_hass, binding_adapter)
     state = await store.async_load_state()
     if state["pre_install_snapshot"] is None:
         snapshot = await recovery.async_snapshot(
@@ -317,7 +327,7 @@ async def _apply_enforce_mode(
     await store.async_mark_apply_in_progress(snapshot)
 
     result = await apply_enforce_plan(
-        plan, AuthPolicyStoreAdapter(hass), binding_adapter, users_by_id
+        plan, AuthPolicyStoreAdapter(auth_hass), binding_adapter, users_by_id
     )
     entry_data["last_apply_result"] = result
     if result["status"] == "applied":
@@ -359,7 +369,7 @@ async def _restore_pre_install_safely(
     entry_data: dict[str, Any],
     *,
     reason: str,
-    state: dict[str, Any] | None = None,
+    state: TesseraStateData | None = None,
     clear_apply_in_progress: bool,
 ) -> bool:
     """Restore the immutable pre-install snapshot, redacting failures."""
@@ -370,10 +380,11 @@ async def _restore_pre_install_safely(
         if snapshot_data is None:
             return True
         users_by_id = await _users_by_id(hass)
+        auth_hass = cast(HassAuthLike, hass)
         result = await async_restore_to_pre_install(
             snapshot_from_state_data(snapshot_data),
-            AuthPolicyStoreAdapter(hass),
-            UserBindingAdapter(hass),
+            AuthPolicyStoreAdapter(auth_hass),
+            UserBindingAdapter(auth_hass),
             users_by_id,
         )
         entry_data["last_restore_result"] = result
