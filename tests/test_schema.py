@@ -72,13 +72,23 @@ def test_policy_schema_rejects_contradictory_control_without_read(
 
 
 @pytest.mark.parametrize(
-    "bad_leaf",
-    [True, {"entities": True}, {"domains": True}, {"read": "yes"}, {}],
+    ("bad_leaf", "match"),
+    [
+        (True, "not bare bool"),
+        ({"entities": True}, "unsupported permission keys"),
+        ({"domains": True}, "unsupported permission keys"),
+        ({"read": "yes"}, "must be boolean"),
+        ({}, "must not be empty"),
+    ],
 )
-def test_policy_schema_rejects_unsafe_leaf_shapes(bad_leaf: object) -> None:
-    """Policy schema rejects bare booleans and unsupported HA shortcuts."""
+def test_policy_schema_rejects_unsafe_leaf_shapes(bad_leaf: object, match: str) -> None:
+    """Policy schema rejects bare booleans and unsupported HA shortcuts.
+
+    Each case asserts the *specific* guard message, so removing one guard
+    cannot be masked by another check raising a different error.
+    """
     policy = default_policy_data()
     policy["area_grants"] = {"living_room": {"viewer": cast(Any, bad_leaf)}}
 
-    with pytest.raises(TesseraSchemaError):
+    with pytest.raises(TesseraSchemaError, match=match):
         validate_policy_data(policy)

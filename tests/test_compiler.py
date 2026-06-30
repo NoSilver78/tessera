@@ -67,6 +67,24 @@ def test_entity_override_replaces_area_grant_for_role() -> None:
     }
 
 
+def test_control_only_entity_override_implies_read() -> None:
+    """A control-only entity override still projects read (control implies read)."""
+    config = default_config_data()
+    config["roles"] = {"operator": {"name": "Operator"}}
+    policy = default_policy_data()
+    policy["area_grants"] = {"living": {"operator": {"read": True}}}
+    policy["entity_overrides"] = {"light.sofa": {"operator": {"control": True}}}
+
+    compiled = compile_policies(
+        config, policy, FakeResolver({"living": ("light.sofa",)})
+    )
+
+    assert compiled["operator"]["entities"]["entity_ids"]["light.sofa"] == {
+        "read": True,
+        "control": True,
+    }
+
+
 def test_all_false_entity_override_removes_area_grant_for_role() -> None:
     """A specific override can remove the allow projection for one entity."""
     config = default_config_data()
@@ -209,6 +227,29 @@ def test_compile_is_deterministic() -> None:
     assert compile_policies(config, policy, resolver) == compile_policies(
         config, policy, resolver
     )
+
+
+def test_compile_output_is_sorted_regardless_of_input_order() -> None:
+    """Roles and entity ids are emitted in deterministic sorted order.
+
+    Inputs are supplied unsorted (role insertion order and the resolver's
+    entity tuple) so that dropping a ``sorted()`` would change key order and
+    fail this test, which a plain ``dict == dict`` comparison would not catch.
+    """
+    config = default_config_data()
+    config["roles"] = {"viewer": {"name": "Viewer"}, "operator": {"name": "Operator"}}
+    policy = default_policy_data()
+    policy["area_grants"] = {
+        "living": {"viewer": {"read": True}, "operator": {"read": True}}
+    }
+    resolver = FakeResolver({"living": ("sensor.temp", "light.sofa")})
+
+    compiled = compile_policies(config, policy, resolver)
+
+    assert list(compiled) == sorted(compiled)
+    for role_policy in compiled.values():
+        entity_ids = role_policy["entities"]["entity_ids"]
+        assert list(entity_ids) == sorted(entity_ids)
 
 
 def test_by_group_membership_is_v1_inert_for_policy_compilation() -> None:
