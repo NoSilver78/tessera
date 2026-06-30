@@ -119,7 +119,15 @@ class FakeServices:
         """Initialize service calls."""
         self.handlers: dict[tuple[str, str], Any] = {}
 
-    def async_register(self, domain: str, service: str, handler: Any) -> None:
+    def async_register(
+        self,
+        domain: str,
+        service: str,
+        handler: Any,
+        schema: Any = None,
+        *_args: Any,
+        **_kwargs: Any,
+    ) -> None:
         """Register one fake service handler."""
         self.handlers[(domain, service)] = handler
 

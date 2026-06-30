@@ -150,7 +150,7 @@ def _register_ack_services(hass: HomeAssistant) -> None:
 
     async def _handle_acknowledge(call: ServiceCall) -> None:
         domain = str(call.data["domain"])
-        target = await compute_component_ack_target(hass, domain)
+        target = await compute_component_ack_target(hass, domain)  # type: ignore[arg-type]
         if target is None:
             raise HomeAssistantError(
                 f"Cannot acknowledge unknown or non-disk component: {domain}"
