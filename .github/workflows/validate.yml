@@ -1,9 +1,11 @@
 name: Validate
 
 # HACS- und hassfest-Validierung. Ergaenzt (ersetzt nicht) ci.yml (Lint/Typ/Test).
-# Hinweis: vollstaendig gruen erst zum Release — erfordert ein OEFFENTLICHES Repo
-# und einen 'tessera'-Eintrag in home-assistant/brands. Bis dahin schlaegt die
-# Brand-Pruefung (besonders hassfest) erwartungsgemaess fehl; PR #27 ist bewusst gehalten.
+# Stand: hassfest + quality (ci.yml) sind gruen. Die hacs/action validiert das Repo
+# REMOTE ueber die GitHub-API am Default-Branch (lokaler checkout aendert das nicht,
+# empirisch geprueft) — der HACS-Check wird daher erst gruen, wenn hacs.json + Manifest
+# auf 'main' liegen (= Merge dieses PRs). 'brands' bleibt ignoriert, bis 'tessera' in
+# home-assistant/brands eingetragen ist (Release-Schritt).
 
 on:
   push:
@@ -20,7 +22,6 @@ jobs:
     name: HACS
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
       - name: HACS validation
         uses: hacs/action@main
         with:
