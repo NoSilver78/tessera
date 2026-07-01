@@ -1,6 +1,7 @@
 # Tessera — Bedien-/UX-Modell (Entwurf zur Validierung)
 
-**Von:** Claude (Architektur) · **Datum:** 2026-07-01 · **Status:** Entwurf — Codex-Agentensystem-Validierung + Owner-Entscheidungen offen
+**Von:** Claude (Architektur) · **Datum:** 2026-07-01 · **Status:** Entwurf — Codex-Agentensystem-Validierung läuft.
+**Owner-Entscheidungen (2026-07-01):** (1) **Authentik parallel** zu lokal (nicht zurückgestellt — `by_group` soll funktional werden; s. §7-Risiko Owner-Aussperrung); (2) **erst Codex-Validierung**, dann bauen; (3) **Wizard: ja, schlank, zuletzt**. Verbleibende offene Fragen (§6): Deny-Log-Quelle, Membership-/Rollen-UI-Ort, Preset-Personas, Authentik-Matching.
 **Quelle:** Multi-Agenten-Workflow (5 Web-Recherche-Linsen → Anforderungen → 3 UI-Entwürfe → adversariale Kritik → Synthese; 11 Agenten). Von Claude gegen `main` code-verifiziert.
 
 ---

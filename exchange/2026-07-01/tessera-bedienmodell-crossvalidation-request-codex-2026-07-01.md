@@ -6,6 +6,12 @@
 ## Warum
 Claude hat via Multi-Agenten-Workflow (5 Web-Recherche-Linsen → Anforderungen → 3 UI-Entwürfe → adversariale Kritik → Synthese) ein **Bedien-/UX-Modell** für Tessera entworfen (inkl. Authentik + Wizard-Frage) und die tragenden Behauptungen gegen `main` verifiziert. **Du validierst dasselbe UNABHÄNGIG** mit deinem eigenen Agentensystem — nicht bestätigen, sondern prüfen/anfechten. Was *beide* Systeme tragen = hohe Konfidenz; was nur einer sagt = genauer prüfen. **Frisch lesen, nicht an das Modell anlehnen.**
 
+## Owner-Entscheidungen (2026-07-01) — VALIDIERE diese, fechte mit Evidenz an, wenn riskant
+Michael hat drei Richtungen festgelegt; deine Validierung soll sie prüfen (nicht bloß annehmen):
+1. **Authentik PARALLEL zu lokal** (nicht zurückgestellt): `by_group` soll funktional werden — Compiler **de-inertieren** (ADR 0005 aufheben) **gleichzeitig** mit dem lokalen `by_user`-Pfad. **HÖCHSTE PRÜF-PRIORITÄT (Sicherheit):** Ist das gefahrlos machbar? Der Owner-Lockout-Guard `_assert_owner_or_admin_survives_in`/`_assert_owner_or_admin_survives` ist im inerten Zustand **ungetestet gegen einen leeren/kaputten `groups`-Claim**. Was verlangt die De-Inertness konkret (OIDC-At-Login-Hook, Compiler-Projektion, D12-Live-Beweis, Re-Gate) und welche **Owner-Aussperr-Risiken** entstehen? Ist additiv/Union + Leerer-Claim-Schonung wirklich wasserdicht, wenn `by_group` real projiziert wird? Nenne die exakten Guards/Tests, die VOR der Aktivierung grün sein müssen.
+2. **Build erst nach dieser Validierung** — deine Reihenfolge-Empfehlung (Dimension 7) ist damit **direkt handlungsleitend**: was ist der sichere erste Bau-Schritt, wenn lokal + Authentik parallel laufen sollen?
+3. **Wizard: ja, aber schlank + zuletzt** (nur Erststart / enforce-Ramp / Authentik-Erstverdrahtung). Validiere den engen Scope und **warne konkret bei Scope-Creep-Gefahr**.
+
 ## Zu prüfendes Artefakt
 `exchange/2026-07-01/tessera-bedienmodell-2026-07-01.md` (das Modell). Kontext-Code: `custom_components/tessera/*.py` (v.a. `monitor.py`, `compiler.py`, `mode_manager.py`, `config_flow.py`, `websocket.py`, `d9_gate.py`, `schema.py`, `linter.py`), Docs `docs/concept.md`, `docs/spec-enforce.md`, `docs/QUALITY.md`, ADR 0005.
 
