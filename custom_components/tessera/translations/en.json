@@ -147,23 +147,23 @@
       "fields": {
         "roles": {
           "name": "Roles",
-          "description": "Role map role_id -> {name, is_admin?}. Replaces config.roles when provided."
+          "description": "Role map: role id maps to name and optional is_admin. Replaces config.roles when provided."
         },
         "memberships": {
           "name": "Memberships",
-          "description": "by_user map user_id -> [role_id, ...]. Replaces config.membership.by_user when provided."
+          "description": "Membership map: user id maps to a list of role ids. Replaces config.membership.by_user when provided."
         },
         "area_grants": {
           "name": "Area grants",
-          "description": "area_id -> role_id -> {read, control}. Replaces policy.area_grants when provided."
+          "description": "Grants: area id, then role id, then read/control booleans. Replaces policy.area_grants when provided."
         },
         "floor_grants": {
           "name": "Floor grants",
-          "description": "floor_id -> role_id -> {read, control}. Replaces policy.floor_grants when provided."
+          "description": "Grants: floor id, then role id, then read/control booleans. Replaces policy.floor_grants when provided."
         },
         "entity_overrides": {
           "name": "Entity overrides",
-          "description": "entity_id -> role_id -> {read, control}. Replaces policy.entity_overrides when provided."
+          "description": "Overrides: entity id, then role id, then read/control booleans. Replaces policy.entity_overrides when provided."
         }
       }
     }
