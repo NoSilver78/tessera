@@ -8,6 +8,7 @@ from typing import Any
 
 import custom_components.tessera as tessera_init
 import pytest
+import voluptuous as vol
 from custom_components.tessera import (
     DATA_ACK_SERVICES_REGISTERED,
     DATA_FLOOR_GRANT_SERVICE_REGISTERED,
@@ -15,6 +16,7 @@ from custom_components.tessera import (
     DATA_MEMBERSHIP_SERVICE_REGISTERED,
     DATA_PREFLIGHT_SERVICE_REGISTERED,
     DATA_SERVICE_REGISTERED,
+    DATA_SET_MODE_SERVICE_REGISTERED,
     DOMAIN,
     SERVICE_ACK_COMPONENT,
     SERVICE_IMPORT,
@@ -23,6 +25,7 @@ from custom_components.tessera import (
     SERVICE_REVOKE_COMPONENT_ACK,
     SERVICE_SET_FLOOR_GRANT,
     SERVICE_SET_MEMBERSHIP,
+    SERVICE_SET_MODE,
 )
 from custom_components.tessera.auth_adapter import (
     AuthRecoverySnapshot,
@@ -429,6 +432,7 @@ async def test_unload_entry_keeps_bucket_and_removes_service_after_last_entry(
     assert DATA_FLOOR_GRANT_SERVICE_REGISTERED not in hass.data[DOMAIN]
     assert DATA_IMPORT_SERVICE_REGISTERED not in hass.data[DOMAIN]
     assert DATA_PREFLIGHT_SERVICE_REGISTERED not in hass.data[DOMAIN]
+    assert DATA_SET_MODE_SERVICE_REGISTERED not in hass.data[DOMAIN]
     assert hass.services.removed == [
         (DOMAIN, SERVICE_RECOMPILE),
         (DOMAIN, SERVICE_ACK_COMPONENT),
@@ -437,6 +441,7 @@ async def test_unload_entry_keeps_bucket_and_removes_service_after_last_entry(
         (DOMAIN, SERVICE_SET_FLOOR_GRANT),
         (DOMAIN, SERVICE_IMPORT),
         (DOMAIN, SERVICE_PREFLIGHT),
+        (DOMAIN, SERVICE_SET_MODE),
     ]
 
 
@@ -1086,6 +1091,49 @@ async def test_set_floor_grant_service_is_admin_only_and_persists(
     }
     assert store.save_policy_calls == 1
     assert compile_calls == ["entry-1"]
+
+
+@pytest.mark.asyncio
+async def test_set_mode_service_is_admin_only_and_routes_through_guarded_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """set_mode is admin-only, persists the target mode, and recompiles guarded."""
+    hass = FakeHass()
+    admin_services = _patch_admin_service_registration(monkeypatch)
+    store = E35Store("monitor")
+    entry_data: dict[str, Any] = {"store": store}
+    hass.data[DOMAIN] = {"entry-1": entry_data}
+    compile_calls: list[str] = []
+
+    async def fake_compile(
+        _hass: Any, entry_id: str, _entry_data: dict[str, Any]
+    ) -> None:
+        compile_calls.append(entry_id)
+
+    monkeypatch.setattr(tessera_init, "_compile_for_mode_safely", fake_compile)
+    tessera_init._register_set_mode_service(hass)
+    handler = hass.services.handlers[(DOMAIN, SERVICE_SET_MODE)]
+
+    with pytest.raises(Unauthorized):
+        await handler(FakeServiceCall({"mode": "enforce"}, is_admin=False))
+
+    await handler(FakeServiceCall({"mode": "enforce"}))
+    assert store.config["mode"] == "enforce"
+
+    await handler(FakeServiceCall({"mode": "monitor"}))
+    assert store.config["mode"] == "monitor"
+
+    assert admin_services == [(DOMAIN, SERVICE_SET_MODE)]
+    assert hass.data[DOMAIN][DATA_SET_MODE_SERVICE_REGISTERED] is True
+    assert compile_calls == ["entry-1", "entry-1"]
+
+
+def test_set_mode_service_schema_restricts_to_known_modes() -> None:
+    """The set_mode schema accepts only off/monitor/enforce."""
+    for mode in ("off", "monitor", "enforce"):
+        assert tessera_init.SERVICE_SET_MODE_SCHEMA({"mode": mode}) == {"mode": mode}
+    with pytest.raises(vol.Invalid):
+        tessera_init.SERVICE_SET_MODE_SCHEMA({"mode": "bogus"})
 
 
 @pytest.mark.asyncio

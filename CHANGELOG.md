@@ -7,6 +7,21 @@ Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-07-01
+
+### Hinzugefügt
+- **`tessera.set_mode`** — Admin-Service zum Setzen des Betriebsmodus (`off`/`monitor`/`enforce`).
+  Läuft über denselben guarded `_compile_for_mode_safely`-Pfad wie der Options-Flow: `enforce`
+  rechnet/journalt/appliet nativ, das Verlassen von `enforce` restauriert den Pre-Install-Snapshot,
+  jeder Fehler fällt sicher auf `monitor` zurück. Admin-only.
+
+### Behoben
+- **Enforce-Modus war über die HA-UI nicht erreichbar.** Das Matrix-Panel ist als Config-Panel der
+  Integration registriert → das Zahnrad öffnet das Panel statt des Options-Flows, und das ⋮-Menü hat
+  kein „Konfigurieren"; der `set_mode`-Options-Flow-Schritt war damit verwaist. `tessera.set_mode`
+  macht den Modus wieder regulär bedienbar (via `ha_call_service` / Entwicklerwerkzeuge). Auf der
+  Dev-Instanz nie aufgefallen, weil der Modus dort per Storage-Seed + Restart geflippt wurde.
+
 ## [0.3.0] — 2026-07-01
 
 ### Hinzugefügt

@@ -62,3 +62,13 @@ import:
       selector:
         object:
 preflight:
+set_mode:
+  fields:
+    mode:
+      required: true
+      selector:
+        select:
+          options:
+            - "off"
+            - "monitor"
+            - "enforce"

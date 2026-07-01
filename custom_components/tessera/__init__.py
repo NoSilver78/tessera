@@ -31,8 +31,8 @@ from .auth_adapter import (
     UserBindingAdapter,
 )
 from .compiler import compile_policies
-from .config_flow import set_floor_grant, set_user_membership
-from .const import DOMAIN, MODE_ENFORCE, MODE_MONITOR, MODE_OFF
+from .config_flow import set_floor_grant, set_mode, set_user_membership
+from .const import DOMAIN, MODE_ENFORCE, MODE_MONITOR, MODE_OFF, MODES
 from .d9_gate import compute_component_ack_target, evaluate_d9_gate
 from .linter import lint_cross_role
 from .mode_manager import apply_enforce_plan, compute_enforce_plan
@@ -90,6 +90,8 @@ SERVICE_IMPORT_SCHEMA = vol.Schema(
     }
 )
 SERVICE_PREFLIGHT = "preflight"
+SERVICE_SET_MODE = "set_mode"
+SERVICE_SET_MODE_SCHEMA = vol.Schema({vol.Required("mode"): vol.In(sorted(MODES))})
 # Bookkeeping sentinels stored in the domain bucket alongside per-entry dicts.
 # Their values are non-dict (bool), so the isinstance(dict) filter in
 # _has_loaded_entries cleanly distinguishes them from real entry data.
@@ -101,6 +103,7 @@ DATA_MEMBERSHIP_SERVICE_REGISTERED = "__membership_service_registered"
 DATA_FLOOR_GRANT_SERVICE_REGISTERED = "__floor_grant_service_registered"
 DATA_IMPORT_SERVICE_REGISTERED = "__import_service_registered"
 DATA_PREFLIGHT_SERVICE_REGISTERED = "__preflight_service_registered"
+DATA_SET_MODE_SERVICE_REGISTERED = "__set_mode_service_registered"
 PANEL_URL_PATH = "tessera"
 PANEL_WEBCOMPONENT = "tessera-matrix-panel"
 PANEL_STATIC_URL = "/tessera_static/tessera-panel.js"
@@ -127,6 +130,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     _register_floor_grant_service(hass)
     _register_import_service(hass)
     _register_preflight_service(hass)
+    _register_set_mode_service(hass)
     _register_websocket_api(hass)
     await _async_register_matrix_panel(hass)
     recovered = await _startup_recovery_safely(
@@ -167,12 +171,14 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.services.async_remove(DOMAIN, SERVICE_SET_FLOOR_GRANT)
         hass.services.async_remove(DOMAIN, SERVICE_IMPORT)
         hass.services.async_remove(DOMAIN, SERVICE_PREFLIGHT)
+        hass.services.async_remove(DOMAIN, SERVICE_SET_MODE)
         domain_data.pop(DATA_SERVICE_REGISTERED, None)
         domain_data.pop(DATA_ACK_SERVICES_REGISTERED, None)
         domain_data.pop(DATA_MEMBERSHIP_SERVICE_REGISTERED, None)
         domain_data.pop(DATA_FLOOR_GRANT_SERVICE_REGISTERED, None)
         domain_data.pop(DATA_IMPORT_SERVICE_REGISTERED, None)
         domain_data.pop(DATA_PREFLIGHT_SERVICE_REGISTERED, None)
+        domain_data.pop(DATA_SET_MODE_SERVICE_REGISTERED, None)
     return True
 
 
@@ -196,6 +202,52 @@ def _register_recompile_service(hass: HomeAssistant) -> None:
 
     hass.services.async_register(DOMAIN, SERVICE_RECOMPILE, _handle_recompile)
     domain_data[DATA_SERVICE_REGISTERED] = True
+
+
+def _register_set_mode_service(hass: HomeAssistant) -> None:
+    """Register the admin-only mode-switch service once per HA instance.
+
+    ``tessera.set_mode`` sets the operating mode (``off``/``monitor``/``enforce``)
+    and routes through the same guarded ``_compile_for_mode_safely`` path as the
+    options flow: entering ``enforce`` computes, journals, applies and clears
+    through the native-auth adapters; leaving ``enforce`` restores the immutable
+    pre-install snapshot; every failure falls safe to monitor. It is the
+    service-level twin of the options-flow ``set_mode`` step (which is shadowed by
+    the matrix config panel), so the enforcement switch stays reachable from
+    ``ha_call_service`` and Developer Tools. Admin-only — only administrators may
+    change the enforcement mode.
+    """
+    domain_data = _domain_data(hass)
+    if domain_data.get(DATA_SET_MODE_SERVICE_REGISTERED) is True:
+        return
+
+    async def _handle_set_mode(call: ServiceCall) -> None:
+        mode = cast(str, call.data["mode"])
+        async with mutation_lock(hass):
+            prepared: list[
+                tuple[str, dict[str, Any], TesseraStore, TesseraConfigData]
+            ] = []
+            for key, entry_data in list(_domain_data(hass).items()):
+                if not isinstance(entry_data, dict):
+                    continue
+                store = cast(TesseraStore, entry_data["store"])
+                config = await store.async_load_config()
+                next_config = set_mode(config, mode)
+                prepared.append((key, entry_data, store, next_config))
+
+            for key, entry_data, store, next_config in prepared:
+                await store.async_save_config(next_config)
+                await _compile_for_mode_safely(hass, key, entry_data)
+                LOGGER.warning("Tessera mode set: mode=%s", mode)
+
+    async_register_admin_service(
+        hass,
+        DOMAIN,
+        SERVICE_SET_MODE,
+        _handle_set_mode,
+        schema=SERVICE_SET_MODE_SCHEMA,
+    )
+    domain_data[DATA_SET_MODE_SERVICE_REGISTERED] = True
 
 
 def _register_ack_services(hass: HomeAssistant) -> None:
