@@ -132,6 +132,30 @@ def remove_role(
     return validate_config_data(next_config), validate_policy_data(next_policy)
 
 
+def set_user_membership(
+    config: TesseraConfigData, user_id: str, role_ids: list[str]
+) -> TesseraConfigData:
+    """Return config with one HA user's Tessera role membership updated."""
+    next_config = validate_config_data(config)
+    if not isinstance(user_id, str) or not user_id:
+        raise TesseraSchemaError("membership user id must be a non-empty string")
+
+    normalized_role_ids = sorted(set(role_ids))
+    unknown_role_ids = [
+        role_id
+        for role_id in normalized_role_ids
+        if role_id not in next_config["roles"]
+    ]
+    if unknown_role_ids:
+        raise TesseraSchemaError("membership role must exist in config.roles")
+
+    if normalized_role_ids:
+        next_config["membership"]["by_user"][user_id] = normalized_role_ids
+    else:
+        next_config["membership"]["by_user"].pop(user_id, None)
+    return validate_config_data(next_config)
+
+
 def add_area_grant(
     config: TesseraConfigData,
     policy: TesseraPolicyData,

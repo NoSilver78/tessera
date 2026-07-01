@@ -16,6 +16,7 @@ from custom_components.tessera.config_flow import (
     remove_area_grant,
     remove_role,
     set_mode,
+    set_user_membership,
 )
 from custom_components.tessera.const import DOMAIN
 from custom_components.tessera.schema import (
@@ -214,6 +215,30 @@ def test_add_role_rejects_duplicate_role_id() -> None:
 
     with pytest.raises(TesseraSchemaError):
         add_role(config, "viewer")
+
+
+def test_set_user_membership_sorts_dedupes_and_removes_idempotently() -> None:
+    """Direct user membership writes normalize role ids and remove empty entries."""
+    config = add_role(add_role(default_config_data(), "viewer"), "operator")
+
+    next_config = set_user_membership(
+        config, "user-1", ["operator", "viewer", "operator"]
+    )
+    removed_config = set_user_membership(next_config, "user-1", [])
+    removed_again_config = set_user_membership(removed_config, "user-1", [])
+
+    assert config["membership"]["by_user"] == {}
+    assert next_config["membership"]["by_user"] == {"user-1": ["operator", "viewer"]}
+    assert removed_config["membership"]["by_user"] == {}
+    assert removed_again_config["membership"]["by_user"] == {}
+
+
+def test_set_user_membership_rejects_unknown_role() -> None:
+    """Membership writes fail closed when any role id is unknown."""
+    config = add_role(default_config_data(), "viewer")
+
+    with pytest.raises(TesseraSchemaError):
+        set_user_membership(config, "user-1", ["viewer", "missing"])
 
 
 def test_add_area_grant_is_schema_aware_and_never_bare_true() -> None:

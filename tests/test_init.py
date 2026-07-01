@@ -10,11 +10,13 @@ import custom_components.tessera as tessera_init
 import pytest
 from custom_components.tessera import (
     DATA_ACK_SERVICES_REGISTERED,
+    DATA_MEMBERSHIP_SERVICE_REGISTERED,
     DATA_SERVICE_REGISTERED,
     DOMAIN,
     SERVICE_ACK_COMPONENT,
     SERVICE_RECOMPILE,
     SERVICE_REVOKE_COMPONENT_ACK,
+    SERVICE_SET_MEMBERSHIP,
 )
 from custom_components.tessera.auth_adapter import (
     AuthRecoverySnapshot,
@@ -232,6 +234,32 @@ class AckStore(E35Store):
         await super().async_save_config(config)
 
 
+class MembershipStore(E35Store):
+    """Store double for by-user membership service tests."""
+
+    def __init__(
+        self,
+        mode: str = "monitor",
+        *,
+        roles: tuple[str, ...] = ("viewer",),
+        fail_save: bool = False,
+        events: list[str] | None = None,
+    ) -> None:
+        """Initialize config with known Tessera roles."""
+        super().__init__(mode, events=events)
+        self.fail_save = fail_save
+        self.save_calls = 0
+        for role_id in roles:
+            self.config["roles"][role_id] = {"name": role_id}
+
+    async def async_save_config(self, config: dict[str, Any]) -> None:
+        """Persist fake config or inject a write failure."""
+        self.save_calls += 1
+        if self.fail_save:
+            raise RuntimeError("write failed")
+        await super().async_save_config(config)
+
+
 @dataclass(frozen=True)
 class FakeEntry:
     """Minimal config entry double."""
@@ -323,10 +351,12 @@ async def test_unload_entry_keeps_bucket_and_removes_service_after_last_entry(
     assert "entry-2" not in hass.data[DOMAIN]
     assert DATA_SERVICE_REGISTERED not in hass.data[DOMAIN]
     assert DATA_ACK_SERVICES_REGISTERED not in hass.data[DOMAIN]
+    assert DATA_MEMBERSHIP_SERVICE_REGISTERED not in hass.data[DOMAIN]
     assert hass.services.removed == [
         (DOMAIN, SERVICE_RECOMPILE),
         (DOMAIN, SERVICE_ACK_COMPONENT),
         (DOMAIN, SERVICE_REVOKE_COMPONENT_ACK),
+        (DOMAIN, SERVICE_SET_MEMBERSHIP),
     ]
 
 
@@ -682,6 +712,226 @@ async def test_d9_revoke_ack_is_idempotent_and_recompiles_on_change(
 
     assert store.config["d9_acks"] == {}
     assert compile_calls == ["entry-1", "entry-1"]
+
+
+@pytest.mark.asyncio
+async def test_set_membership_service_is_admin_only_and_persists(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The by-user membership writer is admin-only and recompiles after save."""
+    hass = AuthHass([FakeUser("user-1", ["system-users"])])
+    admin_services = _patch_admin_service_registration(monkeypatch)
+    store = MembershipStore(roles=("viewer", "operator"))
+    entry_data: dict[str, Any] = {"store": store}
+    hass.data[DOMAIN] = {"entry-1": entry_data}
+    compile_calls: list[str] = []
+
+    async def fake_compile(
+        _hass: Any, entry_id: str, _entry_data: dict[str, Any]
+    ) -> None:
+        compile_calls.append(entry_id)
+
+    monkeypatch.setattr(tessera_init, "_compile_for_mode_safely", fake_compile)
+    tessera_init._register_membership_service(hass)
+    handler = hass.services.handlers[(DOMAIN, SERVICE_SET_MEMBERSHIP)]
+
+    with pytest.raises(Unauthorized):
+        await handler(
+            FakeServiceCall(
+                {"user_id": "user-1", "role_ids": ["viewer"]}, is_admin=False
+            )
+        )
+    await handler(
+        FakeServiceCall(
+            {"user_id": "user-1", "role_ids": ["operator", "viewer", "operator"]}
+        )
+    )
+
+    assert admin_services == [(DOMAIN, SERVICE_SET_MEMBERSHIP)]
+    assert hass.data[DOMAIN][DATA_MEMBERSHIP_SERVICE_REGISTERED] is True
+    assert store.config["membership"]["by_user"] == {"user-1": ["operator", "viewer"]}
+    assert compile_calls == ["entry-1"]
+
+
+@pytest.mark.asyncio
+async def test_set_membership_service_unknown_user_fails_closed_without_save_or_compile(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unknown Home Assistant user ids are rejected before config writes."""
+    hass = AuthHass([FakeUser("other-user", ["system-users"])])
+    _patch_admin_service_registration(monkeypatch)
+    store = MembershipStore()
+    hass.data[DOMAIN] = {"entry-1": {"store": store}}
+
+    async def fail_compile(*_args: Any, **_kwargs: Any) -> None:
+        raise AssertionError("compile must not run for unknown user")
+
+    monkeypatch.setattr(tessera_init, "_compile_for_mode_safely", fail_compile)
+    tessera_init._register_membership_service(hass)
+    handler = hass.services.handlers[(DOMAIN, SERVICE_SET_MEMBERSHIP)]
+
+    with pytest.raises(HomeAssistantError, match="unknown user"):
+        await handler(FakeServiceCall({"user_id": "missing", "role_ids": ["viewer"]}))
+
+    assert store.save_calls == 0
+    assert store.config["membership"]["by_user"] == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("user", "reason"),
+    [
+        (FakeUser("user-1", ["system-users"], is_owner=True), "owner"),
+        (
+            FakeUser("user-1", ["system-users"], system_generated=True),
+            "system-generated",
+        ),
+    ],
+)
+async def test_set_membership_service_rejects_unmanaged_targets_without_save(
+    monkeypatch: pytest.MonkeyPatch, user: FakeUser, reason: str
+) -> None:
+    """Owner and system-generated users are outside Tessera membership writes."""
+    hass = AuthHass([user])
+    _patch_admin_service_registration(monkeypatch)
+    store = MembershipStore()
+    hass.data[DOMAIN] = {"entry-1": {"store": store}}
+    tessera_init._register_membership_service(hass)
+    handler = hass.services.handlers[(DOMAIN, SERVICE_SET_MEMBERSHIP)]
+
+    with pytest.raises(HomeAssistantError, match=reason):
+        await handler(FakeServiceCall({"user_id": "user-1", "role_ids": ["viewer"]}))
+
+    assert store.save_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_set_membership_service_unknown_role_preflights_all_entries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Role validation happens for every entry before any entry is saved."""
+    hass = AuthHass([FakeUser("user-1", ["system-users"])])
+    _patch_admin_service_registration(monkeypatch)
+    valid_store = MembershipStore(roles=("viewer",))
+    invalid_store = MembershipStore(roles=("operator",))
+    hass.data[DOMAIN] = {
+        "entry-1": {"store": valid_store},
+        "entry-2": {"store": invalid_store},
+    }
+
+    async def fail_compile(*_args: Any, **_kwargs: Any) -> None:
+        raise AssertionError("compile must not run after preflight failure")
+
+    monkeypatch.setattr(tessera_init, "_compile_for_mode_safely", fail_compile)
+    tessera_init._register_membership_service(hass)
+    handler = hass.services.handlers[(DOMAIN, SERVICE_SET_MEMBERSHIP)]
+
+    with pytest.raises(TesseraSchemaError):
+        await handler(FakeServiceCall({"user_id": "user-1", "role_ids": ["viewer"]}))
+
+    assert valid_store.save_calls == 0
+    assert invalid_store.save_calls == 0
+    assert valid_store.config["membership"]["by_user"] == {}
+    assert invalid_store.config["membership"]["by_user"] == {}
+
+
+@pytest.mark.asyncio
+async def test_set_membership_service_empty_roles_remove_idempotently(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An empty role list removes the by_user mapping and tolerates repeats."""
+    hass = AuthHass([FakeUser("user-1", ["system-users"])])
+    _patch_admin_service_registration(monkeypatch)
+    store = MembershipStore()
+    store.config["membership"]["by_user"] = {"user-1": ["viewer"]}
+    hass.data[DOMAIN] = {"entry-1": {"store": store}}
+
+    async def fake_compile(*_args: Any, **_kwargs: Any) -> None:
+        return None
+
+    monkeypatch.setattr(tessera_init, "_compile_for_mode_safely", fake_compile)
+    tessera_init._register_membership_service(hass)
+    handler = hass.services.handlers[(DOMAIN, SERVICE_SET_MEMBERSHIP)]
+
+    await handler(FakeServiceCall({"user_id": "user-1", "role_ids": []}))
+    await handler(FakeServiceCall({"user_id": "user-1", "role_ids": []}))
+
+    assert store.config["membership"]["by_user"] == {}
+    assert store.save_calls == 2
+
+
+@pytest.mark.asyncio
+async def test_set_membership_service_recompile_failure_fails_safe_to_monitor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Enforce-mode membership saves must recompile through the fail-safe guard."""
+    issues: list[tuple[str, str]] = []
+    store = MembershipStore("enforce")
+    hass = AuthHass([FakeUser("user-1", ["system-users"])])
+    entry_data: dict[str, Any] = {"store": store}
+    hass.data[DOMAIN] = {"entry-1": entry_data}
+    _patch_admin_service_registration(monkeypatch)
+
+    async def fail_compile(*_args: Any, **_kwargs: Any) -> None:
+        raise RuntimeError("compile failed")
+
+    async def fake_issue(
+        _hass: Any, _entry_id: str, issue_id: str, *, reason: str
+    ) -> None:
+        issues.append((issue_id, reason))
+
+    monkeypatch.setattr(tessera_init, "_compile_for_mode", fail_compile)
+    monkeypatch.setattr(tessera_init, "_record_repair_issue", fake_issue)
+    tessera_init._register_membership_service(hass)
+    handler = hass.services.handlers[(DOMAIN, SERVICE_SET_MEMBERSHIP)]
+
+    await handler(FakeServiceCall({"user_id": "user-1", "role_ids": ["viewer"]}))
+
+    assert store.config["mode"] == "monitor"
+    assert entry_data["mode"] == "monitor"
+    assert store.config["membership"]["by_user"] == {"user-1": ["viewer"]}
+    assert issues == [(tessera_init.REPAIR_ENFORCE_FAIL_SAFE, "compile:RuntimeError")]
+
+
+@pytest.mark.asyncio
+async def test_set_membership_service_blocked_enforce_plan_avoids_native_write(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Blocked enforce recompiles from the service persist monitor, not auth writes."""
+    events: list[str] = []
+    store = MembershipStore("enforce", events=events)
+    hass = AuthHass([FakeUser("user-1", ["system-users"])])
+    entry_data: dict[str, Any] = {"store": store}
+    hass.data[DOMAIN] = {"entry-1": entry_data}
+    _patch_admin_service_registration(monkeypatch)
+
+    async def fake_compute(_hass: Any, _store: Any) -> dict[str, Any]:
+        events.append("compute")
+        return {
+            "groups": [],
+            "bindings": [],
+            "orphan_group_ids": [],
+            "blocked": True,
+            "block_reason": "d9",
+            "block_detail": ["custom_component"],
+        }
+
+    async def fail_apply(*_args: Any, **_kwargs: Any) -> None:
+        raise AssertionError("native auth apply must not run for blocked plan")
+
+    monkeypatch.setattr(tessera_init, "compute_enforce_plan", fake_compute)
+    monkeypatch.setattr(tessera_init, "apply_enforce_plan", fail_apply)
+    _patch_monitor_preview(monkeypatch, events)
+    tessera_init._register_membership_service(hass)
+    handler = hass.services.handlers[(DOMAIN, SERVICE_SET_MEMBERSHIP)]
+
+    await handler(FakeServiceCall({"user_id": "user-1", "role_ids": ["viewer"]}))
+
+    assert store.config["mode"] == "monitor"
+    assert store.state == default_state_data()
+    assert entry_data["mode"] == "monitor"
+    assert entry_data["preview"] == {"mode": "monitor"}
+    assert events == ["compute", "monitor_preview"]
 
 
 @pytest.mark.asyncio
