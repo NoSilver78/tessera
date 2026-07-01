@@ -7,6 +7,16 @@ Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-07-01
+
+### Hinzugefügt
+- **`tessera.preflight`** — read-only Enforce-Readiness-Check (admin-only). Führt die
+  Enforce-Planung vollständig **read-only** aus (kein nativer Write, kein Mode-Wechsel) und gibt als
+  Service-Response zurück: ob `enforce` durchliefe, die **vollständige D9-Component-Blockerliste**
+  (welche Custom-Components vetoen und warum), die Cross-Rollen-Linter-Konflikte und eine
+  Modell-Zusammenfassung. Redacted (keine content-hashes, gekürzte user_ids). Abfragbar via
+  `ha_call_service(return_response=true)` — das „würde enforce laufen, und was blockt?"-Werkzeug.
+
 ## [0.2.0] — 2026-07-01
 
 Erste getaggte Auslieferung (Dogfood/Soak-Stand). Enthält den vollständigen Kern, den
