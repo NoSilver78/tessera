@@ -5,6 +5,8 @@
 
 Ziel: der erste **echte** Enforce-Schreib-Zyklus beweisen — schreiben, durchsetzen, sauber zurücknehmen, Crash-überstehen — auf einer Wegwerf-Instanz, bevor Soak/Dogfood/Release folgen.
 
+> **Stand: aktuelles `main`.** Deckt zusätzlich die seither gemergten Pfade ab — **Live-Panel-Edit re-applied in `enforce`** (CXR-02, Schritt 5a) und die **D9-Ack-Admin-Services** `tessera.acknowledge_component`/`revoke_component_ack` (#11, Schritt 5b).
+
 ## Schritt 0 — Sicherheitsnetz + Beobachtungsweg *(zuerst klären)*
 - **[M]** Backup: `.storage/auth` (+ `auth_provider.homeassistant`) der Dev-Instanz kopieren → harter Rollback möglich.
 - **[M]** Eine **Owner/Admin-Session offen halten** (eingeloggter Tab) = Lockout-Rettung.
@@ -39,6 +41,24 @@ Ziel: der erste **echte** Enforce-Schreib-Zyklus beweisen — schreiben, durchse
 - **[M]** Als `e2e-tester` einloggen (separater Browser/Token — **Claude loggt sich NICHT ein, gibt keine Passwörter ein**).
 - **Erwartung:** `e2e-tester` sieht/bedient **nur** die `wohnzimmer`-view-Entities; alles andere verwehrt (allow-only).
 - **Ehrlich:** die dokumentierten Leak-Pfade (`render_template`/Logbook/Assist) sind hier **nicht** abgedeckt — wir prüfen die native `check_entity`-Ebene.
+
+## Schritt 5a — Live-Panel-Edit re-applied sofort (CXR-02)  **[M setzt, C verifiziert]**
+- Bei **aktivem `enforce`** im Panel einen Grant ändern (z. B. `viewer × wohnzimmer × control` zusätzlich setzen) und speichern.
+- **Erwartung (CXR-02):** der native Auth-Store wird **sofort** neu geschrieben — **ohne** Reload/Neustart. `tessera:viewer`-`PolicyPermissions` spiegeln den neuen Grant unmittelbar.
+- **Verifikation [C]:**
+  1. `.storage/auth`: geänderte `PolicyPermissions` **direkt nach dem Speichern** (nicht erst nach Reload) · weiterhin **allow-only**.
+  2. `last_apply_result.status == "applied"` · Owner/Admin + `system_generated` unverändert · Journal sauber.
+  3. **Gegenprobe:** Grant wieder entfernen → `PolicyPermissions` schrumpft entsprechend, ebenfalls sofort.
+- **Hinweis:** Bei einem Apply-Fehler fällt der Pfad fail-safe auf `monitor` (kein Half-State) — nur beobachten, nicht erzwingen.
+
+## Schritt 5b — D9-Ack-Services (#11)  *(optional; braucht eine auth-berührende Test-Component)*  **[M setzt, C verifiziert]**
+- **Nur auf der Dev-Instanz:** eine harmlose Dummy-Custom-Component mit einer Auth-Mutation im Quelltext (z. B. `async_update_user(...)`) nach `custom_components/<dummy>/` legen → HA-Neustart.
+- **D9-Veto:** `mode=enforce` → **blockiert**, fällt fail-safe auf `monitor` (D9-Gate vetoet die un-acked auth-berührende Component); `enforce_blocked`/Repairs-Hinweis sichtbar.
+- **Ack [M, Admin]:** `tessera.acknowledge_component` mit `domain=<dummy>` → `mode=enforce` läuft **jetzt durch** (Ack überstimmt den Veto). Der Ack in `config["d9_acks"]` ist an **version + content_hash** gebunden.
+- **Revoke [M, Admin]:** `tessera.revoke_component_ack` mit `domain=<dummy>` → erneuter `enforce` **blockiert wieder**.
+- **Admin-only [M+C]:** Aufruf als **Nicht-Admin** → `Unauthorized`, kein Effekt.
+- **Auto-Invalidierung (optional):** Dummy-Component minimal ändern (content_hash wandert) → der alte Ack matcht nicht mehr → Veto wieder aktiv.
+- **Aufräumen [M]:** Dummy-Component **und** den Ack (revoke) wieder entfernen, `mode=off`.
 
 ## Schritt 6 — Restore via `mode=off`  **[M setzt, C verifiziert]**
 - `mode=off`.
