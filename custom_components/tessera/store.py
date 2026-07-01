@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import weakref
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
@@ -47,6 +48,31 @@ class StoreLike(Protocol):
 
 
 StoreFactory = Callable[[Any, int, str], StoreLike]
+
+
+# One process-wide mutation lock per Home Assistant instance. Every TOP-LEVEL
+# store mutation (admin services, matrix websocket, options flow) acquires it so
+# its ``load -> mutate -> save (-> compile)`` sequence runs atomically; concurrent
+# edits would otherwise each reload the same base and last-write-wins (lost
+# update — observed: 8 concurrent matrix set_grant calls persisted only 1).
+#
+# NON-REENTRANT (``asyncio.Lock``): the compile / enforce / fail-safe path runs
+# INSIDE the held lock and MUST use the raw ``async_load_*``/``async_save_*``
+# methods and NEVER re-acquire this lock (e.g. ``_set_mode_monitor``,
+# ``async_fail_safe_to_off``) — otherwise deadlock. Acquire ONLY at the top-level
+# mutation entry points, never inside compile/apply/fail-safe/restore.
+_MUTATION_LOCKS: weakref.WeakKeyDictionary[Any, asyncio.Lock] = (
+    weakref.WeakKeyDictionary()
+)
+
+
+def mutation_lock(hass: HomeAssistant) -> asyncio.Lock:
+    """Return the process-wide Tessera store-mutation lock for ``hass``."""
+    lock = _MUTATION_LOCKS.get(hass)
+    if lock is None:
+        lock = asyncio.Lock()
+        _MUTATION_LOCKS[hass] = lock
+    return lock
 
 
 class TesseraStore:

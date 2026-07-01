@@ -22,7 +22,7 @@ from .schema import (
     validate_config_data,
     validate_policy_data,
 )
-from .store import TesseraStore
+from .store import TesseraStore, mutation_lock
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -330,85 +330,90 @@ class TesseraOptionsFlow(config_entries.OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
         """Persist the Tessera mode."""
-        config, policy = await self._load()
-        if user_input is not None:
-            try:
-                config = set_mode(config, cast(str, user_input["mode"]))
-                return await self._save_preview_finish(config, policy)
-            except (KeyError, TesseraSchemaError):
-                return self._form_set_mode(config, {"base": "invalid"})
+        async with mutation_lock(self.hass):
+            config, policy = await self._load()
+            if user_input is not None:
+                try:
+                    config = set_mode(config, cast(str, user_input["mode"]))
+                    return await self._save_preview_finish(config, policy)
+                except (KeyError, TesseraSchemaError):
+                    return self._form_set_mode(config, {"base": "invalid"})
 
-        return self._form_set_mode(config)
+            return self._form_set_mode(config)
 
     async def async_step_add_role(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
         """Add or update a Tessera role."""
-        config, policy = await self._load()
-        if user_input is not None:
-            try:
-                config = add_role(
-                    config,
-                    cast(str, user_input["role_id"]),
-                    name=cast(str, user_input.get("name", "")),
-                    description=cast(str, user_input.get("description", "")),
-                )
-                return await self._save_preview_finish(config, policy)
-            except (KeyError, TesseraSchemaError):
-                return self._form_add_role({"base": "invalid"})
+        async with mutation_lock(self.hass):
+            config, policy = await self._load()
+            if user_input is not None:
+                try:
+                    config = add_role(
+                        config,
+                        cast(str, user_input["role_id"]),
+                        name=cast(str, user_input.get("name", "")),
+                        description=cast(str, user_input.get("description", "")),
+                    )
+                    return await self._save_preview_finish(config, policy)
+                except (KeyError, TesseraSchemaError):
+                    return self._form_add_role({"base": "invalid"})
 
-        return self._form_add_role()
+            return self._form_add_role()
 
     async def async_step_remove_role(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
         """Remove a role and its grants."""
-        config, policy = await self._load()
-        if user_input is not None:
-            try:
-                config, policy = remove_role(
-                    config, policy, cast(str, user_input["role_id"])
-                )
-                return await self._save_preview_finish(config, policy)
-            except (KeyError, TesseraSchemaError):
-                return self._form_remove_role(config, {"base": "invalid"})
+        async with mutation_lock(self.hass):
+            config, policy = await self._load()
+            if user_input is not None:
+                try:
+                    config, policy = remove_role(
+                        config, policy, cast(str, user_input["role_id"])
+                    )
+                    return await self._save_preview_finish(config, policy)
+                except (KeyError, TesseraSchemaError):
+                    return self._form_remove_role(config, {"base": "invalid"})
 
-        return self._form_remove_role(config)
+            return self._form_remove_role(config)
 
     async def async_step_add_area_grant(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
         """Add an Area x Role grant."""
-        config, policy = await self._load()
-        if user_input is not None:
-            try:
-                policy = add_area_grant(
-                    config,
-                    policy,
-                    area_id=cast(str, user_input["area_id"]),
-                    role_id=cast(str, user_input["role_id"]),
-                    read=cast(bool, user_input["read"]),
-                    control=cast(bool, user_input["control"]),
-                )
-                return await self._save_preview_finish(config, policy)
-            except (KeyError, TesseraSchemaError):
-                return self._form_add_area_grant(config, {"base": "invalid"})
+        async with mutation_lock(self.hass):
+            config, policy = await self._load()
+            if user_input is not None:
+                try:
+                    policy = add_area_grant(
+                        config,
+                        policy,
+                        area_id=cast(str, user_input["area_id"]),
+                        role_id=cast(str, user_input["role_id"]),
+                        read=cast(bool, user_input["read"]),
+                        control=cast(bool, user_input["control"]),
+                    )
+                    return await self._save_preview_finish(config, policy)
+                except (KeyError, TesseraSchemaError):
+                    return self._form_add_area_grant(config, {"base": "invalid"})
 
-        return self._form_add_area_grant(config)
+            return self._form_add_area_grant(config)
 
     async def async_step_remove_area_grant(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
         """Remove an Area x Role grant."""
-        config, policy = await self._load()
-        if user_input is not None:
-            try:
-                policy = remove_area_grant(policy, cast(str, user_input["grant"]))
-                return await self._save_preview_finish(config, policy)
-            except (KeyError, TesseraSchemaError):
-                return self._form_remove_area_grant(policy, {"base": "invalid"})
+        async with mutation_lock(self.hass):
+            config, policy = await self._load()
+            if user_input is not None:
+                try:
+                    policy = remove_area_grant(policy, cast(str, user_input["grant"]))
+                    return await self._save_preview_finish(config, policy)
+                except (KeyError, TesseraSchemaError):
+                    return self._form_remove_area_grant(policy, {"base": "invalid"})
 
-        return self._form_remove_area_grant(policy)
+            return self._form_remove_area_grant(policy)
 
     async def _load(self) -> tuple[TesseraConfigData, TesseraPolicyData]:
         """Load config and policy stores."""
