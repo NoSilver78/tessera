@@ -7,6 +7,22 @@ Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-07-01
+
+### Hinzugefügt
+- **Area-Board (Matrix-Panel):** je Rolle zwei Provenance-Spalten **`Floor | Area`** — die
+  Floor-Zelle zeigt das von der Etage geerbte Recht (bisher im Panel unsichtbar), die Area-Zelle den
+  direkten Grant (klickbar/editierbar wie gehabt). Deckt eine Area beide Quellen, wird die Zeile als
+  **`doppelt`** markiert (redundante Doppelvergabe). Jede Area-Zeile ist **aufklappbar** und listet
+  die von Tessera aufgelösten Entities (die das Area-Recht erben, daher ohne eigene Wertespalten).
+- **Matrix-WS** (`tessera/matrix/get`) liefert dafür Grants **nach Quelle getrennt** (`floor_grants`
+  je Area zusätzlich zu den bestehenden `grants` = Area-Quelle), `area_floor` (Etage je Area) und
+  `entities_by_area` (für das Aufklappen).
+
+### Behoben
+- **Floor-Grants waren im Panel unsichtbar** — das Panel las bisher nur `area_grants`, sodass
+  floor-abgedeckte Areas irreführend „none" zeigten. Die Floor-Spalte macht die Herkunft sichtbar.
+
 ## [0.4.0] — 2026-07-01
 
 ### Hinzugefügt

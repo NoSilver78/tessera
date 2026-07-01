@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 from custom_components.tessera.const import DOMAIN
+from custom_components.tessera.resolver import AreaEntityResolution
 from custom_components.tessera.schema import default_config_data, default_policy_data
 from custom_components.tessera.store import mutation_lock
 from custom_components.tessera.websocket import async_set_matrix_grant
@@ -16,10 +17,11 @@ from custom_components.tessera.websocket import async_set_matrix_grant
 class FakeArea:
     """Minimal AreaEntry-compatible double."""
 
-    def __init__(self, area_id: str, name: str) -> None:
-        """Store the area id and name."""
+    def __init__(self, area_id: str, name: str, floor_id: str | None = None) -> None:
+        """Store the area id, name, and floor."""
         self.id = area_id
         self.name = name
+        self.floor_id = floor_id
 
 
 class FakeAreaRegistry:
@@ -44,6 +46,12 @@ class FakeResolver:
     def entity_ids_for_floor(self, floor_id: str) -> tuple[str, ...]:
         """No floor entities in these tests."""
         return ()
+
+    def entity_ids_for_areas(self, area_ids: Any) -> AreaEntityResolution:
+        """Resolve multiple areas (used by the matrix response builder)."""
+        by_area = {aid: self.entity_ids_for_area(aid) for aid in area_ids}
+        entity_ids = {eid for ids in by_area.values() for eid in ids}
+        return AreaEntityResolution(entity_ids=entity_ids, by_area=by_area)
 
 
 class SlowLoadStore:
