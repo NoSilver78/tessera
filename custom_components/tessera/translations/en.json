@@ -140,6 +140,32 @@
           "description": "Grant control access. Set both read and control to false to remove this floor grant."
         }
       }
+    },
+    "import": {
+      "name": "Import model",
+      "description": "Provision the whole Tessera model in one declarative, idempotent call: each provided dimension replaces that dimension, omitted ones are preserved. Mode and D9 acks are never changed. Admin-only; in enforce mode this recompiles through Tessera's guarded apply path.",
+      "fields": {
+        "roles": {
+          "name": "Roles",
+          "description": "Role map role_id -> {name, is_admin?}. Replaces config.roles when provided."
+        },
+        "memberships": {
+          "name": "Memberships",
+          "description": "by_user map user_id -> [role_id, ...]. Replaces config.membership.by_user when provided."
+        },
+        "area_grants": {
+          "name": "Area grants",
+          "description": "area_id -> role_id -> {read, control}. Replaces policy.area_grants when provided."
+        },
+        "floor_grants": {
+          "name": "Floor grants",
+          "description": "floor_id -> role_id -> {read, control}. Replaces policy.floor_grants when provided."
+        },
+        "entity_overrides": {
+          "name": "Entity overrides",
+          "description": "entity_id -> role_id -> {read, control}. Replaces policy.entity_overrides when provided."
+        }
+      }
     }
   },
   "issues": {
