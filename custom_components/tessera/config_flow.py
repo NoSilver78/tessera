@@ -118,6 +118,7 @@ def remove_role(
             membership.pop(subject, None)
 
     for grants in (
+        next_policy["floor_grants"],
         next_policy["area_grants"],
         next_policy["entity_overrides"],
     ):
@@ -182,6 +183,51 @@ def add_area_grant(
     return validate_policy_data(next_policy)
 
 
+def set_floor_grant(
+    config: TesseraConfigData,
+    policy: TesseraPolicyData,
+    *,
+    floor_id: str,
+    role_id: str,
+    read: bool,
+    control: bool,
+) -> TesseraPolicyData:
+    """Return policy with one schema-aware floor grant set."""
+    if role_id not in config["roles"]:
+        raise TesseraSchemaError("floor grant role must exist in config.roles")
+
+    next_policy = validate_policy_data(policy)
+    if not read and not control:
+        role_map = next_policy["floor_grants"].get(floor_id)
+        if role_map is not None:
+            role_map.pop(role_id, None)
+            if not role_map:
+                next_policy["floor_grants"].pop(floor_id, None)
+        return validate_policy_data(next_policy)
+
+    leaf: PermissionLeaf = {}
+    if read or control:
+        leaf["read"] = True
+    if control:
+        leaf["control"] = True
+    next_policy["floor_grants"].setdefault(floor_id, {})[role_id] = leaf
+    return validate_policy_data(next_policy)
+
+
+def remove_floor_grant(
+    policy: TesseraPolicyData, encoded_grant: str
+) -> TesseraPolicyData:
+    """Return policy with one encoded floor::role grant removed."""
+    floor_id, role_id = decode_grant(encoded_grant)
+    next_policy = validate_policy_data(policy)
+    role_map = next_policy["floor_grants"].get(floor_id)
+    if role_map is not None:
+        role_map.pop(role_id, None)
+        if not role_map:
+            next_policy["floor_grants"].pop(floor_id, None)
+    return validate_policy_data(next_policy)
+
+
 def remove_area_grant(
     policy: TesseraPolicyData, encoded_grant: str
 ) -> TesseraPolicyData:
@@ -196,7 +242,7 @@ def remove_area_grant(
     return validate_policy_data(next_policy)
 
 
-class TesseraConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+class TesseraConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg,misc]
     """Minimal config flow for Tessera phase-1 setup."""
 
     VERSION = 1
@@ -227,7 +273,7 @@ class TesseraConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return TesseraOptionsFlow(config_entry)
 
 
-class TesseraOptionsFlow(config_entries.OptionsFlow):
+class TesseraOptionsFlow(config_entries.OptionsFlow):  # type: ignore[misc]
     """Options flow for monitor-mode Tessera basics."""
 
     def __init__(self, config_entry: ConfigEntry) -> None:

@@ -47,9 +47,9 @@ def compile_policies(
     Returns:
         A role-id keyed mapping of native HA policy structures. The returned
         structure contains only allow grants and never HA shortcut booleans.
-        An entity override that resolves to no permission (all-false or empty)
-        REMOVES the entity from that role even if an area grant exposed it:
-        a negative override beats an area grant.
+        Floor grants, area grants, and entity overrides are additive allow-only
+        sources. They union positive read/control leaves and never emit a deny
+        or remove a grant from a broader source.
     """
     # Re-validate (and deep-copy) inputs as fail-closed defense in depth:
     # callers may pass raw store dicts, so this guarantees the compiler only
@@ -65,30 +65,41 @@ def compile_policies(
         role_id: {} for role_id in sorted(config_data["roles"])
     }
 
+    for floor_id, role_map in sorted(policy_data["floor_grants"].items()):
+        entity_ids = resolver.entity_ids_for_floor(floor_id)
+        _apply_grant_matrix(compiled, entity_ids, role_map)
+
     for area_id, role_map in sorted(policy_data["area_grants"].items()):
         entity_ids = resolver.entity_ids_for_area(area_id)
-        for role_id, leaf in sorted(role_map.items()):
-            role_entities = compiled[role_id]
-            for entity_id in entity_ids:
-                if normalized := _normalize_leaf(leaf):
-                    role_entities[entity_id] = _merge_leaf(
-                        role_entities.get(entity_id), normalized
-                    )
+        _apply_grant_matrix(compiled, entity_ids, role_map)
 
     for entity_id, role_map in sorted(policy_data["entity_overrides"].items()):
         for role_id, leaf in sorted(role_map.items()):
             role_entities = compiled[role_id]
             if normalized := _normalize_leaf(leaf):
-                role_entities[entity_id] = normalized
-            else:
-                # Negative/empty override removes the entity from this role,
-                # even if an area grant added it above (override beats area).
-                role_entities.pop(entity_id, None)
+                role_entities[entity_id] = _merge_leaf(
+                    role_entities.get(entity_id), normalized
+                )
 
     return {
         role_id: {"entities": {"entity_ids": dict(sorted(entity_map.items()))}}
         for role_id, entity_map in sorted(compiled.items())
     }
+
+
+def _apply_grant_matrix(
+    compiled: dict[str, dict[str, PermissionLeaf]],
+    entity_ids: tuple[str, ...],
+    role_map: dict[str, PermissionLeaf],
+) -> None:
+    """Union role grants across every resolved entity id."""
+    for role_id, leaf in sorted(role_map.items()):
+        role_entities = compiled[role_id]
+        for entity_id in entity_ids:
+            if normalized := _normalize_leaf(leaf):
+                role_entities[entity_id] = _merge_leaf(
+                    role_entities.get(entity_id), normalized
+                )
 
 
 def _normalize_leaf(leaf: PermissionLeaf) -> PermissionLeaf | None:
@@ -126,6 +137,7 @@ def _validate_referenced_roles(
     """Fail closed when policy data references roles outside config.roles."""
     known_roles = set(config["roles"])
     for path, matrix in (
+        ("policy.floor_grants", policy["floor_grants"]),
         ("policy.area_grants", policy["area_grants"]),
         ("policy.entity_overrides", policy["entity_overrides"]),
     ):

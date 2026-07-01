@@ -14,11 +14,16 @@ class Registry:
 
     entities: dict[str, Any] | None = None
     devices: dict[str, Any] | None = None
+    areas: list[Any] | None = None
 
     def __post_init__(self) -> None:
         """Allow one fake class to stand in for entity and device registries."""
-        if self.entities is None and self.devices is None:
+        if self.entities is None and self.devices is None and self.areas is None:
             raise ValueError("fake registry needs entities or devices")
+
+    def async_list_areas(self) -> list[Any]:
+        """Return fake Home Assistant areas."""
+        return list(self.areas or [])
 
 
 @dataclass(frozen=True)
@@ -29,6 +34,8 @@ class Entry:
     device_id: str | None = None
     disabled_by: str | None = None
     hidden_by: str | None = None
+    id: str | None = None
+    floor_id: str | None = None
 
 
 def test_resolves_device_area_and_direct_entity_area() -> None:
@@ -48,6 +55,7 @@ def test_resolves_device_area_and_direct_entity_area() -> None:
                 "device-kitchen": Entry(area_id="kitchen"),
             }
         ),
+        Registry(areas=[]),
     )
 
     assert resolver.entity_ids_for_area("living_room") == (
@@ -68,6 +76,7 @@ def test_deduplicates_entities_matching_direct_and_device_area() -> None:
             }
         ),
         Registry(devices={"device-living": {"area_id": "living_room"}}),
+        Registry(areas=[]),
     )
 
     assert resolver.entity_ids_for_area("living_room") == ("light.table",)
@@ -85,6 +94,7 @@ def test_direct_entity_area_overrides_device_area() -> None:
             }
         ),
         Registry(devices={"device-living": Entry(area_id="living_room")}),
+        Registry(areas=[]),
     )
 
     assert resolver.entity_ids_for_area("living_room") == ()
@@ -102,6 +112,7 @@ def test_resolves_multiple_areas_with_combined_sorted_result() -> None:
             }
         ),
         Registry(devices={"device-living": Entry(area_id="living_room")}),
+        Registry(areas=[]),
     )
 
     result = resolver.entity_ids_for_areas(["living_room", "office", "living_room"])
@@ -127,6 +138,7 @@ def test_skips_disabled_entities() -> None:
             }
         ),
         Registry(devices={}),
+        Registry(areas=[]),
     )
 
     assert resolver.entity_ids_for_area("living_room") == ("sensor.enabled",)
@@ -141,6 +153,7 @@ def test_includes_hidden_entities() -> None:
             }
         ),
         Registry(devices={}),
+        Registry(areas=[]),
     )
 
     assert resolver.entity_ids_for_area("living_room") == ("sensor.hidden",)
@@ -151,6 +164,58 @@ def test_missing_device_does_not_resolve() -> None:
     resolver = AreaEntityResolver(
         Registry(entities={"sensor.orphan": Entry(device_id="missing-device")}),
         Registry(devices={}),
+        Registry(areas=[]),
     )
 
     assert resolver.entity_ids_for_area("living_room") == ()
+
+
+def test_resolves_floor_as_union_of_area_entities() -> None:
+    """Floor resolution expands through all areas assigned to that floor."""
+    resolver = AreaEntityResolver(
+        Registry(
+            entities={
+                "light.ug": Entry(area_id="ug_room"),
+                "sensor.ug_device": Entry(device_id="device-ug"),
+                "light.eg": Entry(area_id="eg_room"),
+            }
+        ),
+        Registry(devices={"device-ug": Entry(area_id="ug_hall")}),
+        Registry(
+            areas=[
+                Entry(id="ug_room", floor_id="ug"),
+                Entry(id="ug_hall", floor_id="ug"),
+                Entry(id="eg_room", floor_id="eg"),
+            ]
+        ),
+    )
+
+    assert resolver.entity_ids_for_floor("ug") == ("light.ug", "sensor.ug_device")
+
+
+def test_floor_resolution_deduplicates_and_sorts_entities() -> None:
+    """A floor entity resolved through direct and device paths is emitted once."""
+    resolver = AreaEntityResolver(
+        Registry(
+            entities={
+                "sensor.z": Entry(area_id="living", device_id="device-living"),
+                "sensor.a": Entry(area_id="living"),
+            }
+        ),
+        Registry(devices={"device-living": Entry(area_id="living")}),
+        Registry(areas=[Entry(id="living", floor_id="eg")]),
+    )
+
+    assert resolver.entity_ids_for_floor("eg") == ("sensor.a", "sensor.z")
+
+
+def test_floor_without_areas_and_unknown_floor_are_empty() -> None:
+    """Resolver misses are deny-by-omission, not exceptions."""
+    resolver = AreaEntityResolver(
+        Registry(entities={"light.a": Entry(area_id="living")}),
+        Registry(devices={}),
+        Registry(areas=[Entry(id="living", floor_id="eg")]),
+    )
+
+    assert resolver.entity_ids_for_floor("ug") == ()
+    assert resolver.entity_ids_for_floor("missing") == ()
