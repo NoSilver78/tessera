@@ -77,11 +77,9 @@ def async_register(hass: HomeAssistant) -> None:
     async_register_command(hass, websocket_matrix_set_grant)
 
 
-@websocket_decorators.require_admin  # type: ignore[untyped-decorator]
-@websocket_decorators.websocket_command(  # type: ignore[untyped-decorator]
-    {vol.Required("type"): TYPE_MATRIX_GET}
-)
-@websocket_decorators.async_response  # type: ignore[untyped-decorator]
+@websocket_decorators.require_admin
+@websocket_decorators.websocket_command({vol.Required("type"): TYPE_MATRIX_GET})
+@websocket_decorators.async_response
 async def websocket_matrix_get(
     hass: HomeAssistant,
     connection: ActiveConnection,
@@ -96,7 +94,7 @@ async def websocket_matrix_get(
         connection.send_error(msg["id"], websocket_const.ERR_NOT_FOUND, str(err))
 
 
-@websocket_decorators.require_admin  # type: ignore[untyped-decorator]
+@websocket_decorators.require_admin
 @websocket_decorators.websocket_command(
     {
         vol.Required("type"): TYPE_MATRIX_SET_GRANT,
@@ -105,8 +103,8 @@ async def websocket_matrix_get(
         vol.Required("read"): bool,
         vol.Required("control"): bool,
     }
-)  # type: ignore[untyped-decorator]
-@websocket_decorators.async_response  # type: ignore[untyped-decorator]
+)
+@websocket_decorators.async_response
 async def websocket_matrix_set_grant(
     hass: HomeAssistant,
     connection: ActiveConnection,

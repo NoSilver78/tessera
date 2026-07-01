@@ -74,7 +74,15 @@ class AreaEntityResolver:
         return self.entity_ids_for_areas([area_id]).by_area[area_id]
 
     def entity_ids_for_floor(self, floor_id: str) -> tuple[str, ...]:
-        """Resolve one floor id to sorted, de-duplicated entity ids."""
+        """Resolve one floor id to sorted, de-duplicated entity ids.
+
+        Fail closed on a falsy floor id: an empty string or ``None`` must never
+        collide with floorless areas (which carry ``floor_id=None``) and leak
+        every unassigned entity. ``_area_floor_by_id`` additionally drops floorless
+        areas so no ``None`` key can structurally match — defense in depth.
+        """
+        if not floor_id:
+            return ()
         area_ids = [
             area_id
             for area_id, area_floor_id in self._area_floor_by_id().items()
@@ -117,11 +125,17 @@ class AreaEntityResolver:
             for device_id, device in self._device_registry.devices.items()
         }
 
-    def _area_floor_by_id(self) -> dict[str, str | None]:
+    def _area_floor_by_id(self) -> dict[str, str]:
+        """Map area id to floor id, omitting floorless areas.
+
+        Floorless areas carry ``floor_id=None``; excluding them means a ``None``
+        or empty floor query can never match, so floor resolution stays fail-closed.
+        """
         return {
-            area_id: _entry_str_value(area, "floor_id")
+            area_id: area_floor_id
             for area in self._area_registry.async_list_areas()
             if (area_id := _entry_str_value(area, "id")) is not None
+            and (area_floor_id := _entry_str_value(area, "floor_id"))
         }
 
 

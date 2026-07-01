@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from custom_components.tessera.resolver import AreaEntityResolver
 
@@ -219,3 +219,30 @@ def test_floor_without_areas_and_unknown_floor_are_empty() -> None:
 
     assert resolver.entity_ids_for_floor("ug") == ()
     assert resolver.entity_ids_for_floor("missing") == ()
+
+
+def test_floorless_areas_never_leak_for_none_or_empty_floor() -> None:
+    """A falsy floor query must not collide with floorless areas (fail closed).
+
+    Floorless areas carry ``floor_id=None`` internally; a ``None`` or empty
+    floor query must resolve to nothing rather than every unassigned entity.
+    """
+    resolver = AreaEntityResolver(
+        Registry(
+            entities={
+                "light.orphan": Entry(area_id="no_floor"),
+                "light.eg": Entry(area_id="eg_room"),
+            }
+        ),
+        Registry(devices={}),
+        Registry(
+            areas=[
+                Entry(id="no_floor"),
+                Entry(id="eg_room", floor_id="eg"),
+            ]
+        ),
+    )
+
+    assert resolver.entity_ids_for_floor(cast(str, None)) == ()
+    assert resolver.entity_ids_for_floor("") == ()
+    assert resolver.entity_ids_for_floor("eg") == ("light.eg",)
