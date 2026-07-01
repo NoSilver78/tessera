@@ -8,6 +8,7 @@ source of truth; the compiler projects it into native group policies. See
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -35,7 +36,14 @@ from .mode_manager import apply_enforce_plan, compute_enforce_plan
 from .monitor import compile_current, lint_current_preview, log_monitor_preview
 from .resolver import AreaEntityResolver
 from .restore import async_restore_to_pre_install
-from .schema import D9AckData, TesseraConfigData, TesseraPolicyData
+from .schema import (
+    D9AckData,
+    TesseraConfigData,
+    TesseraPolicyData,
+    TesseraSchemaError,
+    validate_config_data,
+    validate_policy_data,
+)
 from .state import (
     TesseraStateData,
     decide_startup_recovery,
@@ -68,6 +76,16 @@ SERVICE_SET_FLOOR_GRANT_SCHEMA = vol.Schema(
         vol.Required("control"): cv.boolean,
     }
 )
+SERVICE_IMPORT = "import"
+SERVICE_IMPORT_SCHEMA = vol.Schema(
+    {
+        vol.Optional("roles"): dict,
+        vol.Optional("memberships"): dict,
+        vol.Optional("area_grants"): dict,
+        vol.Optional("floor_grants"): dict,
+        vol.Optional("entity_overrides"): dict,
+    }
+)
 # Bookkeeping sentinels stored in the domain bucket alongside per-entry dicts.
 # Their values are non-dict (bool), so the isinstance(dict) filter in
 # _has_loaded_entries cleanly distinguishes them from real entry data.
@@ -77,6 +95,7 @@ DATA_WEBSOCKET_REGISTERED = "__websocket_registered"
 DATA_PANEL_REGISTERED = "__panel_registered"
 DATA_MEMBERSHIP_SERVICE_REGISTERED = "__membership_service_registered"
 DATA_FLOOR_GRANT_SERVICE_REGISTERED = "__floor_grant_service_registered"
+DATA_IMPORT_SERVICE_REGISTERED = "__import_service_registered"
 PANEL_URL_PATH = "tessera"
 PANEL_WEBCOMPONENT = "tessera-matrix-panel"
 PANEL_STATIC_URL = "/tessera_static/tessera-panel.js"
@@ -101,6 +120,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     _register_ack_services(hass)
     _register_membership_service(hass)
     _register_floor_grant_service(hass)
+    _register_import_service(hass)
     _register_websocket_api(hass)
     await _async_register_matrix_panel(hass)
     recovered = await _startup_recovery_safely(
@@ -139,10 +159,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.services.async_remove(DOMAIN, SERVICE_REVOKE_COMPONENT_ACK)
         hass.services.async_remove(DOMAIN, SERVICE_SET_MEMBERSHIP)
         hass.services.async_remove(DOMAIN, SERVICE_SET_FLOOR_GRANT)
+        hass.services.async_remove(DOMAIN, SERVICE_IMPORT)
         domain_data.pop(DATA_SERVICE_REGISTERED, None)
         domain_data.pop(DATA_ACK_SERVICES_REGISTERED, None)
         domain_data.pop(DATA_MEMBERSHIP_SERVICE_REGISTERED, None)
         domain_data.pop(DATA_FLOOR_GRANT_SERVICE_REGISTERED, None)
+        domain_data.pop(DATA_IMPORT_SERVICE_REGISTERED, None)
     return True
 
 
@@ -354,6 +376,121 @@ def _register_floor_grant_service(hass: HomeAssistant) -> None:
         schema=SERVICE_SET_FLOOR_GRANT_SCHEMA,
     )
     domain_data[DATA_FLOOR_GRANT_SERVICE_REGISTERED] = True
+
+
+def _register_import_service(hass: HomeAssistant) -> None:
+    """Register the admin-only declarative model-import service once per instance.
+
+    ``tessera.import`` provisions the whole model in one idempotent call — the
+    surface substitute while role/floor/membership editors are not yet in the
+    panel/options-flow. Each PROVIDED dimension REPLACES that dimension
+    declaratively; omitted dimensions are preserved. Operational fields (``mode``,
+    ``membership.by_group``, ``d9_acks``, ``staging``) are ALWAYS preserved —
+    import provisions the *model*, never the enforcement switch. It is fail-closed
+    (schema + role-reference validation over ALL entries before the first save)
+    and routes through the same guarded ``_compile_for_mode_safely`` path.
+    """
+    domain_data = _domain_data(hass)
+    if domain_data.get(DATA_IMPORT_SERVICE_REGISTERED) is True:
+        return
+
+    async def _handle_import(call: ServiceCall) -> None:
+        payload: Mapping[str, Any] = call.data
+        async with mutation_lock(hass):
+            prepared: list[
+                tuple[
+                    str,
+                    dict[str, Any],
+                    TesseraStore,
+                    TesseraConfigData,
+                    TesseraPolicyData,
+                ]
+            ]
+            prepared = []
+            for key, entry_data in list(_domain_data(hass).items()):
+                if not isinstance(entry_data, dict):
+                    continue
+                store = cast(TesseraStore, entry_data["store"])
+                config = await store.async_load_config()
+                policy = await store.async_load_policy()
+                next_config = _import_into_config(config, payload)
+                next_policy = _import_into_policy(policy, payload)
+                _assert_import_roles_resolve(next_config, next_policy)
+                prepared.append((key, entry_data, store, next_config, next_policy))
+
+            for key, entry_data, store, next_config, next_policy in prepared:
+                await store.async_save_config(next_config)
+                await store.async_save_policy(next_policy)
+                await _compile_for_mode_safely(hass, key, entry_data)
+                LOGGER.warning(
+                    "Tessera model imported: roles=%d memberships=%d area_grants=%d "
+                    "floor_grants=%d entity_overrides=%d",
+                    len(next_config["roles"]),
+                    len(next_config["membership"]["by_user"]),
+                    sum(len(m) for m in next_policy["area_grants"].values()),
+                    sum(len(m) for m in next_policy["floor_grants"].values()),
+                    sum(len(m) for m in next_policy["entity_overrides"].values()),
+                )
+
+    async_register_admin_service(
+        hass,
+        DOMAIN,
+        SERVICE_IMPORT,
+        _handle_import,
+        schema=SERVICE_IMPORT_SCHEMA,
+    )
+    domain_data[DATA_IMPORT_SERVICE_REGISTERED] = True
+
+
+def _import_into_config(
+    config: TesseraConfigData, payload: Mapping[str, Any]
+) -> TesseraConfigData:
+    """Return config with provided model dimensions replaced (declarative)."""
+    next_config = validate_config_data(config)
+    if "roles" in payload:
+        next_config["roles"] = payload["roles"]
+    if "memberships" in payload:
+        next_config["membership"]["by_user"] = payload["memberships"]
+    return validate_config_data(next_config)
+
+
+def _import_into_policy(
+    policy: TesseraPolicyData, payload: Mapping[str, Any]
+) -> TesseraPolicyData:
+    """Return policy with provided grant dimensions replaced (declarative)."""
+    next_policy = validate_policy_data(policy)
+    if "area_grants" in payload:
+        next_policy["area_grants"] = payload["area_grants"]
+    if "floor_grants" in payload:
+        next_policy["floor_grants"] = payload["floor_grants"]
+    if "entity_overrides" in payload:
+        next_policy["entity_overrides"] = payload["entity_overrides"]
+    return validate_policy_data(next_policy)
+
+
+def _assert_import_roles_resolve(
+    config: TesseraConfigData, policy: TesseraPolicyData
+) -> None:
+    """Fail closed if any imported grant or membership references an unknown role."""
+    known = set(config["roles"])
+    for name, matrix in (
+        ("area_grants", policy["area_grants"]),
+        ("floor_grants", policy["floor_grants"]),
+        ("entity_overrides", policy["entity_overrides"]),
+    ):
+        for target, role_map in matrix.items():
+            unknown = sorted(role for role in role_map if role not in known)
+            if unknown:
+                raise TesseraSchemaError(
+                    f"import: policy.{name}.{target} references unknown roles: "
+                    f"{unknown}"
+                )
+    for role_ids in config["membership"]["by_user"].values():
+        unknown = sorted(role for role in role_ids if role not in known)
+        if unknown:
+            raise TesseraSchemaError(
+                f"import: membership references unknown roles: {unknown}"
+            )
 
 
 async def _assert_membership_target_user(hass: HomeAssistant, user_id: str) -> None:

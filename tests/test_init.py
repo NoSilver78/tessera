@@ -11,10 +11,12 @@ import pytest
 from custom_components.tessera import (
     DATA_ACK_SERVICES_REGISTERED,
     DATA_FLOOR_GRANT_SERVICE_REGISTERED,
+    DATA_IMPORT_SERVICE_REGISTERED,
     DATA_MEMBERSHIP_SERVICE_REGISTERED,
     DATA_SERVICE_REGISTERED,
     DOMAIN,
     SERVICE_ACK_COMPONENT,
+    SERVICE_IMPORT,
     SERVICE_RECOMPILE,
     SERVICE_REVOKE_COMPONENT_ACK,
     SERVICE_SET_FLOOR_GRANT,
@@ -288,6 +290,43 @@ class FloorGrantStore(E35Store):
         self.policy = deepcopy(policy)
 
 
+class ImportStore(E35Store):
+    """Store double for the declarative import service (tracks both saves)."""
+
+    def __init__(
+        self,
+        mode: str = "monitor",
+        *,
+        roles: tuple[str, ...] = (),
+        by_user: dict[str, list[str]] | None = None,
+        d9_acks: dict[str, Any] | None = None,
+        floor_grants: dict[str, Any] | None = None,
+    ) -> None:
+        """Initialize config + policy with the given baseline model."""
+        super().__init__(mode)
+        self.save_config_calls = 0
+        self.save_policy_calls = 0
+        for role_id in roles:
+            self.config["roles"][role_id] = {"name": role_id}
+        self.config["membership"]["by_user"] = deepcopy(dict(by_user or {}))
+        self.config["d9_acks"] = deepcopy(dict(d9_acks or {}))
+        self.policy["floor_grants"] = deepcopy(dict(floor_grants or {}))
+
+    async def async_save_config(self, config: dict[str, Any]) -> None:
+        """Persist fake config and record the write."""
+        self.save_config_calls += 1
+        await super().async_save_config(config)
+
+    async def async_load_policy(self) -> dict[str, Any]:
+        """Load fake policy (copy-on-load, mirroring the real store)."""
+        return deepcopy(self.policy)
+
+    async def async_save_policy(self, policy: dict[str, Any]) -> None:
+        """Persist fake policy and record the write."""
+        self.save_policy_calls += 1
+        self.policy = deepcopy(policy)
+
+
 @dataclass(frozen=True)
 class FakeEntry:
     """Minimal config entry double."""
@@ -381,12 +420,14 @@ async def test_unload_entry_keeps_bucket_and_removes_service_after_last_entry(
     assert DATA_ACK_SERVICES_REGISTERED not in hass.data[DOMAIN]
     assert DATA_MEMBERSHIP_SERVICE_REGISTERED not in hass.data[DOMAIN]
     assert DATA_FLOOR_GRANT_SERVICE_REGISTERED not in hass.data[DOMAIN]
+    assert DATA_IMPORT_SERVICE_REGISTERED not in hass.data[DOMAIN]
     assert hass.services.removed == [
         (DOMAIN, SERVICE_RECOMPILE),
         (DOMAIN, SERVICE_ACK_COMPONENT),
         (DOMAIN, SERVICE_REVOKE_COMPONENT_ACK),
         (DOMAIN, SERVICE_SET_MEMBERSHIP),
         (DOMAIN, SERVICE_SET_FLOOR_GRANT),
+        (DOMAIN, SERVICE_IMPORT),
     ]
 
 
@@ -1710,3 +1751,179 @@ async def test_panel_registers_admin_only_and_is_idempotent(
 
     await tessera_init._async_register_matrix_panel(hass)
     assert len(panel_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_import_service_is_admin_only_and_provisions_full_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Import is admin-only, provisions every dimension at once, and recompiles."""
+    hass = FakeHass()
+    admin_services = _patch_admin_service_registration(monkeypatch)
+    store = ImportStore(mode="monitor")
+    hass.data[DOMAIN] = {"entry-1": {"store": store}}
+    compile_calls: list[str] = []
+
+    async def fake_compile(
+        _hass: Any, entry_id: str, _entry_data: dict[str, Any]
+    ) -> None:
+        compile_calls.append(entry_id)
+
+    monkeypatch.setattr(tessera_init, "_compile_for_mode_safely", fake_compile)
+    tessera_init._register_import_service(hass)
+    handler = hass.services.handlers[(DOMAIN, SERVICE_IMPORT)]
+
+    model = {
+        "roles": {"ug_nutzer": {"name": "UG"}, "og_nutzer": {"name": "OG"}},
+        "memberships": {"user-1": ["ug_nutzer"]},
+        "area_grants": {"ug_zimmer": {"ug_nutzer": {"read": True, "control": True}}},
+        "floor_grants": {"og": {"og_nutzer": {"read": True, "control": True}}},
+    }
+
+    with pytest.raises(Unauthorized):
+        await handler(FakeServiceCall(model, is_admin=False))
+    await handler(FakeServiceCall(model))
+
+    assert admin_services == [(DOMAIN, SERVICE_IMPORT)]
+    assert set(store.config["roles"]) == {"ug_nutzer", "og_nutzer"}
+    assert store.config["membership"]["by_user"] == {"user-1": ["ug_nutzer"]}
+    assert store.policy["floor_grants"] == {
+        "og": {"og_nutzer": {"read": True, "control": True}}
+    }
+    assert store.policy["area_grants"] == {
+        "ug_zimmer": {"ug_nutzer": {"read": True, "control": True}}
+    }
+    assert store.config["mode"] == "monitor"  # import never touches mode
+    assert store.save_config_calls == 1  # only the admin call wrote
+    assert store.save_policy_calls == 1
+    assert compile_calls == ["entry-1"]
+
+
+@pytest.mark.asyncio
+async def test_import_service_replaces_provided_and_preserves_operational(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A provided dimension is replaced; omitted + operational fields survive."""
+    hass = FakeHass()
+    _patch_admin_service_registration(monkeypatch)
+    ack = {
+        "version": "1.0",
+        "content_hash": "a" * 64,
+        "accepted_at": "2026-07-01T00:00:00",
+    }
+    store = ImportStore(
+        mode="monitor",
+        roles=("viewer",),
+        by_user={"u": ["viewer"]},
+        d9_acks={"some_component": ack},
+        floor_grants={"old_floor": {"viewer": {"read": True}}},
+    )
+    hass.data[DOMAIN] = {"entry-1": {"store": store}}
+
+    async def _noop(*_args: Any, **_kwargs: Any) -> None:
+        return None
+
+    monkeypatch.setattr(tessera_init, "_compile_for_mode_safely", _noop)
+    tessera_init._register_import_service(hass)
+    handler = hass.services.handlers[(DOMAIN, SERVICE_IMPORT)]
+
+    await handler(
+        FakeServiceCall(
+            {"floor_grants": {"new_floor": {"viewer": {"read": True, "control": True}}}}
+        )
+    )
+
+    # provided dimension replaced
+    assert store.policy["floor_grants"] == {
+        "new_floor": {"viewer": {"read": True, "control": True}}
+    }
+    # omitted dimensions preserved
+    assert set(store.config["roles"]) == {"viewer"}
+    assert store.config["membership"]["by_user"] == {"u": ["viewer"]}
+    assert store.policy["area_grants"] == {}
+    # operational fields preserved (never touched by import)
+    assert store.config["mode"] == "monitor"
+    assert store.config["d9_acks"]["some_component"]["version"] == "1.0"
+
+
+@pytest.mark.asyncio
+async def test_import_service_fails_closed_on_unknown_role_without_save(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A grant referencing an unknown role raises before any store write."""
+    hass = FakeHass()
+    _patch_admin_service_registration(monkeypatch)
+    store = ImportStore(roles=("viewer",))
+    hass.data[DOMAIN] = {"entry-1": {"store": store}}
+
+    async def fail_compile(*_args: Any, **_kwargs: Any) -> None:
+        raise AssertionError("compile must not run on a rejected import")
+
+    monkeypatch.setattr(tessera_init, "_compile_for_mode_safely", fail_compile)
+    tessera_init._register_import_service(hass)
+    handler = hass.services.handlers[(DOMAIN, SERVICE_IMPORT)]
+
+    with pytest.raises(TesseraSchemaError, match="unknown role"):
+        await handler(
+            FakeServiceCall({"area_grants": {"a1": {"ghost": {"read": True}}}})
+        )
+
+    assert store.save_config_calls == 0
+    assert store.save_policy_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_import_service_fails_closed_on_malformed_leaf_without_save(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A malformed grant leaf is rejected by schema validation before any write."""
+    hass = FakeHass()
+    _patch_admin_service_registration(monkeypatch)
+    store = ImportStore(roles=("viewer",))
+    hass.data[DOMAIN] = {"entry-1": {"store": store}}
+
+    async def fail_compile(*_args: Any, **_kwargs: Any) -> None:
+        raise AssertionError("compile must not run on a rejected import")
+
+    monkeypatch.setattr(tessera_init, "_compile_for_mode_safely", fail_compile)
+    tessera_init._register_import_service(hass)
+    handler = hass.services.handlers[(DOMAIN, SERVICE_IMPORT)]
+
+    with pytest.raises(TesseraSchemaError):
+        await handler(
+            FakeServiceCall({"area_grants": {"a1": {"viewer": {"read": "yes"}}}})
+        )
+
+    assert store.save_config_calls == 0
+    assert store.save_policy_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_import_service_is_idempotent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Re-importing the same model leaves the same final state (idempotent)."""
+    hass = FakeHass()
+    _patch_admin_service_registration(monkeypatch)
+    store = ImportStore(mode="monitor")
+    hass.data[DOMAIN] = {"entry-1": {"store": store}}
+
+    async def _noop(*_args: Any, **_kwargs: Any) -> None:
+        return None
+
+    monkeypatch.setattr(tessera_init, "_compile_for_mode_safely", _noop)
+    tessera_init._register_import_service(hass)
+    handler = hass.services.handlers[(DOMAIN, SERVICE_IMPORT)]
+
+    model = {
+        "roles": {"r": {"name": "R"}},
+        "memberships": {"u": ["r"]},
+        "floor_grants": {"f": {"r": {"read": True, "control": True}}},
+    }
+    await handler(FakeServiceCall(model))
+    first_config = deepcopy(store.config)
+    first_policy = deepcopy(store.policy)
+    await handler(FakeServiceCall(model))
+
+    assert store.config == first_config
+    assert store.policy == first_policy

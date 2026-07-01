@@ -44,3 +44,20 @@ set_floor_grant:
       required: true
       selector:
         boolean:
+import:
+  fields:
+    roles:
+      selector:
+        object:
+    memberships:
+      selector:
+        object:
+    area_grants:
+      selector:
+        object:
+    floor_grants:
+      selector:
+        object:
+    entity_overrides:
+      selector:
+        object:
