@@ -21,12 +21,14 @@ from homeassistant.helpers.service import async_register_admin_service
 from homeassistant.util import dt as dt_util
 
 from . import websocket as tessera_websocket
+from ._user_helpers import _is_unmanaged_user
 from .auth_adapter import (
     AuthPolicyStoreAdapter,
     HassAuthLike,
     RecoveryController,
     UserBindingAdapter,
 )
+from .config_flow import set_user_membership
 from .const import DOMAIN, MODE_ENFORCE, MODE_MONITOR, MODE_OFF
 from .d9_gate import compute_component_ack_target
 from .mode_manager import apply_enforce_plan, compute_enforce_plan
@@ -50,6 +52,13 @@ SERVICE_RECOMPILE = "recompile"
 SERVICE_ACK_COMPONENT = "acknowledge_component"
 SERVICE_REVOKE_COMPONENT_ACK = "revoke_component_ack"
 SERVICE_COMPONENT_SCHEMA = vol.Schema({vol.Required("domain"): cv.string})
+SERVICE_SET_MEMBERSHIP = "set_membership"
+SERVICE_SET_MEMBERSHIP_SCHEMA = vol.Schema(
+    {
+        vol.Required("user_id"): cv.string,
+        vol.Required("role_ids"): vol.All(cv.ensure_list, [cv.string]),
+    }
+)
 # Bookkeeping sentinels stored in the domain bucket alongside per-entry dicts.
 # Their values are non-dict (bool), so the isinstance(dict) filter in
 # _has_loaded_entries cleanly distinguishes them from real entry data.
@@ -57,6 +66,7 @@ DATA_SERVICE_REGISTERED = "__recompile_service_registered"
 DATA_ACK_SERVICES_REGISTERED = "__ack_services_registered"
 DATA_WEBSOCKET_REGISTERED = "__websocket_registered"
 DATA_PANEL_REGISTERED = "__panel_registered"
+DATA_MEMBERSHIP_SERVICE_REGISTERED = "__membership_service_registered"
 PANEL_URL_PATH = "tessera"
 PANEL_WEBCOMPONENT = "tessera-matrix-panel"
 PANEL_STATIC_URL = "/tessera_static/tessera-panel.js"
@@ -79,6 +89,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     domain_data[entry.entry_id] = {"store": TesseraStore(hass)}
     _register_recompile_service(hass)
     _register_ack_services(hass)
+    _register_membership_service(hass)
     _register_websocket_api(hass)
     await _async_register_matrix_panel(hass)
     recovered = await _startup_recovery_safely(
@@ -115,8 +126,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.services.async_remove(DOMAIN, SERVICE_RECOMPILE)
         hass.services.async_remove(DOMAIN, SERVICE_ACK_COMPONENT)
         hass.services.async_remove(DOMAIN, SERVICE_REVOKE_COMPONENT_ACK)
+        hass.services.async_remove(DOMAIN, SERVICE_SET_MEMBERSHIP)
         domain_data.pop(DATA_SERVICE_REGISTERED, None)
         domain_data.pop(DATA_ACK_SERVICES_REGISTERED, None)
+        domain_data.pop(DATA_MEMBERSHIP_SERVICE_REGISTERED, None)
     return True
 
 
@@ -227,6 +240,61 @@ def _register_ack_services(hass: HomeAssistant) -> None:
         schema=SERVICE_COMPONENT_SCHEMA,
     )
     domain_data[DATA_ACK_SERVICES_REGISTERED] = True
+
+
+def _register_membership_service(hass: HomeAssistant) -> None:
+    """Register the admin-only user membership writer once per HA instance."""
+    domain_data = _domain_data(hass)
+    if domain_data.get(DATA_MEMBERSHIP_SERVICE_REGISTERED) is True:
+        return
+
+    async def _handle_set_membership(call: ServiceCall) -> None:
+        user_id = str(call.data["user_id"])
+        role_ids = [str(role_id) for role_id in call.data["role_ids"]]
+        await _assert_membership_target_user(hass, user_id)
+
+        prepared_configs: list[
+            tuple[str, dict[str, Any], TesseraStore, TesseraConfigData]
+        ]
+        prepared_configs = []
+        for key, entry_data in list(_domain_data(hass).items()):
+            if not isinstance(entry_data, dict):
+                continue
+            store = cast(TesseraStore, entry_data["store"])
+            config = await store.async_load_config()
+            next_config = set_user_membership(config, user_id, role_ids)
+            prepared_configs.append((key, entry_data, store, next_config))
+
+        for key, entry_data, store, next_config in prepared_configs:
+            await store.async_save_config(next_config)
+            await _compile_for_mode_safely(hass, key, entry_data)
+            LOGGER.warning(
+                "Tessera user membership updated: user_id=%s role_ids=%s",
+                user_id,
+                sorted(set(role_ids)),
+            )
+
+    async_register_admin_service(
+        hass,
+        DOMAIN,
+        SERVICE_SET_MEMBERSHIP,
+        _handle_set_membership,
+        schema=SERVICE_SET_MEMBERSHIP_SCHEMA,
+    )
+    domain_data[DATA_MEMBERSHIP_SERVICE_REGISTERED] = True
+
+
+async def _assert_membership_target_user(hass: HomeAssistant, user_id: str) -> None:
+    """Fail closed unless ``user_id`` is a managed HA user."""
+    if not user_id:
+        raise HomeAssistantError("Cannot set Tessera membership for empty user id")
+    user = (await _users_by_id(hass)).get(user_id)
+    if user is None:
+        raise HomeAssistantError("Cannot set Tessera membership for an unknown user")
+    if _is_unmanaged_user(user):
+        raise HomeAssistantError(
+            "Cannot set Tessera membership for owner or system-generated users"
+        )
 
 
 def _register_websocket_api(hass: HomeAssistant) -> None:
@@ -518,7 +586,7 @@ async def _restore_pre_install_safely(
         )
     except Exception as err:
         LOGGER.error(
-            "Tessera restore failed for entry %s; falling back to monitor mode " "(%s)",
+            "Tessera restore failed for entry %s; falling back to monitor mode (%s)",
             entry_id,
             err.__class__.__name__,
         )

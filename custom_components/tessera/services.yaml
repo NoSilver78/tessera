@@ -16,3 +16,13 @@ revoke_component_ack:
       required: true
       selector:
         text:
+set_membership:
+  fields:
+    user_id:
+      required: true
+      selector:
+        text:
+    role_ids:
+      required: true
+      selector:
+        object:

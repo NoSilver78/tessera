@@ -104,6 +104,20 @@
           "description": "The custom component domain whose acknowledgement should be revoked."
         }
       }
+    },
+    "set_membership": {
+      "name": "Set membership",
+      "description": "Assign Tessera roles to one Home Assistant user. Admin-only; in enforce mode this recompiles through Tessera's guarded apply path.",
+      "fields": {
+        "user_id": {
+          "name": "User id",
+          "description": "The Home Assistant user id to manage."
+        },
+        "role_ids": {
+          "name": "Role ids",
+          "description": "List of Tessera role ids to assign. Use an empty list to remove this user's Tessera membership."
+        }
+      }
     }
   },
   "issues": {

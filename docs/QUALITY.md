@@ -50,6 +50,7 @@ aus **realistischen Fixtures, getesteten Invarianten und unabhängigen Perspekti
 | D9 auth-scoped Veto + Ack-Override | `test_auth_mutating_component_is_vetoed`, `test_admin_ack_overrides_auth_surface_veto`, `test_compiled_artifact_is_vetoed` |
 | D9-Ack nur durch Admin schreibbar | `test_d9_ack_services_are_admin_only` |
 | D9-Ack matcht exakt aktuelle Version + Content-Hash (Service↔Gate-Konsistenz) | `test_computed_ack_target_matches_gate_then_revoke_blocks_again`, `test_d9_ack_service_persists_and_recompiles` |
+| Membership-Write nur admin-only, fail-closed und über guarded recompile | `test_set_membership_service_is_admin_only_and_persists`, `test_set_membership_service_unknown_user_fails_closed_without_save_or_compile`, `test_set_membership_service_rejects_unmanaged_targets_without_save`, `test_set_membership_service_unknown_role_preflights_all_entries`, `test_set_membership_service_recompile_failure_fails_safe_to_monitor`, `test_set_membership_service_blocked_enforce_plan_avoids_native_write` |
 | Panel/Matrix nur für Admins | `test_matrix_websocket_requires_admin`, `test_panel_registers_admin_only_and_is_idempotent` |
 
 ## Mechanismen
