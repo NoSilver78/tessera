@@ -13,7 +13,17 @@ Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   Auth-Zustand; jeder Fehler fällt sicher auf `monitor` zurück.
 - **D9-Vorprüfung v2 (auth-scoped)** — nur auth-mutierende oder nicht statisch analysierbare
   Components veto'en `enforce`; per Ack/Klassifikation überstimmbar (siehe SECURITY.md).
+- **D9-Ack-Admin-Services** — `tessera.acknowledge_component` und `tessera.revoke_component_ack`
+  (admin-only) erfassen bzw. widerrufen einen versions- und hash-gebundenen Ack, mit dem ein Admin
+  den D9-Veto einer auth-berührenden Component bewusst überstimmt; der Ack verfällt automatisch,
+  sobald sich Version oder Inhalt der Component ändern.
 - **HACS-Aktivierung** — `hacs.json`, Validierungs-CI (hassfest + HACS), Inline-Brand-Icon.
+
+### Behoben
+- **Matrix-Panel schreibt in `enforce` nativ nach** — ein über das Area×Rolle-Panel gesetzter Grant
+  löst in `enforce` jetzt sofort einen nativen Re-Apply über den zentralen fail-safe Pfad aus
+  (compute → Apply mit Lockout/D9/allow-only-Guards); vorher wurde nur die Policy + die read-only
+  Vorschau aktualisiert, ohne Wirkung auf die Live-Permissions bis zum nächsten Reload.
 
 ### In Arbeit
 - **Praxis-Validierung von `enforce`** — End-to-End gegen eine separate Dev-Instanz + Soak + Dogfood.
