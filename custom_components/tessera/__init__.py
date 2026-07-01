@@ -41,7 +41,7 @@ from .state import (
     decide_startup_recovery,
     snapshot_from_state_data,
 )
-from .store import TesseraStore
+from .store import TesseraStore, mutation_lock
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -203,40 +203,42 @@ def _register_ack_services(hass: HomeAssistant) -> None:
         # stays MORE restrictive (its veto still blocks enforce). No native auth
         # is half-written — recompile is fail-safe-to-monitor with its own
         # rollback.
-        for key, entry_data in list(_domain_data(hass).items()):
-            if not isinstance(entry_data, dict):
-                continue
-            store = cast(TesseraStore, entry_data["store"])
-            config = await store.async_load_config()
-            config["d9_acks"] = {**config["d9_acks"], domain: ack}
-            await store.async_save_config(config)
-            await _compile_for_mode_safely(hass, key, entry_data)
-            LOGGER.warning(
-                "Tessera D9 component ack recorded: domain=%s version=%s",
-                domain,
-                target["version"],
-            )
+        async with mutation_lock(hass):
+            for key, entry_data in list(_domain_data(hass).items()):
+                if not isinstance(entry_data, dict):
+                    continue
+                store = cast(TesseraStore, entry_data["store"])
+                config = await store.async_load_config()
+                config["d9_acks"] = {**config["d9_acks"], domain: ack}
+                await store.async_save_config(config)
+                await _compile_for_mode_safely(hass, key, entry_data)
+                LOGGER.warning(
+                    "Tessera D9 component ack recorded: domain=%s version=%s",
+                    domain,
+                    target["version"],
+                )
 
     async def _handle_revoke(call: ServiceCall) -> None:
         domain = str(call.data["domain"])
-        for key, entry_data in list(_domain_data(hass).items()):
-            if not isinstance(entry_data, dict):
-                continue
-            store = cast(TesseraStore, entry_data["store"])
-            config = await store.async_load_config()
-            revoked_ack = config["d9_acks"].get(domain)
-            config["d9_acks"] = {
-                ack_domain: ack_entry
-                for ack_domain, ack_entry in config["d9_acks"].items()
-                if ack_domain != domain
-            }
-            await store.async_save_config(config)
-            await _compile_for_mode_safely(hass, key, entry_data)
-            LOGGER.warning(
-                "Tessera D9 component ack revoked: domain=%s version=%s",
-                domain,
-                revoked_ack.get("version") if revoked_ack is not None else None,
-            )
+        async with mutation_lock(hass):
+            for key, entry_data in list(_domain_data(hass).items()):
+                if not isinstance(entry_data, dict):
+                    continue
+                store = cast(TesseraStore, entry_data["store"])
+                config = await store.async_load_config()
+                revoked_ack = config["d9_acks"].get(domain)
+                config["d9_acks"] = {
+                    ack_domain: ack_entry
+                    for ack_domain, ack_entry in config["d9_acks"].items()
+                    if ack_domain != domain
+                }
+                await store.async_save_config(config)
+                await _compile_for_mode_safely(hass, key, entry_data)
+                LOGGER.warning(
+                    "Tessera D9 component ack revoked: domain=%s version=%s",
+                    domain,
+                    revoked_ack.get("version") if revoked_ack is not None else None,
+                )
 
     async_register_admin_service(
         hass,
@@ -270,22 +272,23 @@ def _register_membership_service(hass: HomeAssistant) -> None:
             tuple[str, dict[str, Any], TesseraStore, TesseraConfigData]
         ]
         prepared_configs = []
-        for key, entry_data in list(_domain_data(hass).items()):
-            if not isinstance(entry_data, dict):
-                continue
-            store = cast(TesseraStore, entry_data["store"])
-            config = await store.async_load_config()
-            next_config = set_user_membership(config, user_id, role_ids)
-            prepared_configs.append((key, entry_data, store, next_config))
+        async with mutation_lock(hass):
+            for key, entry_data in list(_domain_data(hass).items()):
+                if not isinstance(entry_data, dict):
+                    continue
+                store = cast(TesseraStore, entry_data["store"])
+                config = await store.async_load_config()
+                next_config = set_user_membership(config, user_id, role_ids)
+                prepared_configs.append((key, entry_data, store, next_config))
 
-        for key, entry_data, store, next_config in prepared_configs:
-            await store.async_save_config(next_config)
-            await _compile_for_mode_safely(hass, key, entry_data)
-            LOGGER.warning(
-                "Tessera user membership updated: user_id=%s role_ids=%s",
-                user_id,
-                sorted(set(role_ids)),
-            )
+            for key, entry_data, store, next_config in prepared_configs:
+                await store.async_save_config(next_config)
+                await _compile_for_mode_safely(hass, key, entry_data)
+                LOGGER.warning(
+                    "Tessera user membership updated: user_id=%s role_ids=%s",
+                    user_id,
+                    sorted(set(role_ids)),
+                )
 
     async_register_admin_service(
         hass,
@@ -314,33 +317,34 @@ def _register_floor_grant_service(hass: HomeAssistant) -> None:
             tuple[str, dict[str, Any], TesseraStore, TesseraPolicyData]
         ]
         prepared_policies = []
-        for key, entry_data in list(_domain_data(hass).items()):
-            if not isinstance(entry_data, dict):
-                continue
-            store = cast(TesseraStore, entry_data["store"])
-            config = await store.async_load_config()
-            policy = await store.async_load_policy()
-            next_policy = set_floor_grant(
-                config,
-                policy,
-                floor_id=floor_id,
-                role_id=role_id,
-                read=read,
-                control=control,
-            )
-            prepared_policies.append((key, entry_data, store, next_policy))
+        async with mutation_lock(hass):
+            for key, entry_data in list(_domain_data(hass).items()):
+                if not isinstance(entry_data, dict):
+                    continue
+                store = cast(TesseraStore, entry_data["store"])
+                config = await store.async_load_config()
+                policy = await store.async_load_policy()
+                next_policy = set_floor_grant(
+                    config,
+                    policy,
+                    floor_id=floor_id,
+                    role_id=role_id,
+                    read=read,
+                    control=control,
+                )
+                prepared_policies.append((key, entry_data, store, next_policy))
 
-        for key, entry_data, store, next_policy in prepared_policies:
-            await store.async_save_policy(next_policy)
-            await _compile_for_mode_safely(hass, key, entry_data)
-            LOGGER.warning(
-                "Tessera floor grant updated: "
-                "floor_id=%s role_id=%s read=%s control=%s",
-                floor_id,
-                role_id,
-                read,
-                control,
-            )
+            for key, entry_data, store, next_policy in prepared_policies:
+                await store.async_save_policy(next_policy)
+                await _compile_for_mode_safely(hass, key, entry_data)
+                LOGGER.warning(
+                    "Tessera floor grant updated: "
+                    "floor_id=%s role_id=%s read=%s control=%s",
+                    floor_id,
+                    role_id,
+                    read,
+                    control,
+                )
 
     async_register_admin_service(
         hass,

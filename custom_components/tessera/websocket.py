@@ -27,7 +27,7 @@ from .schema import (
     TesseraPolicyData,
     TesseraSchemaError,
 )
-from .store import TesseraStore
+from .store import TesseraStore, mutation_lock
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -148,42 +148,50 @@ async def async_set_matrix_grant(
     control: bool,
 ) -> MatrixResponse:
     """Persist one schema-aware grant and return the refreshed matrix payload."""
-    entry_id, entry_data = _get_loaded_entry_data(hass)
-    store = cast(TesseraStore, entry_data["store"])
-    config = await store.async_load_config()
-    policy = await store.async_load_policy()
+    # Serialize the whole load->mutate->save->compile under the store mutation
+    # lock: concurrent set_grant calls (the panel fires one per toggled cell as
+    # parallel @async_response tasks) would each reload the same base policy and
+    # last-write-wins, silently dropping grants.
+    async with mutation_lock(hass):
+        entry_id, entry_data = _get_loaded_entry_data(hass)
+        store = cast(TesseraStore, entry_data["store"])
+        config = await store.async_load_config()
+        policy = await store.async_load_policy()
 
-    area_ids = {area["id"] for area in _areas(hass)}
-    if area_id not in area_ids:
-        raise LookupError(f"Unknown Tessera area: {area_id}")
-    if role_id not in config["roles"]:
-        raise LookupError(f"Unknown Tessera role: {role_id}")
+        area_ids = {area["id"] for area in _areas(hass)}
+        if area_id not in area_ids:
+            raise LookupError(f"Unknown Tessera area: {area_id}")
+        if role_id not in config["roles"]:
+            raise LookupError(f"Unknown Tessera role: {role_id}")
 
-    if read or control:
-        policy = add_area_grant(
-            config,
-            policy,
-            area_id=area_id,
-            role_id=role_id,
-            read=read,
-            control=control,
+        if read or control:
+            policy = add_area_grant(
+                config,
+                policy,
+                area_id=area_id,
+                role_id=role_id,
+                read=read,
+                control=control,
+            )
+        else:
+            policy = remove_area_grant(policy, encode_grant(area_id, role_id))
+
+        await store.async_save_policy(policy)
+        preview = await _refresh_preview(
+            hass, entry_id, entry_data, store, config, policy
         )
-    else:
-        policy = remove_area_grant(policy, encode_grant(area_id, role_id))
+        if config["mode"] == MODE_ENFORCE:
+            # CXR-02: in enforce a saved grant must re-apply to the native auth
+            # store, not merely refresh the read-only preview. Route through the
+            # central fail-safe mode handler (the same path the options flow uses)
+            # so the change runs the full guarded plan (lockout/D9/allow-only) and
+            # falls safe to monitor on error. This runs INSIDE the held lock and
+            # uses raw saves (fail-safe) — it must not re-acquire the lock. Late
+            # import breaks the cycle (__init__ imports this module, not reverse).
+            from . import _compile_for_mode_safely
 
-    await store.async_save_policy(policy)
-    preview = await _refresh_preview(hass, entry_id, entry_data, store, config, policy)
-    if config["mode"] == MODE_ENFORCE:
-        # CXR-02: in enforce a saved grant must re-apply to the native auth store,
-        # not merely refresh the read-only preview. Route through the central
-        # fail-safe mode handler (the same path the options flow uses) so the
-        # change runs the full guarded plan (lockout/D9/allow-only) and falls safe
-        # to monitor on error. Late import breaks the cycle (__init__ imports this
-        # module, not the reverse).
-        from . import _compile_for_mode_safely
-
-        await _compile_for_mode_safely(hass, entry_id, entry_data)
-    return _matrix_response(hass, config, policy, preview)
+            await _compile_for_mode_safely(hass, entry_id, entry_data)
+        return _matrix_response(hass, config, policy, preview)
 
 
 async def _refresh_preview(
