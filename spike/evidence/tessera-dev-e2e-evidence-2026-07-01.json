@@ -1,0 +1,78 @@
+{
+  "meta": {
+    "date": "2026-07-01",
+    "scope": "Full dev-E2E of Tessera enforce write-cycle + CXR-02 + #11 D9-ack on real HA",
+    "ha_version": "2026.6.4",
+    "supported_ha_auth_version": "2026.6.4",
+    "container": "ha-tessera-dev",
+    "container_image": "ghcr.io/home-assistant/home-assistant:2026.6.4",
+    "tessera_ref": "main (1e2e817), current-main synced into the disposable dev volume",
+    "method": "fresh onboard (owner token, scratchpad-only) -> seed role/policy -> options-flow mode changes -> matrix WS / services -> hard-checks read from .storage/auth (in-memory via config/auth/list to avoid the auth-store debounce lag) and tessera.state",
+    "safety": "dev-only, disposable ha-tessera-dev-config volume, no /Volumes/config bind; .storage/auth backed up to scratchpad baseline before enforce; maison-atrium-dev untouched; no tokens/passwords in this evidence"
+  },
+  "scenario": {
+    "owner": "onboarded admin (system-admin, not system_generated)",
+    "content_user": "Home Assistant Content (system-read-only, system_generated)",
+    "test_user": "E2E Tester (non-admin, realistic system-users membership per QUALITY.md R2)",
+    "role": "viewer (is_admin=false)",
+    "grant": "viewer x living_room x read (input_boolean.e2e_allowed)"
+  },
+  "results": {
+    "step1_setup_loads": true,
+    "step3_monitor_readonly_no_native_write": true,
+    "step4_enforce": {
+      "viewer_group_allow_only_read": true,
+      "managed_user_moved_to_restrictive_group": true,
+      "owner_unchanged": true,
+      "content_system_generated_unchanged": true,
+      "snapshot_captures_original_system_users_verbatim": true,
+      "journal_clean": true,
+      "observed_viewer_policy": {"entities": {"entity_ids": {"input_boolean.e2e_allowed": {"read": true}}}},
+      "observed_tester_groups_after_enforce": ["tessera:viewer"]
+    },
+    "step5a_cxr02_live_reapply": {
+      "matrix_add_control_native_applied_immediately": true,
+      "matrix_remove_control_native_applied_immediately": true,
+      "note": "native tessera:viewer policy reflected the panel change on the first read (no reload)"
+    },
+    "step5b_d9_ack": {
+      "unacked_auth_touching_dummy_blocks_enforce": true,
+      "block_fails_safe_to_monitor": true,
+      "admin_ack_recorded_with_version_and_content_hash": true,
+      "ack_then_reenter_enforce_proceeds": true,
+      "revoke_reblocks_enforce": true,
+      "unknown_domain_fails_closed": true,
+      "observed_ack": {"domain": "e2e_dummy", "version": "0.0.1", "content_hash_prefix": "94e8bb72a6"}
+    },
+    "step6_restore_equals_baseline": true,
+    "step8_snapshot_immutable_captures_original": true
+  },
+  "corrected_assumptions": [
+    {
+      "assumption": "managed non-admin keeps system-users AND gains tessera:viewer (superset)",
+      "reality": "managed non-admin is MOVED out of system-users into the restrictive allow-only tessera:viewer group; only system-admin/system-read-only are preserved",
+      "code_ref": "mode_manager._target_group_ids_for_user (removes GROUP_ID_USER; _PRESERVED_SYSTEM_GROUP_IDS = {admin, read_only})",
+      "verdict": "behaviour is correct by design; the initial E2E expectation was wrong"
+    },
+    {
+      "assumption": "pre_install_snapshot should capture the owner too",
+      "reality": "snapshot captures managed users only (owner + system_generated are skipped); restore skips them regardless",
+      "code_ref": "auth_adapter.async_snapshot -> snapshot_managed_user_groups",
+      "verdict": "behaviour is correct by design; the initial E2E expectation was wrong"
+    }
+  ],
+  "observations": [
+    {
+      "severity": "info",
+      "topic": "fail-safe persists monitor",
+      "detail": "A D9 block (or any unsafe path) persists mode=monitor to the config and files a Repairs issue (_fail_safe_to_monitor). An admin ack alone does not re-enter enforce; the admin must deliberately re-set enforce after acking. This is a safe, intentional flow."
+    },
+    {
+      "severity": "low",
+      "topic": "stale native state after a post-apply fail-safe block",
+      "detail": "If enforce applied successfully once and a later re-evaluation is blocked by D9, the fail-safe drops to monitor but leaves the last-applied (more restrictive) tessera groups in place until the admin resolves and re-runs a clean enforce->off cycle. Not a security downgrade (state is the last-good, more restrictive); a minor UX inconsistency (monitor shown while native tessera groups persist). Recommend documenting; not a blocker."
+    }
+  ],
+  "flush_note": "HA debounces .storage/auth writes; user-group changes lag the file by ~1s. All user-group hard-checks were read from the in-memory config/auth/list (authoritative). Group policies flushed immediately in practice.",
+  "verdict": "PASS - enforce write-cycle, CXR-02 live re-apply, and #11 D9-ack services all behave correctly on real HA 2026.6.4; restore returns the auth store byte-exact to baseline."
+}
