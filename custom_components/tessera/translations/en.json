@@ -170,6 +170,16 @@
     "preflight": {
       "name": "Preflight (enforce readiness)",
       "description": "Read-only dry run of the enforce pipeline: returns whether enforce would succeed, the full D9 component breakdown (which custom components would veto and why), cross-role linter conflicts, and a model summary. Writes nothing and never changes mode. Admin-only."
+    },
+    "set_mode": {
+      "name": "Set mode",
+      "description": "Set Tessera's operating mode: off restores managed native auth state and stops, monitor compiles a read-only preview, enforce applies managed native auth after all gates pass. Admin-only. Routes through the same guarded apply path as setup, so entering enforce applies live and leaving it restores the pre-install snapshot.",
+      "fields": {
+        "mode": {
+          "name": "Mode",
+          "description": "The target mode: off, monitor, or enforce."
+        }
+      }
     }
   },
   "issues": {
