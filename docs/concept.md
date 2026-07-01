@@ -93,6 +93,8 @@ User (HA-Account: lokal ODER OIDC)
 
 > **Konflikt-Auflösung (Dim1/Dim-Pflege vs. Dim2/Dim5):** Dim2 und Dim5 erlauben im Store-Schema lokale `deny`/`except`-Annotationen. Dim1 verbietet jeden Deny. **Auflösung:** Beides ist vereinbar, wenn man scharf trennt: Ein `except`/Carve-out ist eine **Compiler-Direktive zur Differenzmengen-Bildung INNERHALB einer Rolle**, kein Grant-Effekt. Sie verschwindet in der Projektion (→ „nicht-enumeriert"). Ein **rollenübergreifender** Deny ist **verboten und unmöglich** (most-permissive-Merge, §5). Das Store-Schema (§3) führt darum `effect` NICHT als Grant-Feld, sondern Carve-outs als explizites `except:[...]` am Selector.
 
+> **⚙️ v1-Implementierungsstand (2026-07-01, ab T-Floor):** Der Compiler ist **rein additiv / allow-only** — `floor ∪ area ∪ entity_override` werden vereinigt (max `read`/`control`, `control⇒read`), **keine Subtraktion**. Die oben beschriebene **`except`/Differenzmengen-Direktive** und die **DENY/UNSET-Präzedenz (§5, Beispiele B/C)** sind das **Zielmodell** und **post-v1** — sie kommen mit dem **Domain/`except`-Selektor-Task** (Carve-out „sauber": Selektor-Level-`except` als enumerierte Differenzmenge, ohne den subtraktiven Override-Footgun, den der most-permissive-Merge einer breiteren Rolle still aufheben könnte). Bis dahin gibt es **keinen** within-role Carve-out; ein versehentliches `{read:false}`-Leaf wird im selben Task **laut abgelehnt** (`TesseraSchemaError`) statt still ignoriert. Autoritativ für den Ist-Stand: `docs/spec-enforce.md` (Allow-only, additiv vereinigt).
+
 ### 2.3 Die drei Stufen — Mapping auf HA-nativ
 
 | Tessera-Stufe | HA-Key | Bedeutung | Materialisierung im Compile |

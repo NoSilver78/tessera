@@ -73,9 +73,9 @@ def lint_cross_role(
         else compile_policies(config_data, policy_data, resolver)
     )
 
-    area_levels = _area_levels_by_role(policy_data, resolver)
+    scope_levels = _scope_levels_by_role(policy_data, resolver)
     compiled_levels = _compiled_levels_by_role(compiled_data)
-    restricted = _restricted_levels_by_role(policy_data, area_levels, compiled_levels)
+    restricted = _restricted_levels_by_role(policy_data, scope_levels, compiled_levels)
 
     users: dict[str, UserLintReport] = {}
     conflicts_total = 0
@@ -168,21 +168,31 @@ def _conflicts_for_user(
     return conflicts
 
 
-def _area_levels_by_role(
+def _scope_levels_by_role(
     policy: TesseraPolicyData, resolver: AreaEntityResolver
 ) -> dict[str, dict[str, set[LintLevel]]]:
-    """Return role/entity levels granted by area rules before overrides."""
+    """Return role/entity levels granted by floor and area rules."""
     levels: dict[str, dict[str, set[LintLevel]]] = {}
+    for floor_id, role_map in sorted(policy["floor_grants"].items()):
+        _add_resolved_levels(levels, resolver.entity_ids_for_floor(floor_id), role_map)
     for area_id, role_map in sorted(policy["area_grants"].items()):
-        entity_ids = resolver.entity_ids_for_area(area_id)
-        for role_id, leaf in sorted(role_map.items()):
-            leaf_levels = _leaf_levels(leaf)
-            if not leaf_levels:
-                continue
-            role_levels = levels.setdefault(role_id, {})
-            for entity_id in entity_ids:
-                role_levels.setdefault(entity_id, set()).update(leaf_levels)
+        _add_resolved_levels(levels, resolver.entity_ids_for_area(area_id), role_map)
     return levels
+
+
+def _add_resolved_levels(
+    levels: dict[str, dict[str, set[LintLevel]]],
+    entity_ids: tuple[str, ...],
+    role_map: dict[str, PermissionLeaf],
+) -> None:
+    """Add normalized positive levels for a resolved grant map."""
+    for role_id, leaf in sorted(role_map.items()):
+        leaf_levels = _leaf_levels(leaf)
+        if not leaf_levels:
+            continue
+        role_levels = levels.setdefault(role_id, {})
+        for entity_id in entity_ids:
+            role_levels.setdefault(entity_id, set()).update(leaf_levels)
 
 
 def _compiled_levels_by_role(

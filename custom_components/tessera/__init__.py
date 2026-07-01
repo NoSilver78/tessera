@@ -28,14 +28,14 @@ from .auth_adapter import (
     RecoveryController,
     UserBindingAdapter,
 )
-from .config_flow import set_user_membership
+from .config_flow import set_floor_grant, set_user_membership
 from .const import DOMAIN, MODE_ENFORCE, MODE_MONITOR, MODE_OFF
 from .d9_gate import compute_component_ack_target
 from .mode_manager import apply_enforce_plan, compute_enforce_plan
 from .monitor import compile_current, lint_current_preview, log_monitor_preview
 from .resolver import AreaEntityResolver
 from .restore import async_restore_to_pre_install
-from .schema import D9AckData, TesseraConfigData
+from .schema import D9AckData, TesseraConfigData, TesseraPolicyData
 from .state import (
     TesseraStateData,
     decide_startup_recovery,
@@ -59,6 +59,15 @@ SERVICE_SET_MEMBERSHIP_SCHEMA = vol.Schema(
         vol.Required("role_ids"): vol.All(cv.ensure_list, [cv.string]),
     }
 )
+SERVICE_SET_FLOOR_GRANT = "set_floor_grant"
+SERVICE_SET_FLOOR_GRANT_SCHEMA = vol.Schema(
+    {
+        vol.Required("floor_id"): cv.string,
+        vol.Required("role_id"): cv.string,
+        vol.Required("read"): cv.boolean,
+        vol.Required("control"): cv.boolean,
+    }
+)
 # Bookkeeping sentinels stored in the domain bucket alongside per-entry dicts.
 # Their values are non-dict (bool), so the isinstance(dict) filter in
 # _has_loaded_entries cleanly distinguishes them from real entry data.
@@ -67,6 +76,7 @@ DATA_ACK_SERVICES_REGISTERED = "__ack_services_registered"
 DATA_WEBSOCKET_REGISTERED = "__websocket_registered"
 DATA_PANEL_REGISTERED = "__panel_registered"
 DATA_MEMBERSHIP_SERVICE_REGISTERED = "__membership_service_registered"
+DATA_FLOOR_GRANT_SERVICE_REGISTERED = "__floor_grant_service_registered"
 PANEL_URL_PATH = "tessera"
 PANEL_WEBCOMPONENT = "tessera-matrix-panel"
 PANEL_STATIC_URL = "/tessera_static/tessera-panel.js"
@@ -90,6 +100,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     _register_recompile_service(hass)
     _register_ack_services(hass)
     _register_membership_service(hass)
+    _register_floor_grant_service(hass)
     _register_websocket_api(hass)
     await _async_register_matrix_panel(hass)
     recovered = await _startup_recovery_safely(
@@ -127,9 +138,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.services.async_remove(DOMAIN, SERVICE_ACK_COMPONENT)
         hass.services.async_remove(DOMAIN, SERVICE_REVOKE_COMPONENT_ACK)
         hass.services.async_remove(DOMAIN, SERVICE_SET_MEMBERSHIP)
+        hass.services.async_remove(DOMAIN, SERVICE_SET_FLOOR_GRANT)
         domain_data.pop(DATA_SERVICE_REGISTERED, None)
         domain_data.pop(DATA_ACK_SERVICES_REGISTERED, None)
         domain_data.pop(DATA_MEMBERSHIP_SERVICE_REGISTERED, None)
+        domain_data.pop(DATA_FLOOR_GRANT_SERVICE_REGISTERED, None)
     return True
 
 
@@ -284,6 +297,61 @@ def _register_membership_service(hass: HomeAssistant) -> None:
     domain_data[DATA_MEMBERSHIP_SERVICE_REGISTERED] = True
 
 
+def _register_floor_grant_service(hass: HomeAssistant) -> None:
+    """Register the admin-only floor grant writer once per HA instance."""
+    domain_data = _domain_data(hass)
+    if domain_data.get(DATA_FLOOR_GRANT_SERVICE_REGISTERED) is True:
+        return
+
+    async def _handle_set_floor_grant(call: ServiceCall) -> None:
+        floor_id = str(call.data["floor_id"])
+        role_id = str(call.data["role_id"])
+        read = bool(call.data["read"])
+        control = bool(call.data["control"])
+        _assert_floor_exists(hass, floor_id)
+
+        prepared_policies: list[
+            tuple[str, dict[str, Any], TesseraStore, TesseraPolicyData]
+        ]
+        prepared_policies = []
+        for key, entry_data in list(_domain_data(hass).items()):
+            if not isinstance(entry_data, dict):
+                continue
+            store = cast(TesseraStore, entry_data["store"])
+            config = await store.async_load_config()
+            policy = await store.async_load_policy()
+            next_policy = set_floor_grant(
+                config,
+                policy,
+                floor_id=floor_id,
+                role_id=role_id,
+                read=read,
+                control=control,
+            )
+            prepared_policies.append((key, entry_data, store, next_policy))
+
+        for key, entry_data, store, next_policy in prepared_policies:
+            await store.async_save_policy(next_policy)
+            await _compile_for_mode_safely(hass, key, entry_data)
+            LOGGER.warning(
+                "Tessera floor grant updated: "
+                "floor_id=%s role_id=%s read=%s control=%s",
+                floor_id,
+                role_id,
+                read,
+                control,
+            )
+
+    async_register_admin_service(
+        hass,
+        DOMAIN,
+        SERVICE_SET_FLOOR_GRANT,
+        _handle_set_floor_grant,
+        schema=SERVICE_SET_FLOOR_GRANT_SCHEMA,
+    )
+    domain_data[DATA_FLOOR_GRANT_SERVICE_REGISTERED] = True
+
+
 async def _assert_membership_target_user(hass: HomeAssistant, user_id: str) -> None:
     """Fail closed unless ``user_id`` is a managed HA user."""
     if not user_id:
@@ -294,6 +362,18 @@ async def _assert_membership_target_user(hass: HomeAssistant, user_id: str) -> N
     if _is_unmanaged_user(user):
         raise HomeAssistantError(
             "Cannot set Tessera membership for owner or system-generated users"
+        )
+
+
+def _assert_floor_exists(hass: HomeAssistant, floor_id: str) -> None:
+    """Fail closed unless ``floor_id`` exists in Home Assistant's floor registry."""
+    if not floor_id:
+        raise HomeAssistantError("Cannot set Tessera grant for empty floor id")
+    from homeassistant.helpers import floor_registry as fr
+
+    if fr.async_get(hass).async_get_floor(floor_id) is None:
+        raise HomeAssistantError(
+            f"Cannot set Tessera grant for unknown floor: {floor_id}"
         )
 
 

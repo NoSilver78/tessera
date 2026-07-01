@@ -14,7 +14,9 @@ from custom_components.tessera.config_flow import (
     add_area_grant,
     add_role,
     remove_area_grant,
+    remove_floor_grant,
     remove_role,
+    set_floor_grant,
     set_mode,
     set_user_membership,
 )
@@ -190,6 +192,14 @@ def test_add_role_and_remove_role_updates_config_and_grants() -> None:
         read=True,
         control=False,
     )
+    policy = set_floor_grant(
+        config,
+        policy,
+        floor_id="eg",
+        role_id="viewer",
+        read=True,
+        control=False,
+    )
 
     next_config, next_policy = remove_role(config, policy, "viewer")
 
@@ -200,6 +210,7 @@ def test_add_role_and_remove_role_updates_config_and_grants() -> None:
     assert next_config["roles"] == {}
     assert next_config["membership"]["by_user"] == {}
     assert next_config["membership"]["by_group"] == {}
+    assert next_policy["floor_grants"] == {}
     assert next_policy["area_grants"] == {}
 
 
@@ -283,6 +294,88 @@ def test_add_area_grant_rejects_unknown_role_and_empty_leaf() -> None:
             read=False,
             control=False,
         )
+
+
+def test_set_floor_grant_is_schema_aware_and_control_implies_read() -> None:
+    """Floor grants store normalized allow-only permission leaves."""
+    config = add_role(default_config_data(), "operator")
+
+    policy = set_floor_grant(
+        config,
+        default_policy_data(),
+        floor_id="eg",
+        role_id="operator",
+        read=False,
+        control=True,
+    )
+
+    leaf = policy["floor_grants"]["eg"]["operator"]
+    assert leaf == {"read": True, "control": True}
+    assert leaf is not True
+    assert validate_policy_data(policy) == policy
+
+
+def test_set_floor_grant_rejects_unknown_role() -> None:
+    """Floor grant writes fail closed when the role is unknown."""
+    config = add_role(default_config_data(), "viewer")
+
+    with pytest.raises(TesseraSchemaError):
+        set_floor_grant(
+            config,
+            default_policy_data(),
+            floor_id="eg",
+            role_id="ghost",
+            read=True,
+            control=False,
+        )
+
+
+def test_set_floor_grant_false_false_removes_idempotently() -> None:
+    """False/false is the floor-grant removal form and tolerates repeats."""
+    config = add_role(default_config_data(), "viewer")
+    policy = set_floor_grant(
+        config,
+        default_policy_data(),
+        floor_id="eg",
+        role_id="viewer",
+        read=True,
+        control=False,
+    )
+
+    removed = set_floor_grant(
+        config,
+        policy,
+        floor_id="eg",
+        role_id="viewer",
+        read=False,
+        control=False,
+    )
+    removed_again = set_floor_grant(
+        config,
+        removed,
+        floor_id="eg",
+        role_id="viewer",
+        read=False,
+        control=False,
+    )
+
+    assert removed["floor_grants"] == {}
+    assert removed_again["floor_grants"] == {}
+
+
+def test_remove_floor_grant_deletes_empty_floor_bucket() -> None:
+    """Removing the final floor role grant removes the empty floor target."""
+    config = add_role(default_config_data(), "viewer")
+    policy = set_floor_grant(
+        config,
+        default_policy_data(),
+        floor_id="eg",
+        role_id="viewer",
+        read=True,
+        control=False,
+    )
+
+    assert remove_floor_grant(policy, "eg::viewer")["floor_grants"] == {}
 
 
 def test_remove_area_grant_deletes_empty_area_bucket() -> None:

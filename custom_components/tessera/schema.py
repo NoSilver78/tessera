@@ -57,6 +57,7 @@ class _TesseraPolicyRequiredData(TypedDict):
     """Required Tessera policy store fields."""
 
     version: int
+    floor_grants: dict[str, dict[str, PermissionLeaf]]
     area_grants: dict[str, dict[str, PermissionLeaf]]
     entity_overrides: dict[str, dict[str, PermissionLeaf]]
 
@@ -97,6 +98,7 @@ def default_policy_data() -> TesseraPolicyData:
     """
     return {
         "version": STORAGE_VERSION,
+        "floor_grants": {},
         "area_grants": {},
         "entity_overrides": {},
         "staging": {},
@@ -184,6 +186,9 @@ def validate_policy_data(data: object) -> TesseraPolicyData:
 
     policy: TesseraPolicyData = {
         "version": STORAGE_VERSION,
+        "floor_grants": _validate_grant_matrix(
+            payload.get("floor_grants", {}), "policy.floor_grants"
+        ),
         "area_grants": _validate_grant_matrix(
             payload.get("area_grants"), "policy.area_grants"
         ),

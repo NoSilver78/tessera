@@ -30,6 +30,7 @@ def test_config_schema_accepts_membership_sources() -> None:
 def test_policy_schema_accepts_read_control_leafs() -> None:
     """Policy schema accepts explicit read/control permission leafs."""
     policy = default_policy_data()
+    policy["floor_grants"] = {"ground": {"auditor": {"read": True}}}
     policy["area_grants"] = {"living_room": {"viewer": {"read": True}}}
     policy["entity_overrides"] = {
         "light.table": {"operator": {"read": True, "control": True}}
@@ -48,6 +49,13 @@ def test_policy_schema_accepts_legitimate_control_and_removal_leafs() -> None:
             "viewer": {"read": True, "control": True},
         }
     }
+    policy["floor_grants"] = {
+        "ground": {
+            "operator": {"control": True},
+            "reader": {"read": True, "control": False},
+            "viewer": {"read": True, "control": True},
+        }
+    }
     policy["entity_overrides"] = {
         "light.read_hidden": {"viewer": {"read": False}},
         "light.table": {"operator": {"read": False, "control": False}},
@@ -58,7 +66,11 @@ def test_policy_schema_accepts_legitimate_control_and_removal_leafs() -> None:
 
 @pytest.mark.parametrize(
     ("section", "target"),
-    [("area_grants", "living_room"), ("entity_overrides", "light.table")],
+    [
+        ("floor_grants", "ground"),
+        ("area_grants", "living_room"),
+        ("entity_overrides", "light.table"),
+    ],
 )
 def test_policy_schema_rejects_contradictory_control_without_read(
     section: str, target: str
@@ -92,3 +104,13 @@ def test_policy_schema_rejects_unsafe_leaf_shapes(bad_leaf: object, match: str) 
 
     with pytest.raises(TesseraSchemaError, match=match):
         validate_policy_data(policy)
+
+
+def test_policy_schema_defaults_missing_floor_grants_for_existing_stores() -> None:
+    """Existing v1 policy payloads without floor grants remain loadable."""
+    policy = default_policy_data()
+    policy.pop("floor_grants")
+
+    validated = validate_policy_data(policy)
+
+    assert validated["floor_grants"] == {}

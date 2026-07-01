@@ -10,12 +10,14 @@ import custom_components.tessera as tessera_init
 import pytest
 from custom_components.tessera import (
     DATA_ACK_SERVICES_REGISTERED,
+    DATA_FLOOR_GRANT_SERVICE_REGISTERED,
     DATA_MEMBERSHIP_SERVICE_REGISTERED,
     DATA_SERVICE_REGISTERED,
     DOMAIN,
     SERVICE_ACK_COMPONENT,
     SERVICE_RECOMPILE,
     SERVICE_REVOKE_COMPONENT_ACK,
+    SERVICE_SET_FLOOR_GRANT,
     SERVICE_SET_MEMBERSHIP,
 )
 from custom_components.tessera.auth_adapter import (
@@ -260,6 +262,32 @@ class MembershipStore(E35Store):
         await super().async_save_config(config)
 
 
+class FloorGrantStore(E35Store):
+    """Store double for floor-grant service tests."""
+
+    def __init__(
+        self,
+        mode: str = "monitor",
+        *,
+        roles: tuple[str, ...] = ("viewer",),
+        events: list[str] | None = None,
+    ) -> None:
+        """Initialize policy/config with known Tessera roles."""
+        super().__init__(mode, events=events)
+        self.save_policy_calls = 0
+        for role_id in roles:
+            self.config["roles"][role_id] = {"name": role_id}
+
+    async def async_load_policy(self) -> dict[str, Any]:
+        """Load fake policy (copy-on-load, mirroring the real store)."""
+        return deepcopy(self.policy)
+
+    async def async_save_policy(self, policy: dict[str, Any]) -> None:
+        """Persist fake policy."""
+        self.save_policy_calls += 1
+        self.policy = deepcopy(policy)
+
+
 @dataclass(frozen=True)
 class FakeEntry:
     """Minimal config entry double."""
@@ -352,11 +380,13 @@ async def test_unload_entry_keeps_bucket_and_removes_service_after_last_entry(
     assert DATA_SERVICE_REGISTERED not in hass.data[DOMAIN]
     assert DATA_ACK_SERVICES_REGISTERED not in hass.data[DOMAIN]
     assert DATA_MEMBERSHIP_SERVICE_REGISTERED not in hass.data[DOMAIN]
+    assert DATA_FLOOR_GRANT_SERVICE_REGISTERED not in hass.data[DOMAIN]
     assert hass.services.removed == [
         (DOMAIN, SERVICE_RECOMPILE),
         (DOMAIN, SERVICE_ACK_COMPONENT),
         (DOMAIN, SERVICE_REVOKE_COMPONENT_ACK),
         (DOMAIN, SERVICE_SET_MEMBERSHIP),
+        (DOMAIN, SERVICE_SET_FLOOR_GRANT),
     ]
 
 
@@ -429,6 +459,26 @@ def _patch_monitor_preview(monkeypatch: pytest.MonkeyPatch, events: list[str]) -
         entry_data["preview"] = {"mode": config["mode"]}
 
     monkeypatch.setattr(tessera_init, "_compile_monitor_preview", fake_preview)
+
+
+def _patch_floor_registry(
+    monkeypatch: pytest.MonkeyPatch, floor_ids: tuple[str, ...] = ("eg",)
+) -> None:
+    """Replace HA's floor registry with a deterministic fake."""
+
+    class FakeFloorRegistry:
+        """Minimal floor registry double."""
+
+        def __init__(self, known_floor_ids: tuple[str, ...]) -> None:
+            self._known_floor_ids = set(known_floor_ids)
+
+        def async_get_floor(self, floor_id: str) -> object | None:
+            return object() if floor_id in self._known_floor_ids else None
+
+    monkeypatch.setattr(
+        "homeassistant.helpers.floor_registry.async_get",
+        lambda _hass: FakeFloorRegistry(floor_ids),
+    )
 
 
 @pytest.mark.asyncio
@@ -929,6 +979,255 @@ async def test_set_membership_service_blocked_enforce_plan_avoids_native_write(
 
     assert store.config["mode"] == "monitor"
     assert store.state == default_state_data()
+    assert entry_data["mode"] == "monitor"
+    assert entry_data["preview"] == {"mode": "monitor"}
+    assert events == ["compute", "monitor_preview"]
+
+
+@pytest.mark.asyncio
+async def test_set_floor_grant_service_is_admin_only_and_persists(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The floor grant writer is admin-only and recompiles after policy save."""
+    hass = FakeHass()
+    admin_services = _patch_admin_service_registration(monkeypatch)
+    _patch_floor_registry(monkeypatch, ("eg",))
+    store = FloorGrantStore(roles=("viewer", "operator"))
+    entry_data: dict[str, Any] = {"store": store}
+    hass.data[DOMAIN] = {"entry-1": entry_data}
+    compile_calls: list[str] = []
+
+    async def fake_compile(
+        _hass: Any, entry_id: str, _entry_data: dict[str, Any]
+    ) -> None:
+        compile_calls.append(entry_id)
+
+    monkeypatch.setattr(tessera_init, "_compile_for_mode_safely", fake_compile)
+    tessera_init._register_floor_grant_service(hass)
+    handler = hass.services.handlers[(DOMAIN, SERVICE_SET_FLOOR_GRANT)]
+
+    with pytest.raises(Unauthorized):
+        await handler(
+            FakeServiceCall(
+                {
+                    "floor_id": "eg",
+                    "role_id": "viewer",
+                    "read": True,
+                    "control": False,
+                },
+                is_admin=False,
+            )
+        )
+    await handler(
+        FakeServiceCall(
+            {
+                "floor_id": "eg",
+                "role_id": "operator",
+                "read": False,
+                "control": True,
+            }
+        )
+    )
+
+    assert admin_services == [(DOMAIN, SERVICE_SET_FLOOR_GRANT)]
+    assert hass.data[DOMAIN][DATA_FLOOR_GRANT_SERVICE_REGISTERED] is True
+    assert store.policy["floor_grants"] == {
+        "eg": {"operator": {"read": True, "control": True}}
+    }
+    assert store.save_policy_calls == 1
+    assert compile_calls == ["entry-1"]
+
+
+@pytest.mark.asyncio
+async def test_set_floor_grant_service_unknown_floor_fails_closed_without_save(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unknown HA floor ids are rejected before policy writes or recompiles."""
+    hass = FakeHass()
+    _patch_admin_service_registration(monkeypatch)
+    _patch_floor_registry(monkeypatch, ())
+    store = FloorGrantStore()
+    hass.data[DOMAIN] = {"entry-1": {"store": store}}
+
+    async def fail_compile(*_args: Any, **_kwargs: Any) -> None:
+        raise AssertionError("compile must not run for unknown floor")
+
+    monkeypatch.setattr(tessera_init, "_compile_for_mode_safely", fail_compile)
+    tessera_init._register_floor_grant_service(hass)
+    handler = hass.services.handlers[(DOMAIN, SERVICE_SET_FLOOR_GRANT)]
+
+    with pytest.raises(HomeAssistantError, match="unknown floor"):
+        await handler(
+            FakeServiceCall(
+                {
+                    "floor_id": "missing",
+                    "role_id": "viewer",
+                    "read": True,
+                    "control": False,
+                }
+            )
+        )
+
+    assert store.save_policy_calls == 0
+    assert store.policy["floor_grants"] == {}
+
+
+@pytest.mark.asyncio
+async def test_set_floor_grant_service_unknown_role_preflights_all_entries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Role validation happens for every entry before any entry is saved."""
+    hass = FakeHass()
+    _patch_admin_service_registration(monkeypatch)
+    _patch_floor_registry(monkeypatch, ("eg",))
+    valid_store = FloorGrantStore(roles=("viewer",))
+    invalid_store = FloorGrantStore(roles=("operator",))
+    hass.data[DOMAIN] = {
+        "entry-1": {"store": valid_store},
+        "entry-2": {"store": invalid_store},
+    }
+
+    async def fail_compile(*_args: Any, **_kwargs: Any) -> None:
+        raise AssertionError("compile must not run after preflight failure")
+
+    monkeypatch.setattr(tessera_init, "_compile_for_mode_safely", fail_compile)
+    tessera_init._register_floor_grant_service(hass)
+    handler = hass.services.handlers[(DOMAIN, SERVICE_SET_FLOOR_GRANT)]
+
+    with pytest.raises(TesseraSchemaError):
+        await handler(
+            FakeServiceCall(
+                {
+                    "floor_id": "eg",
+                    "role_id": "viewer",
+                    "read": True,
+                    "control": False,
+                }
+            )
+        )
+
+    assert valid_store.save_policy_calls == 0
+    assert invalid_store.save_policy_calls == 0
+    assert valid_store.policy["floor_grants"] == {}
+    assert invalid_store.policy["floor_grants"] == {}
+
+
+@pytest.mark.asyncio
+async def test_set_floor_grant_service_false_false_removes_idempotently(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """False/false removes the floor grant and tolerates repeated calls."""
+    hass = FakeHass()
+    _patch_admin_service_registration(monkeypatch)
+    _patch_floor_registry(monkeypatch, ("eg",))
+    store = FloorGrantStore()
+    store.policy["floor_grants"] = {"eg": {"viewer": {"read": True}}}
+    hass.data[DOMAIN] = {"entry-1": {"store": store}}
+
+    async def fake_compile(*_args: Any, **_kwargs: Any) -> None:
+        return None
+
+    monkeypatch.setattr(tessera_init, "_compile_for_mode_safely", fake_compile)
+    tessera_init._register_floor_grant_service(hass)
+    handler = hass.services.handlers[(DOMAIN, SERVICE_SET_FLOOR_GRANT)]
+
+    removal_call = FakeServiceCall(
+        {"floor_id": "eg", "role_id": "viewer", "read": False, "control": False}
+    )
+    await handler(removal_call)
+    await handler(removal_call)
+
+    assert store.policy["floor_grants"] == {}
+    assert store.save_policy_calls == 2
+
+
+@pytest.mark.asyncio
+async def test_set_floor_grant_service_recompile_failure_fails_safe_to_monitor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Enforce-mode floor saves must recompile through the fail-safe guard."""
+    issues: list[tuple[str, str]] = []
+    store = FloorGrantStore("enforce")
+    hass = FakeHass()
+    entry_data: dict[str, Any] = {"store": store}
+    hass.data[DOMAIN] = {"entry-1": entry_data}
+    _patch_admin_service_registration(monkeypatch)
+    _patch_floor_registry(monkeypatch, ("eg",))
+
+    async def fail_compile(*_args: Any, **_kwargs: Any) -> None:
+        raise RuntimeError("compile failed")
+
+    async def fake_issue(
+        _hass: Any, _entry_id: str, issue_id: str, *, reason: str
+    ) -> None:
+        issues.append((issue_id, reason))
+
+    monkeypatch.setattr(tessera_init, "_compile_for_mode", fail_compile)
+    monkeypatch.setattr(tessera_init, "_record_repair_issue", fake_issue)
+    tessera_init._register_floor_grant_service(hass)
+    handler = hass.services.handlers[(DOMAIN, SERVICE_SET_FLOOR_GRANT)]
+
+    await handler(
+        FakeServiceCall(
+            {"floor_id": "eg", "role_id": "viewer", "read": True, "control": False}
+        )
+    )
+
+    assert store.config["mode"] == "monitor"
+    assert entry_data["mode"] == "monitor"
+    assert store.policy["floor_grants"] == {"eg": {"viewer": {"read": True}}}
+    assert issues == [(tessera_init.REPAIR_ENFORCE_FAIL_SAFE, "compile:RuntimeError")]
+
+
+@pytest.mark.asyncio
+async def test_set_floor_grant_service_blocked_enforce_plan_avoids_native_write(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Blocked enforce from the service persists monitor, not auth writes."""
+    events: list[str] = []
+    store = FloorGrantStore("enforce", events=events)
+    hass = FakeHass()
+    entry_data: dict[str, Any] = {"store": store}
+    hass.data[DOMAIN] = {"entry-1": entry_data}
+    _patch_admin_service_registration(monkeypatch)
+    _patch_floor_registry(monkeypatch, ("eg",))
+
+    async def fake_compute(_hass: Any, _store: Any) -> dict[str, Any]:
+        events.append("compute")
+        return {
+            "groups": [],
+            "bindings": [],
+            "orphan_group_ids": [],
+            "blocked": True,
+            "block_reason": "d9",
+            "block_detail": ["custom_component"],
+        }
+
+    async def fail_apply(*_args: Any, **_kwargs: Any) -> None:
+        raise AssertionError("native auth apply must not run for blocked plan")
+
+    monkeypatch.setattr(tessera_init, "compute_enforce_plan", fake_compute)
+    monkeypatch.setattr(tessera_init, "apply_enforce_plan", fail_apply)
+    _patch_monitor_preview(monkeypatch, events)
+    tessera_init._register_floor_grant_service(hass)
+    handler = hass.services.handlers[(DOMAIN, SERVICE_SET_FLOOR_GRANT)]
+
+    await handler(
+        FakeServiceCall(
+            {
+                "floor_id": "eg",
+                "role_id": "viewer",
+                "read": False,
+                "control": True,
+            }
+        )
+    )
+
+    assert store.config["mode"] == "monitor"
+    assert store.state == default_state_data()
+    assert store.policy["floor_grants"] == {
+        "eg": {"viewer": {"read": True, "control": True}}
+    }
     assert entry_data["mode"] == "monitor"
     assert entry_data["preview"] == {"mode": "monitor"}
     assert events == ["compute", "monitor_preview"]

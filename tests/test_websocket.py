@@ -123,11 +123,8 @@ def _conflict_policy() -> dict[str, Any]:
     policy["area_grants"] = {
         "living": {
             "operator": {"read": True, "control": True},
-            "viewer": {"read": True, "control": True},
+            "viewer": {"read": True},
         }
-    }
-    policy["entity_overrides"] = {
-        "light.sofa": {"viewer": {"read": False, "control": False}}
     }
     return policy
 
@@ -300,13 +297,23 @@ async def test_matrix_preview_includes_cross_role_lint_report(
     """Matrix preview exposes the E2 linter report without native auth writes."""
     store = FakeStore(_conflict_config(), _conflict_policy())
     hass = FakeHass(store)
+
+    class OneEntityResolver:
+        """Resolver double that keeps the lint assertion focused."""
+
+        def entity_ids_for_area(self, area_id: str) -> tuple[str, ...]:
+            return ("light.sofa",) if area_id == "living" else ()
+
+        def entity_ids_for_floor(self, floor_id: str) -> tuple[str, ...]:
+            return ()
+
     monkeypatch.setattr(
         "custom_components.tessera.websocket.ar.async_get",
         lambda hass: FakeAreaRegistry([FakeArea("living", "Living Room")]),
     )
     monkeypatch.setattr(
         "custom_components.tessera.websocket.AreaEntityResolver.from_hass",
-        classmethod(lambda cls, hass: FakeResolver()),
+        classmethod(lambda cls, hass: OneEntityResolver()),
     )
 
     result = await async_get_matrix(hass)

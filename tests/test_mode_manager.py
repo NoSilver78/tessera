@@ -37,6 +37,10 @@ class FakeResolver:
         """Return entities for one area."""
         return self._areas.get(area_id, ())
 
+    def entity_ids_for_floor(self, floor_id: str) -> tuple[str, ...]:
+        """Return entities for one floor."""
+        return ()
+
 
 class FakeStore:
     """Async in-memory store double."""
@@ -472,12 +476,9 @@ async def test_linter_conflict_blocks_after_d9_passes() -> None:
     policy = default_policy_data()
     policy["area_grants"] = {
         "living": {
-            "restricted": {"read": True, "control": True},
+            "restricted": {"read": True},
             "operator": {"control": True},
         }
-    }
-    policy["entity_overrides"] = {
-        "light.sofa": {"restricted": {"read": False, "control": False}}
     }
     store = FakeStore(config, policy)
 

@@ -12,13 +12,22 @@ from custom_components.tessera.schema import default_config_data, default_policy
 class FakeResolver:
     """Deterministic AreaEntityResolver test double."""
 
-    def __init__(self, areas: dict[str, tuple[str, ...]]) -> None:
+    def __init__(
+        self,
+        areas: dict[str, tuple[str, ...]],
+        floors: dict[str, tuple[str, ...]] | None = None,
+    ) -> None:
         """Initialize area fixtures."""
         self._areas = areas
+        self._floors = floors or {}
 
     def entity_ids_for_area(self, area_id: str) -> tuple[str, ...]:
         """Return entities for one area."""
         return self._areas.get(area_id, ())
+
+    def entity_ids_for_floor(self, floor_id: str) -> tuple[str, ...]:
+        """Return entities for one floor."""
+        return self._floors.get(floor_id, ())
 
 
 def _config(*roles: str) -> dict[str, object]:
@@ -29,24 +38,17 @@ def _config(*roles: str) -> dict[str, object]:
     return config
 
 
-def test_all_false_override_exposed_by_other_role_is_blocking_conflict() -> None:
-    """A role carve-out nullified by another assigned role is an error."""
-    config = _config("restricted", "operator")
+def test_floor_read_role_conflicts_with_area_control_role_on_same_entity() -> None:
+    """A floor-derived read-only boundary is linted like an area boundary."""
+    config = _config("viewer", "operator")
     policy = default_policy_data()
-    policy["area_grants"] = {
-        "living": {
-            "restricted": {"read": True, "control": True},
-            "operator": {"read": True, "control": True},
-        }
-    }
-    policy["entity_overrides"] = {
-        "light.x": {"restricted": {"read": False, "control": False}}
-    }
+    policy["floor_grants"] = {"eg": {"viewer": {"read": True}}}
+    policy["area_grants"] = {"living": {"operator": {"control": True}}}
 
     report = lint_cross_role(
         config,
         policy,
-        FakeResolver({"living": ("light.x", "light.y")}),
+        FakeResolver({"living": ("light.x",)}, {"eg": ("light.x", "sensor.y")}),
     )
 
     assert has_blocking_conflicts(report) is True
@@ -56,7 +58,7 @@ def test_all_false_override_exposed_by_other_role_is_blocking_conflict() -> None
             "user_id": "user-1",
             "entity_id": "light.x",
             "exposing_roles": ["operator"],
-            "restricting_roles": ["restricted"],
+            "restricting_roles": ["viewer"],
             "level": "control",
             "severity": "error",
         }

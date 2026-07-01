@@ -118,6 +118,28 @@
           "description": "List of Tessera role ids to assign. Use an empty list to remove this user's Tessera membership."
         }
       }
+    },
+    "set_floor_grant": {
+      "name": "Set floor grant",
+      "description": "Grant or remove a Tessera role's read/control access for every entity on a Home Assistant floor. Admin-only; in enforce mode this recompiles through Tessera's guarded apply path.",
+      "fields": {
+        "floor_id": {
+          "name": "Floor id",
+          "description": "The Home Assistant floor id to manage."
+        },
+        "role_id": {
+          "name": "Role id",
+          "description": "The Tessera role id receiving or losing the floor grant."
+        },
+        "read": {
+          "name": "Read",
+          "description": "Grant read access. Control also implies read."
+        },
+        "control": {
+          "name": "Control",
+          "description": "Grant control access. Set both read and control to false to remove this floor grant."
+        }
+      }
     }
   },
   "issues": {

@@ -26,3 +26,21 @@ set_membership:
       required: true
       selector:
         object:
+set_floor_grant:
+  fields:
+    floor_id:
+      required: true
+      selector:
+        text:
+    role_id:
+      required: true
+      selector:
+        text:
+    read:
+      required: true
+      selector:
+        boolean:
+    control:
+      required: true
+      selector:
+        boolean:

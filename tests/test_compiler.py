@@ -17,13 +17,22 @@ from custom_components.tessera.schema import (
 class FakeResolver:
     """Deterministic AreaEntityResolver test double."""
 
-    def __init__(self, areas: dict[str, tuple[str, ...]]) -> None:
+    def __init__(
+        self,
+        areas: dict[str, tuple[str, ...]],
+        floors: dict[str, tuple[str, ...]] | None = None,
+    ) -> None:
         """Initialize area-to-entity fixtures."""
         self._areas = areas
+        self._floors = floors or {}
 
     def entity_ids_for_area(self, area_id: str) -> tuple[str, ...]:
         """Resolve one area id."""
         return self._areas.get(area_id, ())
+
+    def entity_ids_for_floor(self, floor_id: str) -> tuple[str, ...]:
+        """Resolve one floor id."""
+        return self._floors.get(floor_id, ())
 
 
 def test_area_grant_compiles_to_entity_policy_leafs() -> None:
@@ -49,8 +58,8 @@ def test_area_grant_compiles_to_entity_policy_leafs() -> None:
     }
 
 
-def test_entity_override_replaces_area_grant_for_role() -> None:
-    """Entity overrides are more specific than area grants."""
+def test_entity_override_unions_with_area_grant_for_role() -> None:
+    """Entity overrides union additively with area grants."""
     config = default_config_data()
     config["roles"] = {"operator": {"name": "Operator"}}
     policy = default_policy_data()
@@ -62,7 +71,7 @@ def test_entity_override_replaces_area_grant_for_role() -> None:
     )
 
     assert compiled["operator"]["entities"]["entity_ids"] == {
-        "light.sofa": {"read": True},
+        "light.sofa": {"read": True, "control": True},
         "light.table": {"read": True, "control": True},
     }
 
@@ -85,8 +94,8 @@ def test_control_only_entity_override_implies_read() -> None:
     }
 
 
-def test_all_false_entity_override_removes_area_grant_for_role() -> None:
-    """A specific override can remove the allow projection for one entity."""
+def test_all_false_entity_override_does_not_remove_area_grant_for_role() -> None:
+    """All-false overrides never emit deny or weaken broader allows."""
     config = default_config_data()
     config["roles"] = {"operator": {"name": "Operator"}}
     policy = default_policy_data()
@@ -100,12 +109,13 @@ def test_all_false_entity_override_removes_area_grant_for_role() -> None:
     )
 
     assert compiled["operator"]["entities"]["entity_ids"] == {
-        "light.table": {"read": True, "control": True}
+        "light.sofa": {"read": True, "control": True},
+        "light.table": {"read": True, "control": True},
     }
 
 
-def test_entity_override_removes_area_grant_only_for_that_role() -> None:
-    """An all-false override removes grants only for the referenced role."""
+def test_all_false_entity_override_does_not_affect_any_role_grant() -> None:
+    """All-false overrides are deny-by-omission only."""
     config = default_config_data()
     config["roles"] = {"a": {"name": "A"}, "b": {"name": "B"}}
     policy = default_policy_data()
@@ -120,13 +130,13 @@ def test_entity_override_removes_area_grant_only_for_that_role() -> None:
     compiled = compile_policies(config, policy, FakeResolver({"living": ("light.x",)}))
 
     assert compiled == {
-        "a": {"entities": {"entity_ids": {}}},
+        "a": {"entities": {"entity_ids": {"light.x": {"read": True, "control": True}}}},
         "b": {"entities": {"entity_ids": {"light.x": {"read": True, "control": True}}}},
     }
 
 
-def test_all_false_entity_override_can_empty_role_policy() -> None:
-    """Empty role projections stay explicit for later apply/drift logic."""
+def test_all_false_entity_override_cannot_empty_role_policy() -> None:
+    """A negative-looking override cannot remove an additive allow."""
     config = default_config_data()
     config["roles"] = {"operator": {"name": "Operator"}}
     policy = default_policy_data()
@@ -139,7 +149,11 @@ def test_all_false_entity_override_can_empty_role_policy() -> None:
         config, policy, FakeResolver({"living": ("light.sofa",)})
     )
 
-    assert compiled == {"operator": {"entities": {"entity_ids": {}}}}
+    assert compiled == {
+        "operator": {
+            "entities": {"entity_ids": {"light.sofa": {"read": True, "control": True}}}
+        }
+    }
 
 
 def test_multiple_area_grants_for_role_are_merged() -> None:
@@ -161,6 +175,49 @@ def test_multiple_area_grants_for_role_are_merged() -> None:
     assert compiled["viewer"]["entities"]["entity_ids"] == {
         "light.sofa": {"read": True},
         "sensor.fridge": {"read": True},
+    }
+
+
+def test_floor_grant_compiles_to_entity_policy_leafs() -> None:
+    """Floor grants expand through the resolver into explicit entity leaves."""
+    config = default_config_data()
+    config["roles"] = {"viewer": {"name": "Viewer"}}
+    policy = default_policy_data()
+    policy["floor_grants"] = {"eg": {"viewer": {"read": True}}}
+
+    compiled = compile_policies(
+        config,
+        policy,
+        FakeResolver({}, {"eg": ("light.kitchen", "sensor.temp")}),
+    )
+
+    assert compiled["viewer"]["entities"]["entity_ids"] == {
+        "light.kitchen": {"read": True},
+        "sensor.temp": {"read": True},
+    }
+
+
+def test_overlapping_floor_and_area_grants_union_permissions() -> None:
+    """Floor and area grants use max-permission additive union."""
+    config = default_config_data()
+    config["roles"] = {"operator": {"name": "Operator"}}
+    policy = default_policy_data()
+    policy["floor_grants"] = {"eg": {"operator": {"read": True}}}
+    policy["area_grants"] = {"living": {"operator": {"control": True}}}
+
+    compiled = compile_policies(
+        config,
+        policy,
+        FakeResolver(
+            {"living": ("light.shared", "light.area_only")},
+            {"eg": ("light.shared", "sensor.floor_only")},
+        ),
+    )
+
+    assert compiled["operator"]["entities"]["entity_ids"] == {
+        "light.area_only": {"read": True, "control": True},
+        "light.shared": {"read": True, "control": True},
+        "sensor.floor_only": {"read": True},
     }
 
 
@@ -301,6 +358,17 @@ def test_policy_referencing_unknown_role_fails_closed() -> None:
         compile_policies(config, policy, FakeResolver({"living": ("light.sofa",)}))
 
 
+def test_floor_grant_referencing_unknown_role_fails_closed() -> None:
+    """Unknown floor-grant roles fail closed before native policy output."""
+    config = default_config_data()
+    config["roles"] = {"viewer": {"name": "Viewer"}}
+    policy = default_policy_data()
+    policy["floor_grants"] = {"eg": {"ghost": {"read": True}}}
+
+    with pytest.raises(TesseraSchemaError, match="unknown role"):
+        compile_policies(config, policy, FakeResolver({}, {"eg": ("light.sofa",)}))
+
+
 def test_entity_override_referencing_unknown_role_fails_closed() -> None:
     """Unknown roles fail closed even when referenced only by overrides."""
     config = default_config_data()
@@ -321,6 +389,20 @@ def test_all_false_area_grant_is_omitted() -> None:
 
     compiled = compile_policies(
         config, policy, FakeResolver({"living": ("light.sofa",)})
+    )
+
+    assert compiled == {"viewer": {"entities": {"entity_ids": {}}}}
+
+
+def test_all_false_floor_grant_is_omitted() -> None:
+    """All-false floor grants remain deny-by-omission."""
+    config = default_config_data()
+    config["roles"] = {"viewer": {"name": "Viewer"}}
+    policy = default_policy_data()
+    policy["floor_grants"] = {"eg": {"viewer": {"read": False, "control": False}}}
+
+    compiled = compile_policies(
+        config, policy, FakeResolver({}, {"eg": ("light.sofa",)})
     )
 
     assert compiled == {"viewer": {"entities": {"entity_ids": {}}}}
