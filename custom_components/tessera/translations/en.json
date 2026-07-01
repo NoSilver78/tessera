@@ -166,6 +166,10 @@
           "description": "Overrides: entity id, then role id, then read/control booleans. Replaces policy.entity_overrides when provided."
         }
       }
+    },
+    "preflight": {
+      "name": "Preflight (enforce readiness)",
+      "description": "Read-only dry run of the enforce pipeline: returns whether enforce would succeed, the full D9 component breakdown (which custom components would veto and why), cross-role linter conflicts, and a model summary. Writes nothing and never changes mode. Admin-only."
     }
   },
   "issues": {

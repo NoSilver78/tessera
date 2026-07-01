@@ -16,7 +16,8 @@ import voluptuous as vol
 from homeassistant.components.frontend import async_remove_panel
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.components.panel_custom import async_register_panel
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.core import SupportsResponse
+from homeassistant.exceptions import HomeAssistantError, Unauthorized, UnknownUser
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.service import async_register_admin_service
 from homeassistant.util import dt as dt_util
@@ -29,9 +30,11 @@ from .auth_adapter import (
     RecoveryController,
     UserBindingAdapter,
 )
+from .compiler import compile_policies
 from .config_flow import set_floor_grant, set_user_membership
 from .const import DOMAIN, MODE_ENFORCE, MODE_MONITOR, MODE_OFF
-from .d9_gate import compute_component_ack_target
+from .d9_gate import compute_component_ack_target, evaluate_d9_gate
+from .linter import lint_cross_role
 from .mode_manager import apply_enforce_plan, compute_enforce_plan
 from .monitor import compile_current, lint_current_preview, log_monitor_preview
 from .resolver import AreaEntityResolver
@@ -53,7 +56,7 @@ from .store import TesseraStore, mutation_lock
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
-    from homeassistant.core import HomeAssistant, ServiceCall
+    from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse
 
 LOGGER = logging.getLogger(__name__)
 SERVICE_RECOMPILE = "recompile"
@@ -86,6 +89,7 @@ SERVICE_IMPORT_SCHEMA = vol.Schema(
         vol.Optional("entity_overrides"): dict,
     }
 )
+SERVICE_PREFLIGHT = "preflight"
 # Bookkeeping sentinels stored in the domain bucket alongside per-entry dicts.
 # Their values are non-dict (bool), so the isinstance(dict) filter in
 # _has_loaded_entries cleanly distinguishes them from real entry data.
@@ -96,6 +100,7 @@ DATA_PANEL_REGISTERED = "__panel_registered"
 DATA_MEMBERSHIP_SERVICE_REGISTERED = "__membership_service_registered"
 DATA_FLOOR_GRANT_SERVICE_REGISTERED = "__floor_grant_service_registered"
 DATA_IMPORT_SERVICE_REGISTERED = "__import_service_registered"
+DATA_PREFLIGHT_SERVICE_REGISTERED = "__preflight_service_registered"
 PANEL_URL_PATH = "tessera"
 PANEL_WEBCOMPONENT = "tessera-matrix-panel"
 PANEL_STATIC_URL = "/tessera_static/tessera-panel.js"
@@ -121,6 +126,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     _register_membership_service(hass)
     _register_floor_grant_service(hass)
     _register_import_service(hass)
+    _register_preflight_service(hass)
     _register_websocket_api(hass)
     await _async_register_matrix_panel(hass)
     recovered = await _startup_recovery_safely(
@@ -160,11 +166,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.services.async_remove(DOMAIN, SERVICE_SET_MEMBERSHIP)
         hass.services.async_remove(DOMAIN, SERVICE_SET_FLOOR_GRANT)
         hass.services.async_remove(DOMAIN, SERVICE_IMPORT)
+        hass.services.async_remove(DOMAIN, SERVICE_PREFLIGHT)
         domain_data.pop(DATA_SERVICE_REGISTERED, None)
         domain_data.pop(DATA_ACK_SERVICES_REGISTERED, None)
         domain_data.pop(DATA_MEMBERSHIP_SERVICE_REGISTERED, None)
         domain_data.pop(DATA_FLOOR_GRANT_SERVICE_REGISTERED, None)
         domain_data.pop(DATA_IMPORT_SERVICE_REGISTERED, None)
+        domain_data.pop(DATA_PREFLIGHT_SERVICE_REGISTERED, None)
     return True
 
 
@@ -491,6 +499,125 @@ def _assert_import_roles_resolve(
             raise TesseraSchemaError(
                 f"import: membership references unknown roles: {unknown}"
             )
+
+
+def _register_preflight_service(hass: HomeAssistant) -> None:
+    """Register the admin-only, read-only enforce-preflight service once per instance.
+
+    Provisioning tells you nothing about whether ``enforce`` would actually succeed.
+    ``tessera.preflight`` runs the full enforce-planning pipeline READ-ONLY (no native
+    write, no mode change) and returns it as a service response: the would-enforce
+    verdict, the complete D9 component breakdown (which components would veto and why —
+    the enforce-readiness blocker list), the cross-role linter conflicts, and a model
+    summary. Registered directly with ``supports_response`` and a manual admin gate,
+    because HA's ``async_register_admin_service`` cannot return a response.
+    """
+    domain_data = _domain_data(hass)
+    if domain_data.get(DATA_PREFLIGHT_SERVICE_REGISTERED) is True:
+        return
+
+    async def _handle_preflight(call: ServiceCall) -> ServiceResponse:
+        # Admin gate mirrors homeassistant.helpers.service._async_admin_handler; this
+        # read-only diagnostic exposes the RBAC model plus a custom-component scan.
+        if call.context.user_id:
+            user = await hass.auth.async_get_user(call.context.user_id)
+            if user is None:
+                raise UnknownUser(context=call.context)
+            if not user.is_admin:
+                raise Unauthorized(context=call.context)
+
+        entry_data = next(
+            (
+                data
+                for data in _domain_data(hass).values()
+                if isinstance(data, dict) and "store" in data
+            ),
+            None,
+        )
+        if entry_data is None:
+            raise HomeAssistantError("Tessera is not loaded")
+        store = cast(TesseraStore, entry_data["store"])
+        config = await store.async_load_config()
+        policy = await store.async_load_policy()
+        resolver = AreaEntityResolver.from_hass(hass)
+        # Full D9 breakdown: compute_enforce_plan short-circuits at the first blocker,
+        # so evaluate the gate directly to enumerate ALL components + verdicts.
+        d9 = await evaluate_d9_gate(hass, config, self_domain=DOMAIN)  # type: ignore[arg-type]
+        compiled = compile_policies(config, policy, resolver)
+        lint = lint_cross_role(config, policy, resolver, compiled=compiled)
+        # Authoritative "would enforce succeed" verdict — never writes native auth.
+        plan = await compute_enforce_plan(hass, store)
+        return _preflight_response(config, policy, compiled, plan, d9, lint)
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_PREFLIGHT,
+        _handle_preflight,
+        schema=vol.Schema({}),
+        supports_response=SupportsResponse.ONLY,
+    )
+    domain_data[DATA_PREFLIGHT_SERVICE_REGISTERED] = True
+
+
+def _preflight_response(
+    config: TesseraConfigData,
+    policy: TesseraPolicyData,
+    compiled: Mapping[str, Any],
+    plan: Mapping[str, Any],
+    d9: Mapping[str, Any],
+    lint: Mapping[str, Any],
+) -> ServiceResponse:
+    """Build the redacted, JSON-safe enforce-preflight report."""
+    d9_components = {
+        domain: {
+            "verdict": result["verdict"],
+            "source": result["source"],
+            "reason": result["reason"],
+            "version": result["version"],
+        }
+        for domain, result in sorted(d9["by_component"].items())
+    }
+    lint_conflicts = [
+        {
+            "user": conflict["user_id"][:8],
+            "entity_id": conflict["entity_id"],
+            "exposing_roles": conflict["exposing_roles"],
+            "restricting_roles": conflict["restricting_roles"],
+            "level": conflict["level"],
+            "severity": conflict["severity"],
+        }
+        for report in lint["users"].values()
+        for conflict in report["conflicts"]
+    ]
+    return {
+        "mode": config["mode"],
+        "would_enforce_succeed": not plan["blocked"],
+        "blocked_reason": plan["block_reason"],
+        "blocked_detail": plan["block_detail"],
+        "d9": {
+            "enforce_blocked": d9["enforce_blocked"],
+            "blocking": sorted(d9["blocking"]),
+            "components": d9_components,
+        },
+        "lint": {
+            "conflicts_total": lint["conflicts_total"],
+            "blocking": lint["blocking_conflicts"],
+            "conflicts": lint_conflicts,
+        },
+        "model": {
+            "roles": sorted(config["roles"]),
+            "members": len(config["membership"]["by_user"]),
+            "floor_grants": sum(len(m) for m in policy["floor_grants"].values()),
+            "area_grants": sum(len(m) for m in policy["area_grants"].values()),
+            "entity_overrides": sum(
+                len(m) for m in policy["entity_overrides"].values()
+            ),
+            "compiled_entities_per_role": {
+                role: len(compiled[role]["entities"]["entity_ids"])
+                for role in sorted(compiled)
+            },
+        },
+    }
 
 
 async def _assert_membership_target_user(hass: HomeAssistant, user_id: str) -> None:
