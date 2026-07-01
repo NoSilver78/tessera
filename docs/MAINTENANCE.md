@@ -26,6 +26,16 @@ Schutzschichten.
 3. **Fail-safe-to-monitor überall.** Jeder Fehler im Enforce-/Recovery-Pfad fällt auf den
    nicht-eingreifenden `monitor`-Modus zurück (kein Deny-all, kein stiller Halbzustand).
 
+   > **Nuance (Dev-E2E 2026-07-01, `spike/reports/tessera-dev-e2e-report-2026-07-01.md`):** War
+   > `enforce` einmal erfolgreich angewandt und wird eine *spätere* Re-Evaluation von der
+   > D9-Vorprüfung geblockt (z. B. weil eine neue auth-berührende Component auftaucht), fällt der
+   > Runtime auf `monitor` und legt ein Repairs-Issue an — **lässt aber die zuletzt angewandten
+   > (restriktiveren) `tessera:`-Gruppen stehen**, bis ein Admin die Ursache auflöst (Ack bzw. Fix)
+   > und einen sauberen `enforce`→`off`-Zyklus fährt. Das ist **kein** Halbzustand (der native
+   > Zustand ist der letzte konsistente, *strengere* Apply — kein teilweiser Write) und **kein**
+   > Sicherheits-Downgrade. Nur eine bewusste UX-Konsequenz: angezeigter `monitor`-Modus und noch
+   > vorhandene native Gruppen können auseinanderlaufen, bis der Admin `enforce` erneut setzt.
+
 ## Prozess pro HA-Release
 
 Für **jedes** neue Home-Assistant-Release:
