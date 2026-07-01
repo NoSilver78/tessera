@@ -1794,7 +1794,14 @@ async def test_panel_registers_admin_only_and_is_idempotent(
     async def fake_register_panel(_hass: Any, **kwargs: Any) -> None:
         panel_calls.append(kwargs)
 
+    class _FakeIntegration:
+        version = "9.9.9"
+
+    async def _fake_get_integration(_hass: Any, _domain: str) -> _FakeIntegration:
+        return _FakeIntegration()
+
     monkeypatch.setattr(tessera_init, "async_register_panel", fake_register_panel)
+    monkeypatch.setattr(tessera_init, "async_get_integration", _fake_get_integration)
     monkeypatch.setattr(tessera_init, "StaticPathConfig", lambda *args: args)
 
     await tessera_init._async_register_matrix_panel(hass)
@@ -1803,6 +1810,7 @@ async def test_panel_registers_admin_only_and_is_idempotent(
     assert panel_calls[0]["require_admin"] is True
     assert panel_calls[0]["frontend_url_path"] == tessera_init.PANEL_URL_PATH
     assert panel_calls[0]["webcomponent_name"] == tessera_init.PANEL_WEBCOMPONENT
+    assert panel_calls[0]["module_url"] == f"{tessera_init.PANEL_STATIC_URL}?v=9.9.9"
     assert len(hass.http.static_paths) == 1
     assert hass.data[DOMAIN][tessera_init.DATA_PANEL_REGISTERED] is True
 

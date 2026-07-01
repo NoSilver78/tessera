@@ -7,6 +7,14 @@ Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [0.5.1] — 2026-07-01
+
+### Behoben
+- **Panel-Updates waren im Browser bis zu 4 h unsichtbar** — HA liefert das Panel-Modul unter fester
+  URL mit `max-age=14400`, sodass Browser nach einem Update das alte Modul behielten (real beobachtet
+  beim 0.5.0-Rollout). Die `module_url` trägt jetzt die Integrations-Version als Query (`?v=<version>`)
+  → jeder Release bustet den Browser-Cache, neue Panels laden sofort.
+
 ## [0.5.0] — 2026-07-01
 
 ### Hinzugefügt

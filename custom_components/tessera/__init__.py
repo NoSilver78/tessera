@@ -20,6 +20,7 @@ from homeassistant.core import SupportsResponse
 from homeassistant.exceptions import HomeAssistantError, Unauthorized, UnknownUser
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.service import async_register_admin_service
+from homeassistant.loader import async_get_integration
 from homeassistant.util import dt as dt_util
 
 from . import websocket as tessera_websocket
@@ -719,13 +720,19 @@ async def _async_register_matrix_panel(hass: HomeAssistant) -> None:
     await hass.http.async_register_static_paths(
         [StaticPathConfig("/tessera_static", str(PANEL_STATIC_DIR), False)]
     )
+    # Version-bust the module URL: HA serves the static panel behind a multi-hour
+    # cache header at a fixed path, so without a per-version query browsers keep
+    # the stale module after an update. The query changes each release; the static
+    # handler ignores it and serves the file, so the browser refetches on bump.
+    integration = await async_get_integration(hass, DOMAIN)
+    module_url = f"{PANEL_STATIC_URL}?v={integration.version}"
     await async_register_panel(
         hass,
         frontend_url_path=PANEL_URL_PATH,
         webcomponent_name=PANEL_WEBCOMPONENT,
         sidebar_title="Tessera",
         sidebar_icon="mdi:shield-account",
-        module_url=PANEL_STATIC_URL,
+        module_url=module_url,
         require_admin=True,
         config_panel_domain=DOMAIN,
     )
