@@ -55,6 +55,7 @@ aus **realistischen Fixtures, getesteten Invarianten und unabhängigen Perspekti
 | Panel/Matrix nur für Admins | `test_matrix_websocket_requires_admin`, `test_panel_registers_admin_only_and_is_idempotent` |
 | Store-Mutationen serialisiert (kein Lost-Update bei parallelen Edits; Mutation-Lock top-level-only, non-reentrant) | `test_concurrent_matrix_set_grant_persists_all_cells`, `test_enforce_reapply_runs_inside_lock_without_deadlock` |
 | Import provisioniert das Modell deklarativ: admin-only, fail-closed (Schema + Rollen-Referenzen über alle Entries vor dem ersten Save), replace-provided/preserve-operational, idempotent, guarded recompile | `test_import_service_is_admin_only_and_provisions_full_model`, `test_import_service_replaces_provided_and_preserves_operational`, `test_import_service_fails_closed_on_unknown_role_without_save`, `test_import_service_fails_closed_on_malformed_leaf_without_save`, `test_import_service_is_idempotent` |
+| Preflight ist read-only + admin-only: Enforce-Verdikt + volle D9-Blockerliste + Linter-Konflikte als Response, redacted (kein `content_hash`, `user_id` gekürzt); schreibt/enforced nichts, ändert keinen Mode | `test_preflight_response_redacts_and_aggregates`, `test_preflight_service_registers_and_is_idempotent`, `test_preflight_service_rejects_non_admin_and_unknown_user` |
 
 ## Mechanismen
 1. **Stale-Marker-CI-Check** (R4) — `.github/workflows/ci.yml` schlägt fehl, wenn verdrahteter Code in

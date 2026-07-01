@@ -13,10 +13,12 @@ from custom_components.tessera import (
     DATA_FLOOR_GRANT_SERVICE_REGISTERED,
     DATA_IMPORT_SERVICE_REGISTERED,
     DATA_MEMBERSHIP_SERVICE_REGISTERED,
+    DATA_PREFLIGHT_SERVICE_REGISTERED,
     DATA_SERVICE_REGISTERED,
     DOMAIN,
     SERVICE_ACK_COMPONENT,
     SERVICE_IMPORT,
+    SERVICE_PREFLIGHT,
     SERVICE_RECOMPILE,
     SERVICE_REVOKE_COMPONENT_ACK,
     SERVICE_SET_FLOOR_GRANT,
@@ -32,7 +34,7 @@ from custom_components.tessera.schema import (
     default_policy_data,
 )
 from custom_components.tessera.state import default_state_data, snapshot_to_state_data
-from homeassistant.exceptions import HomeAssistantError, Unauthorized
+from homeassistant.exceptions import HomeAssistantError, Unauthorized, UnknownUser
 
 
 class FakeServices:
@@ -107,6 +109,7 @@ class FakeUser:
     is_owner: bool = False
     is_active: bool = True
     system_generated: bool = False
+    is_admin: bool = False
 
 
 class FakeAuth:
@@ -119,6 +122,10 @@ class FakeAuth:
     async def async_get_users(self) -> list[FakeUser]:
         """Return configured users."""
         return self.users
+
+    async def async_get_user(self, user_id: str) -> FakeUser | None:
+        """Return the user with ``user_id`` (or None), mirroring HA's AuthManager."""
+        return next((user for user in self.users if user.id == user_id), None)
 
 
 class AuthHass(FakeHass):
@@ -421,6 +428,7 @@ async def test_unload_entry_keeps_bucket_and_removes_service_after_last_entry(
     assert DATA_MEMBERSHIP_SERVICE_REGISTERED not in hass.data[DOMAIN]
     assert DATA_FLOOR_GRANT_SERVICE_REGISTERED not in hass.data[DOMAIN]
     assert DATA_IMPORT_SERVICE_REGISTERED not in hass.data[DOMAIN]
+    assert DATA_PREFLIGHT_SERVICE_REGISTERED not in hass.data[DOMAIN]
     assert hass.services.removed == [
         (DOMAIN, SERVICE_RECOMPILE),
         (DOMAIN, SERVICE_ACK_COMPONENT),
@@ -428,6 +436,7 @@ async def test_unload_entry_keeps_bucket_and_removes_service_after_last_entry(
         (DOMAIN, SERVICE_SET_MEMBERSHIP),
         (DOMAIN, SERVICE_SET_FLOOR_GRANT),
         (DOMAIN, SERVICE_IMPORT),
+        (DOMAIN, SERVICE_PREFLIGHT),
     ]
 
 
@@ -1927,3 +1936,123 @@ async def test_import_service_is_idempotent(
 
     assert store.config == first_config
     assert store.policy == first_policy
+
+
+class _PreflightCall:
+    """Service-call double carrying only a context.user_id (preflight admin gate)."""
+
+    class _Context:
+        def __init__(self, user_id: str | None) -> None:
+            self.user_id = user_id
+
+    def __init__(self, user_id: str | None) -> None:
+        self.context = _PreflightCall._Context(user_id)
+        self.data: dict[str, Any] = {}
+
+
+def test_preflight_response_redacts_and_aggregates() -> None:
+    """The preflight report aggregates D9 + lint + verdict and redacts PII/hashes."""
+    config = default_config_data()
+    config["mode"] = "monitor"
+    config["roles"] = {"ug_nutzer": {"name": "UG"}, "og_nutzer": {"name": "OG"}}
+    config["membership"]["by_user"] = {"u1": ["ug_nutzer"]}
+    policy = default_policy_data()
+    policy["floor_grants"] = {"og": {"og_nutzer": {"read": True, "control": True}}}
+    policy["area_grants"] = {"a1": {"ug_nutzer": {"read": True, "control": True}}}
+    compiled = {
+        "ug_nutzer": {"entities": {"entity_ids": {"light.a": {"read": True}}}},
+        "og_nutzer": {
+            "entities": {"entity_ids": {"light.b": {"read": True}, "light.c": {}}}
+        },
+    }
+    plan = {"blocked": True, "block_reason": "d9", "block_detail": ["hacs"]}
+    d9 = {
+        "enforce_blocked": True,
+        "blocking": ["hacs"],
+        "by_component": {
+            "hacs": {
+                "verdict": "unknown",
+                "version": "1.0",
+                "reason": "auth surface",
+                "source": "surface_veto",
+                "content_hash": "SECRET_CONTENT_HASH",
+            },
+            "foo": {
+                "verdict": "allow",
+                "version": None,
+                "reason": "no surface",
+                "source": "default",
+                "content_hash": None,
+            },
+        },
+    }
+    lint = {
+        "conflicts_total": 1,
+        "blocking_conflicts": False,
+        "users": {
+            "user-abcdef1234": {
+                "roles": ["ug_nutzer"],
+                "conflicts": [
+                    {
+                        "user_id": "user-abcdef1234",
+                        "entity_id": "light.x",
+                        "exposing_roles": ["r1"],
+                        "restricting_roles": ["r2"],
+                        "level": "control",
+                        "severity": "error",
+                    }
+                ],
+            }
+        },
+    }
+
+    resp = tessera_init._preflight_response(config, policy, compiled, plan, d9, lint)
+
+    assert resp["mode"] == "monitor"
+    assert resp["would_enforce_succeed"] is False
+    assert resp["blocked_reason"] == "d9"
+    assert resp["blocked_detail"] == ["hacs"]
+    assert resp["d9"]["enforce_blocked"] is True
+    assert resp["d9"]["blocking"] == ["hacs"]
+    assert set(resp["d9"]["components"]) == {"hacs", "foo"}
+    assert resp["d9"]["components"]["hacs"]["verdict"] == "unknown"
+    assert "content_hash" not in resp["d9"]["components"]["hacs"]  # redacted
+    assert resp["lint"]["conflicts_total"] == 1
+    assert resp["lint"]["conflicts"][0]["user"] == "user-abc"  # truncated, no full id
+    assert resp["lint"]["conflicts"][0]["entity_id"] == "light.x"
+    assert set(resp["model"]["roles"]) == {"ug_nutzer", "og_nutzer"}
+    assert resp["model"]["members"] == 1
+    assert resp["model"]["floor_grants"] == 1
+    assert resp["model"]["area_grants"] == 1
+    assert resp["model"]["compiled_entities_per_role"] == {
+        "ug_nutzer": 1,
+        "og_nutzer": 2,
+    }
+
+
+@pytest.mark.asyncio
+async def test_preflight_service_registers_and_is_idempotent() -> None:
+    """Preflight registers a handler once and marks the sentinel."""
+    hass = FakeHass()
+    tessera_init._register_preflight_service(hass)
+    assert (DOMAIN, SERVICE_PREFLIGHT) in hass.services.handlers
+    assert hass.data[DOMAIN][DATA_PREFLIGHT_SERVICE_REGISTERED] is True
+    tessera_init._register_preflight_service(hass)  # idempotent, no raise
+
+
+@pytest.mark.asyncio
+async def test_preflight_service_rejects_non_admin_and_unknown_user() -> None:
+    """The read-only preflight diagnostic is admin-only (fail-closed before reads)."""
+    hass = AuthHass(
+        [
+            FakeUser(id="admin-1", group_ids=["system-admin"], is_admin=True),
+            FakeUser(id="reg-1", group_ids=["system-users"], is_admin=False),
+        ]
+    )
+    tessera_init._register_preflight_service(hass)
+    handler = hass.services.handlers[(DOMAIN, SERVICE_PREFLIGHT)]
+
+    with pytest.raises(Unauthorized):
+        await handler(_PreflightCall("reg-1"))
+    with pytest.raises(UnknownUser):
+        await handler(_PreflightCall("ghost"))
