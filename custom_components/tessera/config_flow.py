@@ -242,7 +242,7 @@ def remove_area_grant(
     return validate_policy_data(next_policy)
 
 
-class TesseraConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg,misc]
+class TesseraConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Minimal config flow for Tessera phase-1 setup."""
 
     VERSION = 1
@@ -273,7 +273,7 @@ class TesseraConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: igno
         return TesseraOptionsFlow(config_entry)
 
 
-class TesseraOptionsFlow(config_entries.OptionsFlow):  # type: ignore[misc]
+class TesseraOptionsFlow(config_entries.OptionsFlow):
     """Options flow for monitor-mode Tessera basics."""
 
     def __init__(self, config_entry: ConfigEntry) -> None:
