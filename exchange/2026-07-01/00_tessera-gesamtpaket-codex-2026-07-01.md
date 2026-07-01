@@ -22,7 +22,7 @@ Tessera ist eine fertige, dev-erprobte, **öffentliche** HA-RBAC-Integration (`N
 | `tessera-bedienmodell-crossvalidation-request-codex-2026-07-01.md` | Anfrage | Validierungsauftrag (9 Dimensionen inkl. Mehrparteien-Härtetest) |
 | `tessera-bedienmodell-crossvalidation-codex-2026-07-01.md` | **Ergebnis (Codex)** | ACCEPT-Richtung / AUFLAGEN-Bau / NO-GO-sofort-by_group |
 | (extern) authentik-RBAC-Übergabepaket | Anfrage/Brief | ursprünglicher Mehrparteien-Brief (~70 % durch Tessera beantwortet; Rest in §8) |
-| *(pending)* Isolations-Machbarkeit | **Ergebnis (läuft)** | Abschnitt 4 — übergeordneter Gate |
+| Isolations-Machbarkeit (§4) | **Ergebnis (ENTSCHIEDEN)** | NO-GO Ein-Instanz-Isolation → Haushalt/getrennte Instanzen; Report `spike/reports/tessera-multitenant-isolation-feasibility-2026-07-01.md` |
 | `docs/concept.md`, `docs/spec-enforce.md`, `docs/QUALITY.md`, `SECURITY.md`, ADR 0005 | Referenz | Architektur, allow-only, by_group-Inertness, Leak-Pfade |
 
 ## 2. Konsolidierte Ergebnis-Lage (hohe Konfidenz = beide Systeme deckungsgleich)
@@ -36,7 +36,7 @@ Tessera ist eine fertige, dev-erprobte, **öffentliche** HA-RBAC-Integration (`N
 - **T1 — `by_user`-Membership-Writer + Panel-Sektion.** Der Soak-Unblocker (schließt „User→Rolle"-Lücke). **Codex-Sicherheits-Spec (verbindlich):** WS-Service `tessera/membership/set` **admin-only** (`require_admin`), **kein** direkter Native-Auth-Write; schema-validiert, unbekannte User/Rolle **fail-closed**; in `enforce` **zwingend** über den zentralen `_compile_for_mode_safely`/Apply-Guard-Pfad (wie Matrix-Updates); **redacted** Audit (User-/Rollen-IDs ja, keine Claims/Secrets). **Tests:** unknown user/role, last-admin/owner-risk, owner/system-generated-Target-Rejection, kein Native-Write bei Block, recompile-failure-fail-safe. Membership-UI-Ort = **Panel** (nicht Options-Flow).
 
 ### 3b. READY nach dem Isolations-Verdikt (Tessera-Scope = Intra-Instanz-RBAC, ungated)
-- **T2 — Effective-Access-Read-Schicht + Preflight-DTO.** Forward (per-User) + reverse (per-Area), Herkunfts-Attribution, **explizite PASS/BLOCK-Felder** (Owner-survives, Allow-only, D9, Linter, Auth-Version) für die UI. *(Codex-Fund: heute liefert der Plan diese nicht als PASS.)* Nicht mehr isolations-gegated — Tesseras Scope ist geklärt.
+- **T2 — Effective-Access-Read-Schicht + Preflight-DTO.** Forward (per-User) + reverse (per-Area), Herkunfts-Attribution, **explizite PASS/BLOCK-Felder** (Owner-survives, Allow-only, D9, Linter, Auth-Version) für die UI. *(Codex-Fund: heute liefert der Plan diese nicht als PASS.)* Nicht mehr isolations-gegated. **Aber (Codex-Gesamtpaket-Review, AUFLAGE): der PASS/BLOCK-Vertrag bleibt `MODIFY`, bis die „User ohne wirksame Rolle"-Semantik entschieden + in Code/Tests/Konzept vereinheitlicht ist** — `concept.md:443` fordert enforce-refusal, `mode_manager.py:400 ff.` fällt auf die Default-Rolle zurück, `test_mode_manager.py:840 ff.` pinnt das. **Diese Entscheidung gehört zu den offenen Owner-Fragen (§5) und gate't T2's Spec-Finalität + die Authentik-empty-Claim-Behandlung.**
 - ~~**T4 — Leak-Pfad-Härtung für Ein-Instanz-Isolation**~~ **ENTFÄLLT.** Das Isolations-Verdikt (§4) empfiehlt getrennte Instanzen; die Tenant-Grenze ist die Instanz, nicht Tessera. Kein WS-Filter/Proxy/Core-Patch-Projekt in Tessera.
 
 ### 3c. GATED auf die `by_group`-Gates (Authentik-Track, parallel spezifizierbar, nicht scharf)
