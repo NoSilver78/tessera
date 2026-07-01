@@ -1,11 +1,21 @@
 /**
  * Tessera matrix panel — a custom element (<tessera-matrix-panel>) for the
- * admin-only Tessera sidebar page. Home Assistant assigns the `hass` property;
- * the panel renders the Area x Role grant matrix and persists edits over two
- * WebSocket commands:
- *   - `tessera/matrix/get`       load areas, roles, grants, monitor preview
- *   - `tessera/matrix/set_grant` persist one cell, return the refreshed matrix
- * Each grant cell cycles none -> read -> read+control -> none on click.
+ * admin-only Tessera sidebar page. Home Assistant assigns the `hass` property.
+ *
+ * The matrix splits each role into two provenance columns:
+ *   - Floor: the grant inherited from the area's floor (display-only here).
+ *   - Area:  the direct Area x Role grant, editable — clicking a cell cycles
+ *            none -> read -> read+control -> none via `tessera/matrix/set_grant`.
+ * When both sources grant the same area, the row is flagged "doppelt" (a
+ * redundant double: removing one source won't change effective access).
+ *
+ * Each area row expands (chevron) to list the entities Tessera resolves for it;
+ * those entities inherit the area right, so they carry no per-entity columns.
+ *
+ * WebSocket:
+ *   - `tessera/matrix/get`       load areas, roles, per-source grants, floors,
+ *                                entities-by-area, monitor preview
+ *   - `tessera/matrix/set_grant` persist one Area cell, return the refreshed matrix
  */
 class TesseraMatrixPanel extends HTMLElement {
   constructor() {
@@ -16,6 +26,7 @@ class TesseraMatrixPanel extends HTMLElement {
     this._error = "";
     this._pending = "";
     this._loading = false;
+    this._expanded = new Set();
   }
 
   set hass(hass) {
@@ -51,13 +62,12 @@ class TesseraMatrixPanel extends HTMLElement {
       return;
     }
     const current = this._grantFor(areaId, roleId);
-    // Cycle the cell: none -> read -> read+control -> none.
-    const next =
-      current.control
-        ? { read: false, control: false }
-        : current.read
-          ? { read: true, control: true }
-          : { read: true, control: false };
+    // Cycle the Area cell: none -> read -> read+control -> none.
+    const next = current.control
+      ? { read: false, control: false }
+      : current.read
+        ? { read: true, control: true }
+        : { read: true, control: false };
 
     this._pending = `${areaId}::${roleId}`;
     this._error = "";
@@ -78,11 +88,46 @@ class TesseraMatrixPanel extends HTMLElement {
     }
   }
 
-  /** Return the current grant for a cell, defaulting to no permission. */
+  _toggleExpand(areaId) {
+    if (this._expanded.has(areaId)) {
+      this._expanded.delete(areaId);
+    } else {
+      this._expanded.add(areaId);
+    }
+    this._render();
+  }
+
+  /** Direct Area grant for a cell, defaulting to no permission. */
   _grantFor(areaId, roleId) {
     return (
       this._data?.grants?.[areaId]?.[roleId] || { read: false, control: false }
     );
+  }
+
+  /** Floor-inherited grant for a cell, defaulting to no permission. */
+  _floorGrantFor(areaId, roleId) {
+    return (
+      this._data?.floor_grants?.[areaId]?.[roleId] || {
+        read: false,
+        control: false,
+      }
+    );
+  }
+
+  /** A cell is a "double" when both the floor and the area grant it. */
+  _isDouble(areaId, roleId) {
+    const area = this._grantFor(areaId, roleId);
+    const floor = this._floorGrantFor(areaId, roleId);
+    return (area.read || area.control) && (floor.read || floor.control);
+  }
+
+  _state(grant) {
+    return grant.control ? "control" : grant.read ? "read" : "none";
+  }
+
+  _entityName(entityId) {
+    const state = this._hass?.states?.[entityId];
+    return state?.attributes?.friendly_name || entityId;
   }
 
   _messageFromError(err) {
@@ -122,16 +167,8 @@ class TesseraMatrixPanel extends HTMLElement {
           padding: 20px 24px;
           border-bottom: 1px solid var(--divider-color);
         }
-        h1 {
-          margin: 0;
-          font-size: 24px;
-          font-weight: 500;
-        }
-        .actions {
-          display: flex;
-          gap: 12px;
-          align-items: center;
-        }
+        h1 { margin: 0; font-size: 24px; font-weight: 500; }
+        .actions { display: flex; gap: 12px; align-items: center; }
         button {
           border: 1px solid var(--divider-color);
           border-radius: 999px;
@@ -141,13 +178,8 @@ class TesseraMatrixPanel extends HTMLElement {
           font: inherit;
           padding: 8px 14px;
         }
-        button:hover {
-          border-color: var(--primary-color);
-        }
-        button:disabled {
-          cursor: progress;
-          color: var(--disabled-text-color);
-        }
+        button:hover { border-color: var(--primary-color); }
+        button:disabled { cursor: progress; color: var(--disabled-text-color); }
         .error {
           margin: 16px 24px 0;
           padding: 12px 16px;
@@ -155,6 +187,19 @@ class TesseraMatrixPanel extends HTMLElement {
           color: var(--error-color);
           background: var(--secondary-background-color);
         }
+        .legend {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 16px;
+          padding: 12px 24px 0;
+          font-size: 12px;
+          color: var(--secondary-text-color);
+        }
+        .legend span { display: inline-flex; align-items: center; gap: 6px; }
+        .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+        .swatch.read { background: var(--warning-color); }
+        .swatch.control { background: var(--success-color); }
+        .swatch.dbl { outline: 2px solid var(--error-color); outline-offset: 1px; }
         .preview {
           display: grid;
           grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -162,74 +207,69 @@ class TesseraMatrixPanel extends HTMLElement {
           padding: 20px 24px;
           border-bottom: 1px solid var(--divider-color);
         }
-        .metric {
-          background: var(--secondary-background-color);
-          border-radius: 10px;
-          padding: 12px;
-        }
+        .metric { background: var(--secondary-background-color); border-radius: 10px; padding: 12px; }
         .metric span {
-          display: block;
-          color: var(--secondary-text-color);
-          font-size: 12px;
-          text-transform: uppercase;
-          letter-spacing: 0.04em;
+          display: block; color: var(--secondary-text-color);
+          font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em;
         }
-        .metric strong {
-          display: block;
-          margin-top: 4px;
-          font-size: 22px;
-          font-weight: 500;
-        }
-        .matrix-wrap {
-          overflow: auto;
-        }
-        table {
-          width: 100%;
-          border-collapse: collapse;
-          min-width: 640px;
-        }
-        th,
-        td {
+        .metric strong { display: block; margin-top: 4px; font-size: 22px; font-weight: 500; }
+        .matrix-wrap { overflow: auto; }
+        table { width: 100%; border-collapse: collapse; min-width: 640px; }
+        th, td {
           border-bottom: 1px solid var(--divider-color);
-          padding: 12px;
+          padding: 10px 12px;
           text-align: center;
         }
         th {
           background: var(--secondary-background-color);
           color: var(--secondary-text-color);
           font-weight: 500;
-          position: sticky;
-          top: 0;
-          z-index: 1;
+          position: sticky; top: 0; z-index: 1;
         }
-        th:first-child,
-        td:first-child {
-          position: sticky;
-          left: 0;
-          text-align: left;
-          background: var(--card-background-color);
-          z-index: 2;
+        th.sub { font-weight: 400; font-size: 12px; text-transform: none; }
+        th:first-child, td:first-child {
+          position: sticky; left: 0; text-align: left;
+          background: var(--card-background-color); z-index: 2;
         }
+        th.role-h { z-index: 1; }
+        .bl { border-left: 1px solid var(--divider-color); }
         .cell {
-          min-width: 96px;
+          min-width: 84px;
           border-radius: 10px;
+          font: inherit;
+          padding: 6px 10px;
         }
-        .cell.none {
-          color: var(--secondary-text-color);
+        .cell.none { color: var(--secondary-text-color); background: var(--secondary-background-color); }
+        .cell.read { color: var(--primary-text-color); background: var(--warning-color); }
+        .cell.control { color: var(--text-primary-color); background: var(--success-color); }
+        .cell.floor { display: inline-block; border: none; cursor: default; opacity: 0.92; }
+        .cell.dbl { outline: 2px solid var(--error-color); outline-offset: 1px; }
+        .chev {
+          border: none; background: none; padding: 0 6px 0 0;
+          color: var(--secondary-text-color); cursor: pointer; font-size: 13px;
+        }
+        .chev:hover { color: var(--primary-color); border: none; }
+        .doppelt {
+          margin-left: 8px; font-size: 11px; padding: 1px 8px; border-radius: 6px;
+          color: var(--primary-text-color); background: var(--warning-color);
+        }
+        tr.entrow td {
           background: var(--secondary-background-color);
+          text-align: left; padding: 8px 12px 10px 34px;
         }
-        .cell.read {
-          color: var(--primary-text-color);
-          background: var(--warning-color);
+        .ehint {
+          font-size: 11px; color: var(--secondary-text-color);
+          text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px;
         }
-        .cell.control {
-          color: var(--text-primary-color);
-          background: var(--success-color);
-        }
-        .empty {
-          padding: 32px 24px;
+        .eboxes { display: flex; flex-wrap: wrap; gap: 6px; }
+        .ebox {
+          background: var(--card-background-color);
+          border: 1px solid var(--divider-color);
+          border-radius: 6px; padding: 3px 8px;
+          font-family: var(--code-font-family, monospace); font-size: 11px;
           color: var(--secondary-text-color);
         }
+        .empty { padding: 32px 24px; color: var(--secondary-text-color); }
       </style>
       <div class="card">
         <header>
@@ -242,6 +282,7 @@ class TesseraMatrixPanel extends HTMLElement {
           </div>
         </header>
         ${this._error ? `<div class="error">${this._escape(this._error)}</div>` : ""}
+        ${roles.length ? this._legendTemplate() : ""}
         ${this._previewTemplate(preview)}
         ${this._matrixTemplate(areas, roles)}
       </div>
@@ -257,6 +298,24 @@ class TesseraMatrixPanel extends HTMLElement {
         }
       });
     });
+    this.shadowRoot.querySelectorAll("[data-expand]").forEach((button) => {
+      button.addEventListener("click", () => {
+        if (button.dataset.expand) {
+          this._toggleExpand(button.dataset.expand);
+        }
+      });
+    });
+  }
+
+  _legendTemplate() {
+    return `
+      <section class="legend" aria-label="Legend">
+        <span><span class="swatch read"></span>read</span>
+        <span><span class="swatch control"></span>control (implies read)</span>
+        <span><span class="swatch dbl"></span>doppelt (floor + area)</span>
+        <span>Floor = display · Area = click to edit</span>
+      </section>
+    `;
   }
 
   _previewTemplate(preview) {
@@ -289,14 +348,24 @@ class TesseraMatrixPanel extends HTMLElement {
     if (!areas.length) {
       return '<div class="empty">No Home Assistant areas found.</div>';
     }
+    const roleHead = roles
+      .map(
+        (role) =>
+          `<th class="role-h bl" colspan="2" scope="colgroup">${this._escape(role.name)}</th>`,
+      )
+      .join("");
+    const subHead = roles
+      .map(() => '<th class="sub bl" scope="col">Floor</th><th class="sub" scope="col">Area</th>')
+      .join("");
     return `
       <div class="matrix-wrap">
         <table>
           <thead>
             <tr>
-              <th scope="col">Area</th>
-              ${roles.map((role) => `<th scope="col">${this._escape(role.name)}</th>`).join("")}
+              <th rowspan="2" scope="col">Bereich</th>
+              ${roleHead}
             </tr>
+            <tr>${subHead}</tr>
           </thead>
           <tbody>
             ${areas.map((area) => this._areaRow(area, roles)).join("")}
@@ -307,32 +376,68 @@ class TesseraMatrixPanel extends HTMLElement {
   }
 
   _areaRow(area, roles) {
-    return `
-      <tr>
-        <td>${this._escape(area.name)}</td>
-        ${roles.map((role) => this._grantCell(area, role)).join("")}
-      </tr>
-    `;
+    const floor = this._data?.area_floor?.[area.id];
+    const label = floor ? `${area.name} · ${floor.name}` : area.name;
+    const expanded = this._expanded.has(area.id);
+    const rowDouble = roles.some((role) => this._isDouble(area.id, role.id));
+    const cells = roles
+      .map((role) => this._floorCell(area, role) + this._areaCell(area, role))
+      .join("");
+    const nameCell = `
+      <td>
+        <button type="button" class="chev" data-expand="${this._escape(area.id)}"
+          aria-label="Toggle entities" aria-expanded="${expanded ? "true" : "false"}">
+          ${expanded ? "▾" : "▸"}
+        </button>${this._escape(label)}${rowDouble ? '<span class="doppelt">doppelt</span>' : ""}
+      </td>`;
+    const rows = [`<tr>${nameCell}${cells}</tr>`];
+    if (expanded) {
+      rows.push(this._entityRow(area, roles.length));
+    }
+    return rows.join("");
   }
 
-  _grantCell(area, role) {
-    const grant = this._grantFor(area.id, role.id);
-    // The cell's CSS class and its visible label are the same token.
-    const state = grant.control ? "control" : grant.read ? "read" : "none";
+  _floorCell(area, role) {
+    const state = this._state(this._floorGrantFor(area.id, role.id));
+    const dbl = this._isDouble(area.id, role.id) ? " dbl" : "";
+    return `<td class="bl"><span class="cell floor ${state}${dbl}">${state}</span></td>`;
+  }
+
+  _areaCell(area, role) {
+    const state = this._state(this._grantFor(area.id, role.id));
+    const dbl = this._isDouble(area.id, role.id) ? " dbl" : "";
     const pending = this._pending === `${area.id}::${role.id}`;
     return `
       <td>
         <button
           type="button"
-          class="cell ${state}"
+          class="cell ${state}${dbl}"
           data-area="${this._escape(area.id)}"
           data-role="${this._escape(role.id)}"
           ${this._disabledAttr(pending)}
-          title="Toggle ${this._escape(area.name)} / ${this._escape(role.name)}"
+          title="Toggle area grant ${this._escape(area.name)} / ${this._escape(role.name)}"
         >
           ${pending ? "Saving..." : state}
         </button>
       </td>
+    `;
+  }
+
+  _entityRow(area, roleCount) {
+    const ids = this._data?.entities_by_area?.[area.id] || [];
+    const colspan = 1 + roleCount * 2;
+    const boxes = ids.length
+      ? ids
+          .map((id) => `<span class="ebox">${this._escape(this._entityName(id))}</span>`)
+          .join("")
+      : '<span class="ebox">— keine Entities —</span>';
+    return `
+      <tr class="entrow">
+        <td colspan="${colspan}">
+          <div class="ehint">${ids.length} Entities · erben das Area-Recht</div>
+          <div class="eboxes">${boxes}</div>
+        </td>
+      </tr>
     `;
   }
 

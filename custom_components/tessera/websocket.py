@@ -10,6 +10,7 @@ from homeassistant.components.websocket_api import const as websocket_const
 from homeassistant.components.websocket_api import decorators as websocket_decorators
 from homeassistant.components.websocket_api.connection import ActiveConnection
 from homeassistant.helpers import area_registry as ar
+from homeassistant.helpers import floor_registry as fr
 
 from .config_flow import add_area_grant, encode_grant, remove_area_grant
 from .const import DOMAIN, MODE_ENFORCE
@@ -61,12 +62,22 @@ class MatrixGrant(TypedDict):
     control: bool
 
 
+class MatrixFloor(TypedDict):
+    """Floor metadata for an area — labels and floor-sourced grants."""
+
+    id: str
+    name: str
+
+
 class MatrixResponse(TypedDict):
     """Complete matrix payload returned by Tessera WebSocket commands."""
 
     areas: list[MatrixArea]
     roles: list[MatrixRole]
     grants: dict[str, dict[str, MatrixGrant]]
+    floor_grants: dict[str, dict[str, MatrixGrant]]
+    area_floor: dict[str, MatrixFloor | None]
+    entities_by_area: dict[str, list[str]]
     preview: MonitorPreview
     lint: LintReport
 
@@ -226,10 +237,14 @@ def _matrix_response(
     """Build the panel payload from schema-valid config and policy."""
     areas = _areas(hass)
     roles = _roles(config)
+    area_floor = _area_floor(hass)
     return {
         "areas": areas,
         "roles": roles,
         "grants": _grants(policy, areas, roles),
+        "floor_grants": _floor_grants(policy, areas, roles, area_floor),
+        "area_floor": area_floor,
+        "entities_by_area": _entities_by_area(hass, areas),
         "preview": preview,
         "lint": preview["lint"],
     }
@@ -275,6 +290,63 @@ def _grant_leaf(leaf: PermissionLeaf | None) -> MatrixGrant:
         "read": bool(leaf and leaf.get("read") is True),
         "control": bool(leaf and leaf.get("control") is True),
     }
+
+
+def _area_floor(hass: HomeAssistant) -> dict[str, MatrixFloor | None]:
+    """Return each area's floor (id + name), or None for a floorless area.
+
+    The floor registry is only fetched once an area actually carries a floor,
+    so instances (and tests) without floors never touch it.
+    """
+    floor_reg: Any = None
+    result: dict[str, MatrixFloor | None] = {}
+    for area in ar.async_get(hass).async_list_areas():
+        floor_id = area.floor_id
+        if not floor_id:
+            result[area.id] = None
+            continue
+        if floor_reg is None:
+            floor_reg = fr.async_get(hass)
+        floor = floor_reg.async_get_floor(floor_id)
+        result[area.id] = {
+            "id": floor_id,
+            "name": floor.name if floor is not None else floor_id,
+        }
+    return result
+
+
+def _floor_grants(
+    policy: TesseraPolicyData,
+    areas: list[MatrixArea],
+    roles: list[MatrixRole],
+    area_floor: dict[str, MatrixFloor | None],
+) -> dict[str, dict[str, MatrixGrant]]:
+    """Return the floor-sourced grant for each visible Area x Role cell.
+
+    A cell's floor source is the grant on the area's *floor* (if any) — the
+    other half of the provenance split the panel renders next to the direct
+    area grant, so an overlap (both set) is visible as a redundant double.
+    """
+    role_ids = [role["id"] for role in roles]
+    floor_grants_policy = policy["floor_grants"]
+    result: dict[str, dict[str, MatrixGrant]] = {}
+    for area in areas:
+        area_id = area["id"]
+        floor = area_floor.get(area_id)
+        role_map = floor_grants_policy.get(floor["id"], {}) if floor else {}
+        result[area_id] = {
+            role_id: _grant_leaf(role_map.get(role_id)) for role_id in role_ids
+        }
+    return result
+
+
+def _entities_by_area(
+    hass: HomeAssistant, areas: list[MatrixArea]
+) -> dict[str, list[str]]:
+    """Return the entity ids Tessera resolves for each area (for the expand)."""
+    resolver = AreaEntityResolver.from_hass(hass)
+    resolution = resolver.entity_ids_for_areas([area["id"] for area in areas])
+    return {area["id"]: list(resolution.by_area.get(area["id"], ())) for area in areas}
 
 
 def _get_loaded_entry_data(hass: HomeAssistant) -> tuple[str, dict[str, Any]]:

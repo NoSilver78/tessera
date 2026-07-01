@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 from custom_components.tessera.const import DOMAIN
+from custom_components.tessera.resolver import AreaEntityResolution
 from custom_components.tessera.schema import default_config_data, default_policy_data
 from custom_components.tessera.websocket import (
     async_get_matrix,
@@ -22,6 +23,27 @@ class FakeArea:
 
     id: str
     name: str
+    floor_id: str | None = None
+
+
+@dataclass(frozen=True)
+class FakeFloor:
+    """Small FloorEntry-compatible test double."""
+
+    floor_id: str
+    name: str
+
+
+class FakeFloorRegistry:
+    """Floor registry double for matrix tests."""
+
+    def __init__(self, floors: list[FakeFloor]) -> None:
+        """Index floors by id."""
+        self._floors = {floor.floor_id: floor for floor in floors}
+
+    def async_get_floor(self, floor_id: str) -> FakeFloor | None:
+        """Return the floor for ``floor_id`` (or None)."""
+        return self._floors.get(floor_id)
 
 
 class FakeAreaRegistry:
@@ -37,11 +59,21 @@ class FakeAreaRegistry:
 
 
 class FakeResolver:
-    """Deterministic area resolver for preview compilation."""
+    """Deterministic area resolver for preview compilation and the panel expand."""
 
     def entity_ids_for_area(self, area_id: str) -> tuple[str, ...]:
         """Resolve fake areas to fake entities."""
         return ("light.sofa", "switch.lamp") if area_id == "living" else ()
+
+    def entity_ids_for_floor(self, floor_id: str) -> tuple[str, ...]:
+        """Resolve a floor to its entities."""
+        return ("light.sofa", "switch.lamp") if floor_id == "ground" else ()
+
+    def entity_ids_for_areas(self, area_ids: Any) -> AreaEntityResolution:
+        """Resolve multiple areas at once (used by the panel entity expand)."""
+        by_area = {aid: self.entity_ids_for_area(aid) for aid in area_ids}
+        entity_ids = {eid for ids in by_area.values() for eid in ids}
+        return AreaEntityResolution(entity_ids=entity_ids, by_area=by_area)
 
 
 class FakeStore:
@@ -307,6 +339,11 @@ async def test_matrix_preview_includes_cross_role_lint_report(
         def entity_ids_for_floor(self, floor_id: str) -> tuple[str, ...]:
             return ()
 
+        def entity_ids_for_areas(self, area_ids: Any) -> AreaEntityResolution:
+            by_area = {aid: self.entity_ids_for_area(aid) for aid in area_ids}
+            entity_ids = {eid for ids in by_area.values() for eid in ids}
+            return AreaEntityResolution(entity_ids=entity_ids, by_area=by_area)
+
     monkeypatch.setattr(
         "custom_components.tessera.websocket.ar.async_get",
         lambda hass: FakeAreaRegistry([FakeArea("living", "Living Room")]),
@@ -365,3 +402,58 @@ def test_matrix_websocket_requires_admin(matrix_hass: FakeHass) -> None:
             FakeConnection(is_admin=False),
             {"id": 1, "type": "tessera/matrix/get"},
         )
+
+
+@pytest.mark.asyncio
+async def test_matrix_get_splits_floor_and_area_sources_with_entities(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Matrix get exposes floor/area per-source grants, area floors, and entities."""
+    config = _config()
+    policy = default_policy_data()
+    policy["area_grants"] = {"living": {"viewer": {"read": True}}}
+    policy["floor_grants"] = {"ground": {"viewer": {"read": True, "control": True}}}
+    store = FakeStore(config, policy)
+    hass = FakeHass(store)
+
+    monkeypatch.setattr(
+        "custom_components.tessera.websocket.ar.async_get",
+        lambda hass: FakeAreaRegistry(
+            [
+                FakeArea("kitchen", "Kitchen", floor_id="ground"),
+                FakeArea("living", "Living Room", floor_id="ground"),
+                FakeArea("attic", "Attic"),
+            ]
+        ),
+    )
+    monkeypatch.setattr(
+        "custom_components.tessera.websocket.fr.async_get",
+        lambda hass: FakeFloorRegistry([FakeFloor("ground", "Ground")]),
+    )
+    monkeypatch.setattr(
+        "custom_components.tessera.websocket.AreaEntityResolver.from_hass",
+        classmethod(lambda cls, hass: FakeResolver()),
+    )
+
+    result = await async_get_matrix(hass)
+
+    # area -> floor labels (floorless area resolves to None)
+    assert result["area_floor"]["living"] == {"id": "ground", "name": "Ground"}
+    assert result["area_floor"]["attic"] is None
+    # the double: living/viewer is granted via BOTH the floor and a direct area grant
+    assert result["floor_grants"]["living"]["viewer"] == {"read": True, "control": True}
+    assert result["grants"]["living"]["viewer"] == {"read": True, "control": False}
+    # kitchen: floor source only (no direct area grant)
+    assert result["floor_grants"]["kitchen"]["viewer"] == {
+        "read": True,
+        "control": True,
+    }
+    assert result["grants"]["kitchen"]["viewer"] == {"read": False, "control": False}
+    # attic: floorless -> no floor source
+    assert result["floor_grants"]["attic"]["viewer"] == {
+        "read": False,
+        "control": False,
+    }
+    # entities per area (from the resolver) power the row expand
+    assert result["entities_by_area"]["living"] == ["light.sofa", "switch.lamp"]
+    assert result["entities_by_area"]["kitchen"] == []
