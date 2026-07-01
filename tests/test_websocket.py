@@ -11,6 +11,7 @@ from custom_components.tessera.resolver import AreaEntityResolution
 from custom_components.tessera.schema import default_config_data, default_policy_data
 from custom_components.tessera.websocket import (
     async_get_matrix,
+    async_set_matrix_floor_grant,
     async_set_matrix_grant,
     websocket_matrix_get,
 )
@@ -171,6 +172,27 @@ def _install_matrix_doubles(monkeypatch: pytest.MonkeyPatch) -> None:
                 FakeArea("living", "Living Room"),
             ]
         ),
+    )
+    monkeypatch.setattr(
+        "custom_components.tessera.websocket.AreaEntityResolver.from_hass",
+        classmethod(lambda cls, hass: FakeResolver()),
+    )
+
+
+def _install_floor_doubles(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Patch area+floor registries and the resolver for floor-grant tests."""
+    monkeypatch.setattr(
+        "custom_components.tessera.websocket.ar.async_get",
+        lambda hass: FakeAreaRegistry(
+            [
+                FakeArea("living", "Living Room", floor_id="ground"),
+                FakeArea("kitchen", "Kitchen", floor_id="ground"),
+            ]
+        ),
+    )
+    monkeypatch.setattr(
+        "custom_components.tessera.websocket.fr.async_get",
+        lambda hass: FakeFloorRegistry([FakeFloor("ground", "Ground")]),
     )
     monkeypatch.setattr(
         "custom_components.tessera.websocket.AreaEntityResolver.from_hass",
@@ -457,3 +479,83 @@ async def test_matrix_get_splits_floor_and_area_sources_with_entities(
     # entities per area (from the resolver) power the row expand
     assert result["entities_by_area"]["living"] == ["light.sofa", "switch.lamp"]
     assert result["entities_by_area"]["kitchen"] == []
+
+
+@pytest.mark.asyncio
+async def test_matrix_set_floor_grant_writes_and_control_implies_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A floor grant write is schema-aware, control implies read, covers the floor."""
+    _install_floor_doubles(monkeypatch)
+    store = FakeStore(_config(), default_policy_data())
+    hass = FakeHass(store)
+
+    result = await async_set_matrix_floor_grant(
+        hass, floor_id="ground", role_id="operator", read=False, control=True
+    )
+
+    assert store.policy["floor_grants"]["ground"]["operator"] == {
+        "read": True,
+        "control": True,
+    }
+    assert result["floor_grants"]["living"]["operator"] == {
+        "read": True,
+        "control": True,
+    }
+    assert result["floor_grants"]["kitchen"]["operator"] == {
+        "read": True,
+        "control": True,
+    }
+    assert store.saved_policies == [store.policy]
+
+
+@pytest.mark.asyncio
+async def test_matrix_set_floor_grant_rejects_unknown_floor_and_role(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unknown floor or role ids fail closed before any policy write."""
+    _install_floor_doubles(monkeypatch)
+    store = FakeStore(_config(), default_policy_data())
+    hass = FakeHass(store)
+
+    with pytest.raises(LookupError, match="Unknown Tessera floor"):
+        await async_set_matrix_floor_grant(
+            hass, floor_id="attic", role_id="operator", read=True, control=False
+        )
+    with pytest.raises(LookupError, match="Unknown Tessera role"):
+        await async_set_matrix_floor_grant(
+            hass, floor_id="ground", role_id="ghost", read=True, control=False
+        )
+
+    assert store.saved_policies == []
+
+
+@pytest.mark.asyncio
+async def test_matrix_set_floor_grant_in_enforce_reapplies_native(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CXR-02: saving a floor grant in enforce re-applies via the central handler."""
+    config = _config()
+    config["mode"] = "enforce"
+    store = FakeStore(config, default_policy_data())
+    hass = FakeHass(store)
+    _install_floor_doubles(monkeypatch)
+
+    calls: list[tuple[Any, str, dict[str, Any]]] = []
+
+    async def _spy_compile(
+        spy_hass: Any, entry_id: str, entry_data: dict[str, Any]
+    ) -> None:
+        calls.append((spy_hass, entry_id, entry_data))
+
+    monkeypatch.setattr(
+        "custom_components.tessera._compile_for_mode_safely", _spy_compile
+    )
+
+    await async_set_matrix_floor_grant(
+        hass, floor_id="ground", role_id="operator", read=True, control=False
+    )
+
+    assert store.saved_policies, "policy must be persisted before re-apply"
+    assert len(calls) == 1
+    assert calls[0][1] == "entry-1"
