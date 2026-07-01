@@ -2,7 +2,7 @@
 
 **Von:** Claude (Architektur) · **An:** Codex (Agentensystem) · **Zweck:** konsolidierter Stand aller Anfragen, Ergebnisse und Aufgabenstellungen der Design-Phase „Tessera-Bedienung + Authentik + Mehrparteien". Ein Einstiegspunkt.
 
-> ⚠️ **Ein Gate ist noch offen:** die **Mehrparteien-Isolations-Machbarkeit** (Abschnitt 4) läuft noch als separater Agenten-Workflow. Ihr Go/No-Go ist der **übergeordnete** Entscheid — er bestimmt, ob mehrparteien-spezifische Aufgaben auf **einer** HA-Instanz überhaupt sinnvoll sind. Wird hier ergänzt, sobald fertig.
+> ✅ **Der übergeordnete Gate ist entschieden (Abschnitt 4):** Echte Mieter-Isolation auf EINER HA-Instanz ist quellcode-verifiziert **NICHT mit vertretbarem Aufwand erreichbar** (render_template, History/Logbook-DB-Reads, Automation-Kontext-Stripping, Camera-Proxy, Admin-Bypass lecken lautlos; Tessera deckt nur die native Permission-Ebene). **Empfehlung: getrennte HA-Instanzen pro Einheit.** → Damit ist Tesseras Scope geklärt: **Ein-Haushalt-/Intra-Instanz-RBAC**, NICHT Mandantentrennung. Voller Report: `spike/reports/tessera-multitenant-isolation-feasibility-2026-07-01.md`. **Owner-Entscheidung zur Architektur (Abschnitt 4) steht noch aus.**
 
 ---
 
@@ -35,9 +35,9 @@ Tessera ist eine fertige, dev-erprobte, **öffentliche** HA-RBAC-Integration (`N
 ### 3a. READY — isolations-unabhängig, sofort spec-fertig
 - **T1 — `by_user`-Membership-Writer + Panel-Sektion.** Der Soak-Unblocker (schließt „User→Rolle"-Lücke). **Codex-Sicherheits-Spec (verbindlich):** WS-Service `tessera/membership/set` **admin-only** (`require_admin`), **kein** direkter Native-Auth-Write; schema-validiert, unbekannte User/Rolle **fail-closed**; in `enforce` **zwingend** über den zentralen `_compile_for_mode_safely`/Apply-Guard-Pfad (wie Matrix-Updates); **redacted** Audit (User-/Rollen-IDs ja, keine Claims/Secrets). **Tests:** unknown user/role, last-admin/owner-risk, owner/system-generated-Target-Rejection, kein Native-Write bei Block, recompile-failure-fail-safe. Membership-UI-Ort = **Panel** (nicht Options-Flow).
 
-### 3b. GATED auf das Isolations-Verdikt (Abschnitt 4) — NICHT vor Go bauen
-- **T2 — Effective-Access-Read-Schicht + Preflight-DTO.** Forward (per-User) + reverse (per-Area), Herkunfts-Attribution, **explizite PASS/BLOCK-Felder** (Owner-survives, Allow-only, D9, Linter, Auth-Version) für die UI. *(Codex-Fund: heute liefert der Plan diese nicht als PASS.)*
-- **T4 — Leak-Pfad-Härtung (nur wenn Isolation auf einer Instanz machbar):** je nach Verdikt WS-Command-Filter (render_template etc.), Recorder/Logbook/History/Event-Filter, Skript-/Szenen-Isolation. **Scope steht erst nach Abschnitt 4 fest.**
+### 3b. READY nach dem Isolations-Verdikt (Tessera-Scope = Intra-Instanz-RBAC, ungated)
+- **T2 — Effective-Access-Read-Schicht + Preflight-DTO.** Forward (per-User) + reverse (per-Area), Herkunfts-Attribution, **explizite PASS/BLOCK-Felder** (Owner-survives, Allow-only, D9, Linter, Auth-Version) für die UI. *(Codex-Fund: heute liefert der Plan diese nicht als PASS.)* Nicht mehr isolations-gegated — Tesseras Scope ist geklärt.
+- ~~**T4 — Leak-Pfad-Härtung für Ein-Instanz-Isolation**~~ **ENTFÄLLT.** Das Isolations-Verdikt (§4) empfiehlt getrennte Instanzen; die Tenant-Grenze ist die Instanz, nicht Tessera. Kein WS-Filter/Proxy/Core-Patch-Projekt in Tessera.
 
 ### 3c. GATED auf die `by_group`-Gates (Authentik-Track, parallel spezifizierbar, nicht scharf)
 - **T3 — Authentik-Spec-Branch.** Mindest-Gates VOR Aktivierung: Claim-Hook (redacted), Effective-Union `by_user ∪ valid_by_group` mit Herkunft, **Linter+Preflight prüfen dieselbe Union wie Apply**, leerer/kaputter Claim entfernt nie still Rollen (block/fail-safe), Owner-Survival-Tests, **D12-Live-Beweis**. **„Nur das Compiler-Flag drehen" ist verboten** (koordinierte Änderung über Compiler+Mode-Manager+Linter+Effective-View+Tests). OIDC-Integration klären (`hass-oidc-auth` vs `auth_oidc` — liefert wer den rohen `groups`-Claim?).
@@ -45,9 +45,9 @@ Tessera ist eine fertige, dev-erprobte, **öffentliche** HA-RBAC-Integration (`N
 ### 3d. Später
 - entity_overrides-UI (backend-real, UX-unsichtbar) · Rollen-Rename/Duplicate/Delete + Bulk · Deny-Evidence (erst synthetisch, dann real+Retention) · Wizard (Panel-Stepper, nur Erststart/enforce-Ramp/Authentik).
 
-## 4. PENDING GATE — Mehrparteien-Isolations-Machbarkeit (übergeordnet)
-**Frage:** Kann echte Mieter-Isolation auf EINER HA-Instanz erreicht werden — oder leckt sie über `render_template`/History/Logbook/Assist/indirekte Steuerung (Skript/Szene) trotz nativer Permissions? Ein laufender Agenten-Workflow enumeriert **jeden** tenant-erreichbaren Pfad, verifiziert die native Permission-Durchsetzung **am echten HA-Quellcode** und klassifiziert (nativ-gated / durch Custom-Component schließbar / braucht Architektur = Proxy/Core-Patch).
-**Konsequenz:** Fällt das Verdikt negativ (Ein-Instanz nicht wasserdicht), ist die ehrliche Alternative **getrennte HA-Instanzen pro Einheit** → dann entfallen T4 + große Teile des Mehrparteien-Umbaus, und Tessera bleibt das Haushalts-RBAC pro Instanz. **→ Landkarte + Go/No-Go wird hier ergänzt, bevor 3b/3c gebaut wird.**
+## 4. GATE ENTSCHIEDEN — Mehrparteien-Isolations-Machbarkeit (übergeordnet)
+**Verdikt (quellcode-verifiziert gegen HA 2025.1.4, voller Report `spike/reports/tessera-multitenant-isolation-feasibility-2026-07-01.md`):** Echte Mieter-Isolation auf EINER Instanz = **NO-GO mit vertretbarem Aufwand.** Tessera deckt nur die native Permission-Ebene (state-read + entity-service-control, konditional). **Lautlos leckende needs-architecture-Löcher:** permissiver Group-Merge (`merge.py:26-49` + `system-users`=read-all), Admin-Bypass, **Automation-Kontext-Stripping** (`automation/__init__.py:644`, Aktionen laufen als System), **History/Logbook/Recorder-DB-Reads** (kein per-user-Filter, `/api/logbook` dumpt das Haus), **render_template** (kein require_admin/check_entity → jeder liest jede Entity), **Camera/Image-Proxy** (HTTP-Bytes ohne Hook). Custom-WS-Filter schließt nur einen Teil; Reverse-Proxy sieht nicht in Automation/Template-Sensoren; Core-Patch = untragbarer Fork.
+**Empfehlung: getrennte HA-Instanzen pro Einheit** (echte Isolation per Prozess-/Auth-Grenze; geteilte HW über eine Whitelist-„Haus-Instanz"). **Konsequenz fürs Backlog:** die Tenant-Grenze ist die **Instanz**, nicht Tessera → **T4 entfällt** (kein Ein-Instanz-Leak-Pfad-Härtungsprojekt). Tesseras Scope ist damit **geklärt + unblockt**: Ein-Haushalt-/Intra-Instanz-RBAC. T1/T2/T3 bleiben gültig (Tessera pro Instanz). **→ Owner-Entscheidung zur Architektur ausstehend.**
 
 ## 5. Offene Owner-Entscheidungen (blockieren Detail-Specs)
 - **Doku↔Code-Divergenz (vor Authentik):** User ohne wirksame Rolle — Code fällt auf Default-Rolle, `concept.md` fordert enforce-refusal. Welches Verhalten ist korrekt?
