@@ -12,7 +12,12 @@ from homeassistant.components.websocket_api.connection import ActiveConnection
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import floor_registry as fr
 
-from .config_flow import add_area_grant, encode_grant, remove_area_grant
+from .config_flow import (
+    add_area_grant,
+    encode_grant,
+    remove_area_grant,
+    set_floor_grant,
+)
 from .const import DOMAIN, MODE_ENFORCE
 from .linter import LintReport
 from .monitor import (
@@ -35,6 +40,7 @@ if TYPE_CHECKING:
 
 TYPE_MATRIX_GET = "tessera/matrix/get"
 TYPE_MATRIX_SET_GRANT = "tessera/matrix/set_grant"
+TYPE_MATRIX_SET_FLOOR_GRANT = "tessera/matrix/set_floor_grant"
 
 
 class MatrixArea(TypedDict):
@@ -86,6 +92,7 @@ def async_register(hass: HomeAssistant) -> None:
     """Register Tessera matrix WebSocket commands."""
     async_register_command(hass, websocket_matrix_get)
     async_register_command(hass, websocket_matrix_set_grant)
+    async_register_command(hass, websocket_matrix_set_floor_grant)
 
 
 @websocket_decorators.require_admin
@@ -126,6 +133,41 @@ async def websocket_matrix_set_grant(
         result = await async_set_matrix_grant(
             hass,
             area_id=cast(str, msg["area_id"]),
+            role_id=cast(str, msg["role_id"]),
+            read=cast(bool, msg["read"]),
+            control=cast(bool, msg["control"]),
+        )
+    except TesseraSchemaError as err:
+        connection.send_error(msg["id"], websocket_const.ERR_INVALID_FORMAT, str(err))
+        return
+    except LookupError as err:
+        connection.send_error(msg["id"], websocket_const.ERR_NOT_FOUND, str(err))
+        return
+
+    connection.send_result(msg["id"], result)
+
+
+@websocket_decorators.require_admin
+@websocket_decorators.websocket_command(
+    {
+        vol.Required("type"): TYPE_MATRIX_SET_FLOOR_GRANT,
+        vol.Required("floor_id"): str,
+        vol.Required("role_id"): str,
+        vol.Required("read"): bool,
+        vol.Required("control"): bool,
+    }
+)
+@websocket_decorators.async_response
+async def websocket_matrix_set_floor_grant(
+    hass: HomeAssistant,
+    connection: ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Persist one Floor x Role grant and return the refreshed matrix."""
+    try:
+        result = await async_set_matrix_floor_grant(
+            hass,
+            floor_id=cast(str, msg["floor_id"]),
             role_id=cast(str, msg["role_id"]),
             read=cast(bool, msg["read"]),
             control=cast(bool, msg["control"]),
@@ -199,6 +241,56 @@ async def async_set_matrix_grant(
             # falls safe to monitor on error. This runs INSIDE the held lock and
             # uses raw saves (fail-safe) — it must not re-acquire the lock. Late
             # import breaks the cycle (__init__ imports this module, not reverse).
+            from . import _compile_for_mode_safely
+
+            await _compile_for_mode_safely(hass, entry_id, entry_data)
+        return _matrix_response(hass, config, policy, preview)
+
+
+async def async_set_matrix_floor_grant(
+    hass: HomeAssistant,
+    *,
+    floor_id: str,
+    role_id: str,
+    read: bool,
+    control: bool,
+) -> MatrixResponse:
+    """Persist one schema-aware floor grant and return the refreshed matrix.
+
+    A floor grant covers every area on the floor, so the refreshed payload
+    updates all of those areas' Floor cells at once. In enforce a saved floor
+    grant re-applies natively through the central guarded mode handler (CXR-02),
+    like a direct area grant; the write is serialized under the mutation lock.
+    """
+    async with mutation_lock(hass):
+        entry_id, entry_data = _get_loaded_entry_data(hass)
+        store = cast(TesseraStore, entry_data["store"])
+        config = await store.async_load_config()
+        policy = await store.async_load_policy()
+
+        known_floor_ids = {floor["id"] for floor in _area_floor(hass).values() if floor}
+        if floor_id not in known_floor_ids:
+            raise LookupError(f"Unknown Tessera floor: {floor_id}")
+        if role_id not in config["roles"]:
+            raise LookupError(f"Unknown Tessera role: {role_id}")
+
+        policy = set_floor_grant(
+            config,
+            policy,
+            floor_id=floor_id,
+            role_id=role_id,
+            read=read,
+            control=control,
+        )
+
+        await store.async_save_policy(policy)
+        preview = await _refresh_preview(
+            hass, entry_id, entry_data, store, config, policy
+        )
+        if config["mode"] == MODE_ENFORCE:
+            # CXR-02: enforce must re-apply the saved floor grant to native auth,
+            # not merely refresh the preview. Same guarded path as area grants;
+            # runs INSIDE the held lock with raw saves (must not re-acquire).
             from . import _compile_for_mode_safely
 
             await _compile_for_mode_safely(hass, entry_id, entry_data)

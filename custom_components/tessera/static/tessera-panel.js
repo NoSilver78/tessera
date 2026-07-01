@@ -88,6 +88,43 @@ class TesseraMatrixPanel extends HTMLElement {
     }
   }
 
+  /** Advance one Floor x Role cell to its next grant state and persist it. */
+  async _toggleFloor(areaId, roleId) {
+    if (!this._hass || this._pending) {
+      return;
+    }
+    const floor = this._data?.area_floor?.[areaId];
+    if (!floor) {
+      return;
+    }
+    const current = this._floorGrantFor(areaId, roleId);
+    // Cycle the Floor cell: none -> read -> read+control -> none. A floor grant
+    // covers every area on the floor, so the refreshed matrix updates them all.
+    const next = current.control
+      ? { read: false, control: false }
+      : current.read
+        ? { read: true, control: true }
+        : { read: true, control: false };
+
+    this._pending = `floor::${floor.id}::${roleId}`;
+    this._error = "";
+    this._render();
+    try {
+      this._data = await this._hass.connection.sendMessagePromise({
+        type: "tessera/matrix/set_floor_grant",
+        floor_id: floor.id,
+        role_id: roleId,
+        read: next.read,
+        control: next.control,
+      });
+    } catch (err) {
+      this._error = this._messageFromError(err);
+    } finally {
+      this._pending = "";
+      this._render();
+    }
+  }
+
   _toggleExpand(areaId) {
     if (this._expanded.has(areaId)) {
       this._expanded.delete(areaId);
@@ -227,7 +264,7 @@ class TesseraMatrixPanel extends HTMLElement {
           position: sticky; top: 0; z-index: 1;
         }
         th.sub { font-weight: 400; font-size: 12px; text-transform: none; }
-        th:first-child, td:first-child {
+        th:first-child:not(.sub), td:first-child {
           position: sticky; left: 0; text-align: left;
           background: var(--card-background-color); z-index: 2;
         }
@@ -298,6 +335,15 @@ class TesseraMatrixPanel extends HTMLElement {
         }
       });
     });
+    this.shadowRoot
+      .querySelectorAll("[data-floorarea][data-role]")
+      .forEach((button) => {
+        button.addEventListener("click", () => {
+          if (button.dataset.floorarea && button.dataset.role) {
+            this._toggleFloor(button.dataset.floorarea, button.dataset.role);
+          }
+        });
+      });
     this.shadowRoot.querySelectorAll("[data-expand]").forEach((button) => {
       button.addEventListener("click", () => {
         if (button.dataset.expand) {
@@ -313,7 +359,7 @@ class TesseraMatrixPanel extends HTMLElement {
         <span><span class="swatch read"></span>read</span>
         <span><span class="swatch control"></span>control (implies read)</span>
         <span><span class="swatch dbl"></span>doppelt (floor + area)</span>
-        <span>Floor = display · Area = click to edit</span>
+        <span>Floor + Area: click to edit</span>
       </section>
     `;
   }
@@ -398,9 +444,28 @@ class TesseraMatrixPanel extends HTMLElement {
   }
 
   _floorCell(area, role) {
+    const floor = this._data?.area_floor?.[area.id];
     const state = this._state(this._floorGrantFor(area.id, role.id));
     const dbl = this._isDouble(area.id, role.id) ? " dbl" : "";
-    return `<td class="bl"><span class="cell floor ${state}${dbl}">${state}</span></td>`;
+    if (!floor) {
+      // Floorless area: no floor grant to toggle, render display-only.
+      return `<td class="bl"><span class="cell floor ${state}">${state}</span></td>`;
+    }
+    const pending = this._pending === `floor::${floor.id}::${role.id}`;
+    return `
+      <td class="bl">
+        <button
+          type="button"
+          class="cell ${state}${dbl}"
+          data-floorarea="${this._escape(area.id)}"
+          data-role="${this._escape(role.id)}"
+          ${this._disabledAttr(pending)}
+          title="Toggle floor grant ${this._escape(floor.name)} / ${this._escape(role.name)}"
+        >
+          ${pending ? "Saving..." : state}
+        </button>
+      </td>
+    `;
   }
 
   _areaCell(area, role) {

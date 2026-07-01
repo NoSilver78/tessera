@@ -7,6 +7,21 @@ Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-07-01
+
+### Hinzugefügt
+- **Floor-Grants im Panel editierbar:** die `Floor`-Zellen des Area-Boards sind jetzt klickbar
+  (none → read → read+control → none) und schreiben über das neue WS-Command
+  `tessera/matrix/set_floor_grant` — ein Klick setzt den Grant der **ganzen Etage**, alle Areas des
+  Floors aktualisieren sich. In enforce wird nativ re-applied (CXR-02, guarded, fail-safe-to-monitor).
+  Floor-Grants haben damit erstmals ein echtes UI (bisher nur der Admin-Service). Areas ohne Etage
+  bleiben in der Floor-Spalte display-only.
+
+### Behoben
+- **Die erste Sub-Header-Zelle („Floor") erbte fälschlich das Sticky-Style der Bereich-Spalte**
+  (`th:first-child` traf auch den Sub-Header) und sah dadurch anders aus als die übrigen
+  Floor/Area-Header — Selektor auf `th:first-child:not(.sub)` eingegrenzt.
+
 ## [0.5.1] — 2026-07-01
 
 ### Behoben
