@@ -7,6 +7,15 @@ Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Entfernt
+- **Spike-Harness-Komponente** (`spike/tools/tessera_spike/harness/`) aus dem Repo entfernt — die
+  ladbare HA-Test-Komponente aus Phase 0, die `docs/spec-phase0.md` ausdrücklich als „nach Spike
+  entfernbar" markiert und die nie an Nutzer ausgeliefert wurde (HACS installiert nur
+  `custom_components/tessera/`). Sie enthielt eine zweite `manifest.json`, über die der Hassfest-Helper
+  von `hacs/default` (`integration_path` — naiver `*manifest.json`-Glob über das gesamte Repo, verlangt
+  **genau eine**) stolperte. Die Spike-Probe-Skripte (`d0_preflight_spike.py` wird weiterhin von der
+  Test-Suite geprüft), -Evidence und -Reports bleiben erhalten.
+
 ## [0.6.1] — 2026-07-02
 
 ### Geändert
