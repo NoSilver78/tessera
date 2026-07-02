@@ -59,7 +59,7 @@ gebrauchen können** — steht in der **[ROADMAP](ROADMAP.md)** und in **[CONTRI
 4. **Home Assistant neu starten.**
 5. **Einstellungen → Geräte & Dienste → Integration hinzufügen → Tessera**.
 
-**Getestete HA-Version:** Home Assistant **2026.6.4** (siehe *[Version-Guard](#version-guard-private-ha-apis)*).
+**Getestete HA-Version:** Home Assistant **2026.7.0** (siehe *[Version-Guard](#version-guard-private-ha-apis)*).
 Auf einer abweichenden HA-Version blockiert der Laufzeit-Guard den `enforce`-Schreibpfad und hält
 Tessera im read-only `monitor`-Zustand.
 
@@ -106,7 +106,7 @@ Tessera schreibt teils über **private/undokumentierte HA-Auth-APIs**, für die 
 Stabilitätsgarantie gibt — sie können zwischen Releases brechen. Schutz:
 
 - **Aktiver Schutz (Laufzeit-Guard):** Der Auth-Schreibpfad prüft im Code auf die **exakt getestete**
-  HA-Version (`SUPPORTED_HA_AUTH_VERSION`, derzeit **2026.6.4** — exakter Gleichheits-Match). Auf jeder
+  HA-Version (`SUPPORTED_HA_AUTH_VERSION`, derzeit **2026.7.0** — exakter Gleichheits-Match). Auf jeder
   abweichenden Version wird der Schreibpfad **fail-closed blockiert** und `enforce` fällt auf den
   read-only `monitor`-Zustand zurück — **kein** nativer Write.
 - Ein zusätzlicher `hacs.json`-Pin der HA-Mindestversion ist **bewusst noch nicht** gesetzt (die

@@ -18,7 +18,7 @@ from ._user_helpers import _user_group_ids
 from .const import MODE_OFF
 from .schema import TesseraConfigData
 
-SUPPORTED_HA_AUTH_VERSION = "2026.6.4"
+SUPPORTED_HA_AUTH_VERSION = "2026.7.0"
 TESSERA_GROUP_PREFIX = "tessera:"
 GROUP_ID_ADMIN = "system-admin"
 GROUP_ID_READ_ONLY = "system-read-only"
