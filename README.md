@@ -11,8 +11,9 @@ Home-Assistant-Auth-Store. **Kein Monkeypatch, kein Core-Fork.**
 > ⚠️ **Sicherheitskritische Integration.** Tessera verändert, wer in deiner Home-Assistant-Instanz
 > was sehen und tun darf. Im `enforce`-Modus **schreibt Tessera aktiv** in den HA-Auth-Store. Lies das
 > **[Sicherheitsmodell](#sicherheitsmodell-ehrlich)** unten, bevor du `enforce` aktivierst — und beachte
-> den **[Projektstatus](#projektstatus)**: Durchsetzung ist gebaut und verdrahtet, aber noch nicht in
-> der Praxis (End-to-End/Soak/Dogfood) bewiesen. Beginne mit `monitor`.
+> den **[Projektstatus](#projektstatus)**: Durchsetzung ist gebaut, verdrahtet und in einer **Live-Instanz
+> nachgewiesen** (Dev-E2E + laufender Betrieb); breite Erprobung über viele Setups steht noch aus.
+> **Beginne trotzdem mit `monitor`**, sichte die berechneten Verdicts und wechsle erst dann bewusst zu `enforce`.
 
 ## Was Tessera tut
 
@@ -24,30 +25,33 @@ Home-Assistant-Auth-Store. **Kein Monkeypatch, kein Core-Fork.**
 - **Linter** — prüft Policies vor dem Anwenden auf Konflikte und Lücken.
 - **Dual-Mode-Mitgliedschaft** — lokale Rollen (`by_user`, Baseline, ohne Fremdabhängigkeit) **oder**
   additiv ein Mapping aus einem externen IdP (`by_group`, z. B. Authentik/OIDC — optional).
-- **Admin-Panel** „Tessera" in der HA-Seitenleiste (nur Administratoren).
+- **Admin-Panel** „Tessera" (Area-Board) in der HA-Seitenleiste (nur Administratoren): je Rolle die
+  Herkunftsspalten **Floor | Area** (klickbar zum Setzen von Grants), Doppelvergabe-Markierung und
+  aufklappbare Bereiche bis auf Entity-Ebene.
 - **Drei Betriebsmodi** mit nicht-eingreifendem Default — siehe unten.
 
 ## Projektstatus
 
-**Aktiver Aufbau · noch kein Release · noch nicht für den Produktiveinsatz freigegeben.**
+**Veröffentlicht (v0.6.0) · `enforce` dev-erprobt und in einer Live-Instanz aktiv · breite Multi-Setup-Erprobung erwünscht.**
 
 | Baustein | Stand |
 |---|---|
 | **Core** (Store · Compiler · Linter · Schema · Config-Flow) | ✅ funktionsfähig |
 | **Monitor** (read-only Vorschau + Matrix-Panel) | ✅ funktionsfähig |
 | **Enforce-Maschinerie** (Plan · Bindings · Write+Guards · Restore/Recovery) | ✅ gebaut, adversarial gegated |
-| **Enforce-Verdrahtung** (`mode=enforce` schaltet scharf) | ✅ verdrahtet (E3.5) — `mode=enforce` schreibt nativen Auth; Fehler → fail-safe auf `monitor` |
-| **Echter End-to-End-Test gegen eine Dev-Instanz + Soak** | ⏳ ausstehend (vor Praxiseinsatz) |
-| **HACS-Aktivierung** (`hacs.json` · HACS+hassfest-CI · Brand-Icon) | ✅ erledigt (Datei-Check braucht öffentliches Repo) |
-| **HACS-Release** (getaggtes Release + Public-Flip) | ⏳ ausstehend |
+| **Enforce-Verdrahtung** (`mode=enforce` schaltet scharf) | ✅ verdrahtet — `mode=enforce` schreibt nativen Auth; Fehler → fail-safe auf `monitor` |
+| **Area-Board-Panel** (Floor\|Area-Herkunft · Doppel-Markierung · Entity-Aufklappen · Area+Floor editierbar) | ✅ funktionsfähig |
+| **End-to-End gegen Dev-Instanz + Live-Betrieb** | ✅ Dev-E2E durchlaufen + Live-`enforce` verifiziert; **breiter Multi-Setup-Soak erwünscht** |
+| **HACS-Aktivierung** (`hacs.json` · HACS+hassfest-CI · Brand-Icon) | ✅ erledigt |
+| **HACS** (public · getaggte Releases) | ✅ v0.2.0–v0.6.0 · Default-Store-Listing geplant |
 
 Die ganze Geschichte — Vision, Phasen, was als Nächstes kommt und **wo wir Unterstützung gut
 gebrauchen können** — steht in der **[ROADMAP](ROADMAP.md)** und in **[CONTRIBUTING](CONTRIBUTING.md)**.
 
 ## Installation (HACS — Custom Repository)
 
-> Tessera ist (noch) **nicht** im HACS-Default-Store, und es gibt **noch kein getaggtes Release**.
-> Sobald das erste Release veröffentlicht ist, läuft die Installation so:
+> Tessera ist als **HACS Custom Repository** installierbar — es gibt getaggte Releases (aktuell **v0.6.0**).
+> Die Aufnahme in den **HACS-Default-Store** ist geplant; bis dahin über „Custom repositories":
 
 1. HACS öffnen → Drei-Punkte-Menü oben rechts → **Custom repositories**.
 2. URL: `https://github.com/NoSilver78/tessera` · Kategorie: **Integration** → **ADD**.
