@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 728 372" font-family="system-ui,-apple-system,Segoe UI,Roboto,sans-serif" role="img" aria-label="Tessera Labels-Board: Umschalter Bereiche/Labels, je Label eine Zelle pro Rolle, aufklappbare Entitaeten">
+  <rect width="728" height="372" rx="10" fill="#111318"/>
+  <rect x="12" y="10" width="704" height="352" rx="12" fill="#1f2229" stroke="#34383f"/>
+  <text x="30" y="40" fill="#e3e5e8" font-size="16" font-weight="600">Tessera Matrix</text>
+
+  <!-- board toggle -->
+  <rect x="486" y="24" width="104" height="26" rx="13" fill="none" stroke="#34383f"/>
+  <text x="538" y="41" fill="#9aa0a6" font-size="12" text-anchor="middle">Bereiche</text>
+  <rect x="596" y="24" width="96" height="26" rx="13" fill="#0d2b3a" stroke="#03a9f4"/>
+  <text x="644" y="41" fill="#03a9f4" font-size="12" font-weight="600" text-anchor="middle">Labels</text>
+
+  <!-- header -->
+  <line x1="12" y1="58" x2="716" y2="58" stroke="#34383f"/>
+  <text x="30" y="86" fill="#9aa0a6" font-size="12">Label</text>
+  <text x="470" y="86" fill="#9aa0a6" font-size="13" font-weight="600" text-anchor="middle">eg_nutzer</text>
+  <text x="618" y="86" fill="#9aa0a6" font-size="13" font-weight="600" text-anchor="middle">gast</text>
+  <line x1="12" y1="96" x2="716" y2="96" stroke="#34383f"/>
+
+  <!-- batterie (expanded) -->
+  <text x="30" y="126" fill="#9aa0a6" font-size="13">▾</text>
+  <circle cx="52" cy="121" r="5" fill="#ff9800"/>
+  <text x="64" y="126" fill="#e3e5e8" font-size="13">batterie</text>
+  <text x="130" y="126" fill="#7d838a" font-size="11">· 34 Entitäten</text>
+  <rect x="432" y="108" width="76" height="26" rx="8" fill="#ff9800"/><text x="470" y="126" fill="#3a2600" font-size="12" text-anchor="middle">read</text>
+  <rect x="580" y="108" width="76" height="26" rx="8" fill="#ff9800"/><text x="618" y="126" fill="#3a2600" font-size="12" text-anchor="middle">read</text>
+  <!-- entity chips -->
+  <rect x="12" y="140" width="704" height="42" fill="#15181d"/>
+  <text x="52" y="157" fill="#7d838a" font-size="10" letter-spacing="0.5">34 ENTITÄTEN · ERBEN DAS LABEL-RECHT</text>
+  <rect x="52" y="163" width="150" height="16" rx="5" fill="#1f2229" stroke="#34383f"/><text x="60" y="175" fill="#9aa0a6" font-size="10" font-family="monospace">sensor.tur_batterie</text>
+  <rect x="210" y="163" width="162" height="16" rx="5" fill="#1f2229" stroke="#34383f"/><text x="218" y="175" fill="#9aa0a6" font-size="10" font-family="monospace">sensor.rauch_kg_batterie</text>
+  <rect x="380" y="163" width="150" height="16" rx="5" fill="#1f2229" stroke="#34383f"/><text x="388" y="175" fill="#9aa0a6" font-size="10" font-family="monospace">binary_sensor.fenster</text>
+  <line x1="12" y1="182" x2="716" y2="182" stroke="#25282e"/>
+
+  <!-- außen -->
+  <text x="30" y="212" fill="#9aa0a6" font-size="13">▸</text>
+  <circle cx="52" cy="207" r="5" fill="#4caf50"/>
+  <text x="64" y="212" fill="#e3e5e8" font-size="13">außen</text>
+  <text x="118" y="212" fill="#7d838a" font-size="11">· 12 Entitäten</text>
+  <rect x="432" y="194" width="76" height="26" rx="8" fill="#4caf50"/><text x="470" y="212" fill="#0c2810" font-size="12" text-anchor="middle">control</text>
+  <rect x="580" y="194" width="76" height="26" rx="8" fill="none" stroke="#34383f"/><text x="618" y="212" fill="#7d838a" font-size="12" text-anchor="middle">none</text>
+  <line x1="12" y1="230" x2="716" y2="230" stroke="#25282e"/>
+
+  <!-- gast -->
+  <text x="30" y="260" fill="#9aa0a6" font-size="13">▸</text>
+  <circle cx="52" cy="255" r="5" fill="#03a9f4"/>
+  <text x="64" y="260" fill="#e3e5e8" font-size="13">gast_sichtbar</text>
+  <text x="158" y="260" fill="#7d838a" font-size="11">· 18 Entitäten</text>
+  <rect x="432" y="242" width="76" height="26" rx="8" fill="none" stroke="#34383f"/><text x="470" y="260" fill="#7d838a" font-size="12" text-anchor="middle">none</text>
+  <rect x="580" y="242" width="76" height="26" rx="8" fill="#ff9800"/><text x="618" y="260" fill="#3a2600" font-size="12" text-anchor="middle">read</text>
+  <line x1="12" y1="278" x2="716" y2="278" stroke="#25282e"/>
+
+  <!-- kritisch -->
+  <text x="30" y="308" fill="#9aa0a6" font-size="13">▸</text>
+  <circle cx="52" cy="303" r="5" fill="#f44336"/>
+  <text x="64" y="308" fill="#e3e5e8" font-size="13">kritisch</text>
+  <text x="126" y="308" fill="#7d838a" font-size="11">· 7 Entitäten</text>
+  <rect x="432" y="290" width="76" height="26" rx="8" fill="none" stroke="#34383f"/><text x="470" y="308" fill="#7d838a" font-size="12" text-anchor="middle">none</text>
+  <rect x="580" y="290" width="76" height="26" rx="8" fill="none" stroke="#34383f"/><text x="618" y="308" fill="#7d838a" font-size="12" text-anchor="middle">none</text>
+
+  <!-- legend -->
+  <line x1="12" y1="328" x2="716" y2="328" stroke="#34383f"/>
+  <rect x="30" y="342" width="12" height="12" rx="3" fill="#ff9800"/><text x="48" y="352" fill="#9aa0a6" font-size="11">read</text>
+  <rect x="96" y="342" width="12" height="12" rx="3" fill="#4caf50"/><text x="114" y="352" fill="#9aa0a6" font-size="11">control</text>
+  <text x="182" y="352" fill="#7d838a" font-size="11">Farb-Punkt = HA-Label-Farbe · Zelle klicken: none → read → control</text>
+</svg>

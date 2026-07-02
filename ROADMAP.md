@@ -1,7 +1,8 @@
 # Roadmap
 
 Dieses Dokument beschreibt **wohin Tessera will**, **wo es gerade steht** und **was noch zu tun
-ist**. Stand: **2026-06-30**. Es ist bewusst ehrlich — auch über offene Flanken (siehe ganz unten).
+ist**. Stand: **2026-07-02** (v0.9.0 — Floor- + Label-Grants + Konfig-Seiten-Modusschalter geshippt).
+Es ist bewusst ehrlich — auch über offene Flanken (siehe ganz unten).
 
 ## Vision
 
@@ -93,9 +94,14 @@ geführt — und seit E3.5 (Phase 3) im Setup-Pfad verdrahtet:
 
 - **`by_group`-Pfad (Authentik/OIDC):** Rollen-Mitgliedschaft additiv aus IdP-Gruppen — derzeit
   **inert**, bis der Roh-Claim-Seitenkanal verlässlich nachgewiesen ist.
-- **Feinere Scopes** als Bereich × Rolle (Einzel-Entity-Ausnahmen sind möglich, aber Sekundärfall).
+- **Klick-UI für die letzten Konfig-Lücken** (Audit v0.9.0, siehe GUIDE → *Konfigurationsreferenz*):
+  (a) `is_admin`-Feld im „Add role"-Flow, (b) `tessera.set_entity_override`-Service + Panel-Board für
+  Einzel-Entity-Rechte (heute nur `import`), (c) Nutzer→Rollen-Mitgliedschaft per Options-Flow/Panel
+  (heute nur Service/`import`). Das Modell setzt alles durch — nur die Editier-UI fehlt.
+- **`recompile` admin-gaten** — als einziger schreib-naher Service nicht admin-gated (kleiner Radius:
+  nur Re-Apply bestehender Policy, kein neuer Input), zur Konsistenz nachziehen.
+- **Options-Flow für Floor-/Label-Grants** (heute Panel + Service; nur Area-Grants zusätzlich im Flow).
 - **Mitigations-Ideen** für die dokumentierten Leak-Pfade (Template/Logbook/Assist).
-- **Panel-Politur** (Frontend) und Übersetzungen.
 
 ## Offene Flanken (ehrlich)
 
