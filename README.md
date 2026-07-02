@@ -1,158 +1,158 @@
 # Tessera
 
-> Rollenbasierte Zugriffskontrolle (RBAC) für Home Assistant — *Read / Control* × **Rolle** × **Bereich**.
+> Role-based access control (RBAC) for Home Assistant — *Read / Control* × **Role** × **Area**.
 
-Tessera ist ein eigenständiges Berechtigungssystem für Home Assistant. Es schließt eine seit
-Jahren offene Lücke: HA kennt nur drei feste Systemgruppen, kein UI für feingranulare Rechte und
-einen Owner-Bypass. Tessera kompiliert deklarative Richtlinien (**Rolle × Bereich × Aktion**) zu
-**nativen** HA-`PolicyPermissions` und schreibt sie — **im `enforce`-Modus** — in den
-Home-Assistant-Auth-Store. **Kein Monkeypatch, kein Core-Fork.**
+[Deutsch](README.de.md) · **English**
 
-> ⚠️ **Sicherheitskritische Integration.** Tessera verändert, wer in deiner Home-Assistant-Instanz
-> was sehen und tun darf. Im `enforce`-Modus **schreibt Tessera aktiv** in den HA-Auth-Store. Lies das
-> **[Sicherheitsmodell](#sicherheitsmodell-ehrlich)** unten, bevor du `enforce` aktivierst — und beachte
-> den **[Projektstatus](#projektstatus)**: Durchsetzung ist gebaut, verdrahtet und in einer **Live-Instanz
-> nachgewiesen** (Dev-E2E + laufender Betrieb); breite Erprobung über viele Setups steht noch aus.
-> **Beginne trotzdem mit `monitor`**, sichte die berechneten Verdicts und wechsle erst dann bewusst zu `enforce`.
+Tessera is a standalone permission system for Home Assistant. It closes a gap that has been open for
+years: HA only has three fixed system groups, no UI for fine-grained rights, and a hard owner bypass.
+Tessera compiles declarative policies (**role × area × action**) into **native** HA
+`PolicyPermissions` and writes them — **in `enforce` mode** — into the Home Assistant auth store.
+**No monkeypatch, no core fork.**
 
-## Was Tessera tut
+> ⚠️ **Security-critical integration.** Tessera changes who can see and do what in your Home Assistant
+> instance. In `enforce` mode Tessera **actively writes** to the HA auth store. Read the
+> **[security model](#security-model-honest)** below before you enable `enforce` — and note the
+> **[project status](#project-status)**: enforcement is built, wired, and **proven in a live instance**
+> (dev E2E + running operation); broad testing across many setups is still pending.
+> **Start with `monitor` anyway**, review the computed verdicts, and only then move deliberately to `enforce`.
 
-- **Deklarative Policies** — Rollen × Bereiche × Aktionen. Pro Bereich × Rolle vergibst du im Panel
-  **Read** (ansehen) und/oder **Control** (bedienen); eine dritte Stufe **change** entspricht
-  HAs globalem `is_admin` (siehe [Sicherheitsmodell](#sicherheitsmodell-ehrlich)).
-- **Compiler** — übersetzt Policies in native HA-`PolicyPermissions` (expandiert Bereiche zu
-  Entity-IDs, inkl. der area-losen Direkt-Entitäten, die HAs `area_ids` allein verfehlt).
-- **Linter** — prüft Policies vor dem Anwenden auf Konflikte und Lücken.
-- **Dual-Mode-Mitgliedschaft** — lokale Rollen (`by_user`, Baseline, ohne Fremdabhängigkeit) **oder**
-  additiv ein Mapping aus einem externen IdP (`by_group`, z. B. Authentik/OIDC — optional).
-- **Admin-Panel** „Tessera" (Area-Board) in der HA-Seitenleiste (nur Administratoren): je Rolle die
-  Herkunftsspalten **Floor | Area** (klickbar zum Setzen von Grants), Doppelvergabe-Markierung und
-  aufklappbare Bereiche bis auf Entity-Ebene.
-- **Drei Betriebsmodi** mit nicht-eingreifendem Default — siehe unten.
+## What Tessera does
 
-## Projektstatus
+- **Declarative policies** — roles × areas × actions. Per area × role you grant, in the panel,
+  **Read** (view) and/or **Control** (operate); a third level **change** corresponds to HA's global
+  `is_admin` (see [security model](#security-model-honest)).
+- **Compiler** — translates policies into native HA `PolicyPermissions` (expands areas to entity IDs,
+  including the area-less direct entities that HA's `area_ids` alone misses).
+- **Linter** — checks policies for conflicts and gaps before applying.
+- **Dual-mode membership** — local roles (`by_user`, the baseline, no external dependency) **or**
+  additively a mapping from an external IdP (`by_group`, e.g. Authentik/OIDC — optional).
+- **Admin panel** "Tessera" (Area-Board) in the HA sidebar (administrators only): per role the
+  provenance columns **Floor | Area** (clickable to set grants), a double-grant marker, and
+  expandable areas down to entity level.
+- **Three operating modes** with a non-intrusive default — see below.
 
-**Veröffentlicht (v0.8.1) · `enforce` dev-erprobt und in einer Live-Instanz aktiv · breite Multi-Setup-Erprobung erwünscht.**
+## Project status
 
-| Baustein | Stand |
+**Published (v0.8.1) · `enforce` dev-proven and active in a live instance · broad multi-setup testing wanted.**
+
+| Building block | Status |
 |---|---|
-| **Core** (Store · Compiler · Linter · Schema · Config-Flow) | ✅ funktionsfähig |
-| **Monitor** (read-only Vorschau + Matrix-Panel) | ✅ funktionsfähig |
-| **Enforce-Maschinerie** (Plan · Bindings · Write+Guards · Restore/Recovery) | ✅ gebaut, adversarial gegated |
-| **Enforce-Verdrahtung** (`mode=enforce` schaltet scharf) | ✅ verdrahtet — `mode=enforce` schreibt nativen Auth; Fehler → fail-safe auf `monitor` |
-| **Area-Board-Panel** (Floor\|Area-Herkunft · Doppel-Markierung · Entity-Aufklappen · Area+Floor editierbar) | ✅ funktionsfähig |
-| **End-to-End gegen Dev-Instanz + Live-Betrieb** | ✅ Dev-E2E durchlaufen + Live-`enforce` verifiziert; **breiter Multi-Setup-Soak erwünscht** |
-| **HACS-Aktivierung** (`hacs.json` · HACS+hassfest-CI · Brand-Icon) | ✅ erledigt |
-| **HACS** (public · getaggte Releases) | ✅ v0.2.0–v0.8.1 · Default-Store-Einreichung eingereicht (in Review) |
+| **Core** (store · compiler · linter · schema · config flow) | ✅ working |
+| **Monitor** (read-only preview + matrix panel) | ✅ working |
+| **Enforce machinery** (plan · bindings · write+guards · restore/recovery) | ✅ built, adversarially gated |
+| **Enforce wiring** (`mode=enforce` goes live) | ✅ wired — `mode=enforce` writes native auth; errors → fail-safe to `monitor` |
+| **Area-Board panel** (Floor\|Area provenance · double marker · entity expand · Area+Floor editable) | ✅ working |
+| **End-to-end against a dev instance + live operation** | ✅ dev E2E run + live `enforce` verified; **broad multi-setup soak wanted** |
+| **HACS enablement** (`hacs.json` · HACS+hassfest CI · brand icon) | ✅ done |
+| **HACS** (public · tagged releases) | ✅ v0.2.0–v0.8.1 · default-store submission in review |
 
-Die ganze Geschichte — Vision, Phasen, was als Nächstes kommt und **wo wir Unterstützung gut
-gebrauchen können** — steht in der **[ROADMAP](ROADMAP.md)** und in **[CONTRIBUTING](CONTRIBUTING.md)**.
+The whole story — vision, phases, what comes next, and **where help is most useful** — is in the
+**[ROADMAP](ROADMAP.md)** and in **[CONTRIBUTING](CONTRIBUTING.md)**.
 
-## Ausführliche Anleitung
+## Full guide
 
-Vollständige **Einrichtung & Nutzung** — Installation, Betriebsmodi, Rollen/Grants/Mitgliedschaften,
-Area-Board-Panel, `enforce` mit Preflight, **„was zu beachten ist"** (Versions-Guard/HA-Updates!),
-Troubleshooting und FAQ — mit Screenshots:
+Complete **setup & usage** — installation, operating modes, roles/grants/memberships, the Area-Board
+panel, `enforce` with preflight, a prominent **"things to watch out for"** section (version guard /
+HA updates!), troubleshooting and FAQ — with screenshots:
 
 **📖 [English](docs/GUIDE.md) · [Deutsch](docs/GUIDE.de.md)**
 
-## Installation (HACS — Custom Repository)
+## Installation (HACS — custom repository)
 
-> Tessera ist als **HACS Custom Repository** installierbar — es gibt getaggte Releases (aktuell **v0.8.1**).
-> Die Aufnahme in den **HACS-Default-Store** ist eingereicht (in Review); bis dahin über „Custom repositories":
+> Tessera is installable as a **HACS custom repository** — there are tagged releases (currently **v0.8.1**).
+> Inclusion in the **HACS default store** has been submitted (in review); until then, use "Custom repositories":
 
-1. HACS öffnen → Drei-Punkte-Menü oben rechts → **Custom repositories**.
-2. URL: `https://github.com/NoSilver78/tessera` · Kategorie: **Integration** → **ADD**.
-3. Tessera in der HACS-Liste auswählen und herunterladen.
-4. **Home Assistant neu starten.**
-5. **Einstellungen → Geräte & Dienste → Integration hinzufügen → Tessera**.
+1. Open HACS → three-dot menu top right → **Custom repositories**.
+2. URL: `https://github.com/NoSilver78/tessera` · category: **Integration** → **ADD**.
+3. Select Tessera in the HACS list and download it.
+4. **Restart Home Assistant.**
+5. **Settings → Devices & Services → Add Integration → Tessera**.
 
-**Getestete HA-Version:** Home Assistant **2026.7.0** (siehe *[Version-Guard](#version-guard-private-ha-apis)*).
-Auf einer abweichenden HA-Version blockiert der Laufzeit-Guard den `enforce`-Schreibpfad und hält
-Tessera im read-only `monitor`-Zustand.
+**Tested HA version:** Home Assistant **2026.7.0** (see *[version guard](#version-guard-private-ha-apis)*).
+On any other HA version the runtime guard blocks the `enforce` write path and keeps Tessera in the
+read-only `monitor` state.
 
-## Sicherheitsmodell (ehrlich)
+## Security model (honest)
 
-Tessera kennt drei Betriebsmodi. **Der Default ist nicht-eingreifend.**
+Tessera has three operating modes. **The default is non-intrusive.**
 
-| Modus | Wirkung |
+| Mode | Effect |
 |---|---|
-| `off` | Tessera tut nichts. |
-| `monitor` | Tessera **berechnet** Permissions und zeigt Abweichungen (Panel + Logs), **schreibt aber NICHT** in den Auth-Store. Sicher zum Einfahren. |
-| `enforce` | Tessera **schreibt** die kompilierten Permissions aktiv in den HA-Auth-Store (native Gruppen-`PolicyPermissions` + Rebind der `group_ids`) und greift real in Zugriffe ein. |
+| `off` | Tessera does nothing. |
+| `monitor` | Tessera **computes** permissions and shows deviations (panel + logs), but **does NOT write** to the auth store. Safe for onboarding. |
+| `enforce` | Tessera **writes** the compiled permissions into the HA auth store (native group `PolicyPermissions` + rebind of `group_ids`) and really intervenes in access. |
 
-> **Aktueller Stand:** `enforce` ist verdrahtet (seit E3.5) und **schreibt** beim Setzen von
-> `mode=enforce` nativen Auth-Zustand — nach einer fail-closed Gate-Sequenz (HA-Version → Compile →
-> [D9-Vorprüfung](#d9-vorprüfung-enforce-gate) → Linter → Lockout-Precheck → unveränderlicher
-> Snapshot/Journal → Apply). **Jeder Fehler in dieser Kette fällt sicher auf `monitor` zurück**
-> (kein halb-scharfer Zustand); ein abgebrochener Lauf wird beim Start aus dem Pre-Install-Snapshot
-> wiederhergestellt. Was noch **aussteht**, ist der Praxis-Nachweis (End-to-End gegen eine
-> Dev-Instanz + Soak + Dogfood, siehe [ROADMAP](ROADMAP.md)). Beginne deshalb mit `monitor`, prüfe
-> die berechneten Verdicts, und wechsle erst dann bewusst zu `enforce`.
+> **Current state:** `enforce` is wired and **writes** native auth state when `mode=enforce` is set —
+> after a fail-closed gate sequence (HA version → compile → [D9 gate](docs/GUIDE.md#the-d9-gate) →
+> linter → lockout precheck → immutable snapshot/journal → apply). **Every error in this chain safely
+> falls back to `monitor`** (no half-applied state); an aborted run is restored from the pre-install
+> snapshot at startup. What is still **pending** is broad practical proof (soak + dogfood across many
+> setups, see [ROADMAP](ROADMAP.md)). So start with `monitor`, review the computed verdicts, and only
+> then move deliberately to `enforce`.
 
-### Allow-only-Modell
-Tessera vergibt Berechtigungen **additiv (allow-only)**: Eine Policy *gewährt* Zugriff; nicht
-gewährter Zugriff bleibt verwehrt. Tessera setzt **keine** Deny-Regeln und hebelt **keine**
-HA-eigenen Admin-Rechte aus. Owner und systemerzeugte Konten werden nie verändert.
+### Allow-only model
+Tessera grants permissions **additively (allow-only)**: a policy *grants* access; access not granted
+stays denied. Tessera sets **no** deny rules and overrides **no** HA-native admin rights. Owner and
+system-generated accounts are never modified.
 
-### Dokumentierte Leak-Pfade (bekannte Grenzen)
-HA-Permissions wirken **nicht** auf jeder Oberfläche identisch. Tessera kann diese HA-internen
-Pfade **nicht** schließen — sie sind hier ehrlich dokumentiert:
+### Documented leak paths (known limits)
+HA permissions do **not** act identically on every surface. Tessera **cannot** close these HA-internal
+paths — documented honestly here:
 
-- **`render_template` / Template-Sensoren** — Templates können Zustände von Entitäten lesen, auf die
-  ein Benutzer per UI keinen Zugriff hat; Werte können indirekt durchsickern.
-- **Logbook / History** — Verlaufsansichten können Ereignisse zu eingeschränkten Entitäten
-  offenlegen, je nach HA-Version und Konfiguration.
-- **Assist / Conversation** — Sprach-/Konversations-Agenten können Zustände abfragen oder Aktionen
-  auslösen, die die Permission-Schicht teilweise umgehen.
+- **`render_template` / template sensors** — templates can read states of entities a user has no UI
+  access to; values can leak indirectly.
+- **Logbook / History** — history views may reveal events of restricted entities, depending on HA
+  version and configuration.
+- **Assist / Conversation** — voice/conversation agents can query states or trigger actions that
+  partly bypass the permission layer.
 
-> Tessera ist **keine** vollständige Daten-Isolation. Sind diese Pfade für dich relevant, ergänze
-> HA-seitige Maßnahmen (Entitäten aus Assist ausschließen, Template-Exposition begrenzen).
+> Tessera is **not** full data isolation. If these paths matter to you, add HA-side measures (exclude
+> entities from Assist, limit template exposure).
 
-### Version-Guard (private HA-APIs)
-Tessera schreibt teils über **private/undokumentierte HA-Auth-APIs**, für die Home Assistant **keine**
-Stabilitätsgarantie gibt — sie können zwischen Releases brechen. Schutz:
+### Version guard (private HA APIs)
+Tessera writes partly through **private/undocumented HA auth APIs** for which Home Assistant gives
+**no** stability guarantee — they can break between releases. Protection:
 
-- **Aktiver Schutz (Laufzeit-Guard):** Der Auth-Schreibpfad prüft im Code auf die **exakt getestete**
-  HA-Version (`SUPPORTED_HA_AUTH_VERSION`, derzeit **2026.7.0** — exakter Gleichheits-Match). Auf jeder
-  abweichenden Version wird der Schreibpfad **fail-closed blockiert** und `enforce` fällt auf den
-  read-only `monitor`-Zustand zurück — **kein** nativer Write.
-- Ein zusätzlicher `hacs.json`-Pin der HA-Mindestversion ist **bewusst noch nicht** gesetzt (die
-  HACS-Validierung lehnte den Wert als künftiges Minimum ab); er kann mit dem Public-Flip als
-  optionale zweite Hürde ergänzt werden. Die eigentliche Absicherung ist und bleibt der
-  Laufzeit-Guard oben.
-- Bricht eine interne API, wird die getestete/gepinnte Version angehoben und eine neue
-  MAJOR-Version veröffentlicht.
+- **Active protection (runtime guard):** the auth write path checks in code for the **exact tested**
+  HA version (`SUPPORTED_HA_AUTH_VERSION`, currently **2026.7.0** — exact-equality match). On any other
+  version the write path is **fail-closed blocked** and `enforce` falls back to the read-only `monitor`
+  state — **no** native write. **Every HA core update therefore safely pauses `enforce`** until a
+  Tessera version verifies the new HA version (details:
+  [guide → things to watch out for](docs/GUIDE.md#things-to-watch-out-for)).
+- An additional `hacs.json` pin of the minimum HA version is **deliberately not** set (HACS validation
+  rejected the value as a future minimum); the real safeguard is and remains the runtime guard above.
+- If an internal API breaks, the tested version is raised and a new version is published.
 
-Mehr dazu: **[docs/MAINTENANCE.md](docs/MAINTENANCE.md)**.
+More on this: **[docs/MAINTENANCE.md](docs/MAINTENANCE.md)**.
 
-## Datenschutz
+## Privacy
 
-Tessera verarbeitet **ausschließlich lokal** Account-/Rollen-/Bereichszuordnungen (HA-Benutzer,
-Rollen, Bereichszuweisungen — personenbezogene Daten i. S. d. DSGVO). **Keine Cloud, keine
-Telemetrie.** Persistenz nur lokal (HA-Auth-Store + Tesseras eigener Store).
+Tessera processes account/role/area mappings (HA users, roles, area assignments — personal data under
+the GDPR) **entirely locally**. **No cloud, no telemetry.** Persistence is local only (HA auth store +
+Tessera's own store).
 
-## Mitwirken
+## Contributing
 
-Tessera ist bewusst offen für Beitragende — besonders **Tests auf vielfältigen Multi-User-Setups**,
-**HA-Versions-Kompatibilität** und **Feedback zum RBAC-Modell**. Wo genau Hilfe gebraucht wird, steht
-in **[CONTRIBUTING.md](CONTRIBUTING.md)** (Abschnitt *Help wanted*).
+Tessera is deliberately open to contributors — especially **tests on diverse multi-user setups**,
+**HA-version compatibility**, and **feedback on the RBAC model**. Where exactly help is needed is in
+**[CONTRIBUTING.md](CONTRIBUTING.md)** (section *Help wanted*).
 
-## Sicherheitslücken melden
+## Reporting security issues
 
-Bitte **nicht** öffentlich als Issue. Nutze GitHub **Private Vulnerability Reporting** (Tab *Security*
-des Repos) — Details in **[SECURITY.md](SECURITY.md)**.
+Please **not** as a public issue. Use GitHub **Private Vulnerability Reporting** (the repo's *Security*
+tab) — details in **[SECURITY.md](SECURITY.md)**.
 
-## Entwicklung (transparent)
+## Development (transparent)
 
-Tessera wird in einem ungewöhnlichen, bewusst dokumentierten Modell gebaut: **Claude** (Architektur,
-Gate, Audit), **Codex** (Implementierung) und Michael (Eigentümer/Orchestrierung). Der Sinn ist
-**Sicherheit durch Mehraugen-Prinzip**: jeder Auth-Schreibpfad durchläuft vor dem Merge ein
-**adversariales Mehr-Agenten-Gate** (mehrere unabhängige, skeptische Reviewer) plus
-**Mutationsproben** (Tests werden gezielt gebrochen, um zu beweisen, dass sie den Regress fangen).
-Der Prozess ist offen einsehbar: [`CONTRACT.md`](CONTRACT.md), [`CLAUDE_WORKFLOW.md`](CLAUDE_WORKFLOW.md),
-die Übergaben in [`exchange/`](exchange/) und die Gate-Reviews in [`reports/`](reports/).
+Tessera is built in an unusual, deliberately documented model: **Claude** (architecture, gate, audit),
+**Codex** (implementation), and Michael (owner/orchestration). The point is **safety through
+multiple-eyes review**: every auth write path passes, before merge, an **adversarial multi-agent gate**
+(several independent, skeptical reviewers) plus **mutation proofs** (tests are deliberately broken to
+prove they catch the regression). The process is openly viewable: [`CONTRACT.md`](CONTRACT.md),
+[`CLAUDE_WORKFLOW.md`](CLAUDE_WORKFLOW.md), the handoffs in [`exchange/`](exchange/), and the gate
+reviews in [`reports/`](reports/).
 
-## Lizenz
+## License
 
 [MIT](LICENSE) © 2026 Michael Scholz
