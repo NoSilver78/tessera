@@ -7,7 +7,7 @@
 **Deutsch** · [English](GUIDE.md)
 
 [![HACS](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=flat-square)](https://github.com/NoSilver78/tessera)
-[![Version](https://img.shields.io/badge/version-0.8.1-blue.svg?style=flat-square)](https://github.com/NoSilver78/tessera/releases)
+[![Version](https://img.shields.io/badge/version-0.9.0-blue.svg?style=flat-square)](https://github.com/NoSilver78/tessera/releases)
 [![HA](https://img.shields.io/badge/Home%20Assistant-2026.7.0-41BDF5.svg?style=flat-square)](#voraussetzungen)
 [![License](https://img.shields.io/badge/license-MIT-green.svg?style=flat-square)](../LICENSE)
 
@@ -180,6 +180,7 @@ Ein **Grant** verknüpft **Bereich/Etage × Rolle** mit `read` und/oder `control
 |---|---|---|
 | **Area-Grant** | Panel-Klick oder `add_area_grant` | Rechte für **einen Bereich** (primär, ~90 % der Pflege) |
 | **Floor-Grant** | Panel-Klick oder `tessera.set_floor_grant` | Rechte für die **ganze Etage** (alle Bereiche darauf) |
+| **Label-Grant** | Labels-Board-Klick oder `tessera.set_label_grant` | additive Rechte für **alles, was ein Label auflöst** (Entität + Gerät + Bereich) |
 | **Entity-Override** | `tessera.import` (`entity_overrides`) | additive Einzel-Entity-Rechte |
 
 Wirkung der Stufen je Rolle:
@@ -189,6 +190,26 @@ Wirkung der Stufen je Rolle:
 | `read` | Zustand ansehen | — |
 | `control` | ansehen **und** bedienen | schließt `read` ein |
 | `change` | globale Admin-Rechte | HAs `is_admin` (nicht bereichsscoped) |
+
+**Label-Grants** sind die querschnittliche Dimension: Ein Label ist ein Tag, das du *quer* durchs Haus
+vergibst — ein Label-Grant schneidet also durch Etagen und Bereiche. Ein Label-Grant erfasst die
+**Vereinigung** aus — Entitäten, die das Label direkt tragen **+** Entitäten von *Geräten* mit dem Label
+**+** Entitäten von *Bereichen* mit dem Label (genau so, wie Home Assistant selbst ein Label-Target
+auflöst). Wie jeder Grant ist er additiv/allow-only, und `control` schließt `read` ein. Setzen im
+**Labels-Board** (siehe [Panel](#das-admin-panel-tessera-area-board)) oder per `tessera.set_label_grant`
+/ `tessera.import` (`label_grants`).
+
+> [!TIP]
+> Ein Label ist das richtige Werkzeug für ein Anliegen, das **über Räume hinweg** gilt — z. B. ein
+> `security`-Label an jeder Kamera, jedem Schloss und Türsensor, mit `read` für eine `gast`-Rolle —
+> statt einzelne Entity-Overrides zusammenzuklauben. Das Label muss in HA bereits existieren: unter
+> **Einstellungen → Labels** anlegen/zuweisen (oder in den Entitäten-/Geräte-Tabellen mehrfach
+> zuweisen), erst dann in Tessera darüber granten.
+
+> [!CAUTION]
+> Ein Label-Grant kann **deutlich breiter sein, als er aussieht**: Geräte- und Bereichs-Vererbung ziehen
+> weit mehr Entitäten hinein, als buchstäblich getaggt sind. **Klappe die Label-Zeile im Panel (Monitor)
+> auf und lies die aufgelöste Entitäten-Zahl, bevor du scharf schaltest.**
 
 ### 3. Mitgliedschaften
 
@@ -211,8 +232,10 @@ Das ganze Modell lässt sich auch in **einem** idempotenten Aufruf provisioniere
 
 ## Das Admin-Panel „Tessera" (Area-Board)
 
-In der Seitenleiste erscheint (nur für Administratoren) die Seite **Tessera** — das **Area-Board**.
-Es ist die zentrale, visuelle Pflege-Oberfläche für Grants.
+In der Seitenleiste erscheint (nur für Administratoren) die Seite **Tessera**. Ein Umschalter oben,
+**`Bereiche ↔ Labels`**, wechselt zwischen zwei Boards: dem **Area-Board** (Grants nach Etage/Bereich)
+und dem **Labels-Board** (Grants nach Label). Zusammen sind sie die zentrale, visuelle Pflege-Oberfläche
+für Grants.
 
 ![Area-Board: nach Etage gruppiert, je Rolle die Spalten Floor und Area, mit Doppel-Markierung und aufklappbaren Entitäten](images/panel-areaboard.svg)
 
@@ -230,6 +253,14 @@ Es ist die zentrale, visuelle Pflege-Oberfläche für Grants.
   (redundant, kein Fehler).
 - **Aufklappen** (Chevron an der Bereich-Zeile) listet die von Tessera aufgelösten **Entitäten** des
   Bereichs — sie erben das Bereich-Recht und haben daher keine eigenen Wertespalten.
+
+**Das Labels-Board** (Umschalter → **Labels**) listet deine Home-Assistant-**Labels** als Zeilen, je mit
+einem Farb-Punkt (die HA-Farbe des Labels) und der Zahl der aufgelösten Entitäten. Je Rolle gibt es eine
+editierbare Zelle, die `none → read → read+control → none` zykelt; klappt man eine Label-Zeile auf,
+erscheinen genau die Entitäten, die der Grant abdeckt — oft über mehrere Etagen und Bereiche hinweg.
+Labels werden **zuerst in HA getaggt**; Tessera grantet nur über bestehende.
+
+![Labels-Board: der Umschalter Bereiche↔Labels, Labels als Zeilen mit Read-/Control-Zelle je Rolle, ein Label aufgeklappt bis zu den über Bereiche hinweg aufgelösten Entitäten](images/panel-labels.svg)
 
 > [!TIP]
 > Oben zeigt das Panel eine **Vorschau** (Rollen, Entitäten, Read-/Control-Grants) — im `monitor`
@@ -324,6 +355,14 @@ Tessera vergibt **nur** Rechte (additiv). Es gibt keine Deny-Regeln; Tessera heb
 Admin-Rechte aus. Überlappen Etage und Bereich, ist das Ergebnis die **Vereinigung** (im Panel als
 „doppelt" markiert).
 
+### Label-Breite & Vererbung
+
+Ein **Label-Grant** löst über Entität **+** Gerät **+** Bereich auf, sein Scope ist also mindestens das
+Getaggte und oft mehr. Read-lastige Label-Scopes wirken zudem mit den
+[bekannten Leak-Pfaden](#bekannte-leak-pfade) unten zusammen. Vor dem Scharfschalten: **Label-Zeile im
+Panel (Monitor) aufklappen** und die aufgelöste Entitäten-Zahl lesen. Labels werden zuerst in HA
+getaggt — Tessera grantet ein bestehendes Label, es erstellt keines.
+
 ### Bekannte Leak-Pfade
 
 HA-Permissions wirken **nicht** auf jeder Oberfläche identisch. Diese HA-internen Pfade kann Tessera
@@ -372,16 +411,47 @@ fail-safe-to-monitor Pfad.
 | `tessera.recompile` | — | alle Einträge im aktuellen Modus neu kompilieren (in `enforce`: nativer Re-Apply) |
 | `tessera.set_membership` | `user_id` (Pflicht), `role_ids` (Objekt/Liste, Pflicht) | Nutzer → Rolle(n) zuordnen |
 | `tessera.set_floor_grant` | `floor_id`, `role_id`, `read`, `control` (alle Pflicht) | Etagen-Grant setzen |
+| `tessera.set_label_grant` | `label_id`, `role_id`, `read`, `control` (alle Pflicht) | Label-Grant setzen/entfernen |
 | `tessera.acknowledge_component` | `domain` (Pflicht) | eine D9-blockende Component freigeben |
 | `tessera.revoke_component_ack` | `domain` (Pflicht) | eine D9-Freigabe zurücknehmen |
-| `tessera.import` | `roles`, `memberships`, `area_grants`, `floor_grants`, `entity_overrides` (alle Objekt, optional) | ganzes Modell in **einem** idempotenten Aufruf provisionieren (bereitgestellt = ersetzt, weggelassen = bleibt) |
+| `tessera.import` | `roles`, `memberships`, `area_grants`, `floor_grants`, `label_grants`, `entity_overrides` (alle Objekt, optional) | ganzes Modell in **einem** idempotenten Aufruf provisionieren (bereitgestellt = ersetzt, weggelassen = bleibt) |
 
 > [!TIP]
 > `tessera.import` ist der schnellste Weg, ein komplettes Haushaltsmodell aufzusetzen oder
 > versioniert (z. B. aus einem Skript) zu pflegen. `is_admin` je Rolle wird hier über `roles` gesetzt.
 
 Area-Grants selbst werden im Panel per Klick gesetzt (WebSocket `tessera/matrix/set_grant`) bzw. über
-den Options-Flow (**Add area grant** / **Remove area grant**).
+den Options-Flow (**Add area grant** / **Remove area grant**). Floor- und Label-Grants werden an ihren
+Panel-Zellen gesetzt (`tessera/matrix/set_floor_grant` / `set_label_grant`) oder über die passenden
+Services — der Options-Flow deckt derzeit nur Area-Grants ab.
+
+### Konfigurationsreferenz — wo welche Einstellung lebt
+
+Tessera wird über den **Options-Flow** (Konfigurieren), das **Panel**, **Services** oder `tessera.import`
+konfiguriert — **nie** über `configuration.yaml`. Diese Übersicht bildet jede Einstellung auf ihren
+Setz-Weg ab und markiert, was heute **keinen Klick-Weg** hat und einen Service bzw. `import` braucht:
+
+| Einstellung | Options-Flow | Panel | Service | `import` |
+|---|:---:|:---:|:---:|:---:|
+| Betriebs-`mode` | ✅ Set mode | — | `set_mode` | — |
+| Rolle anlegen / löschen | ✅ Add/Remove role | — | — | ✅ `roles` |
+| Rollen-**Name** / Beschreibung | ✅ | — | — | ✅ `roles` |
+| Rollen-**`is_admin`** (die `change`-Stufe) | ❌ | ❌ | ❌ | ✅ `roles` |
+| **Area-Grant** | ✅ Add/Remove area grant | ✅ Area-Zelle | — | ✅ `area_grants` |
+| **Floor-Grant** | ❌ | ✅ Floor-Zelle | `set_floor_grant` | ✅ `floor_grants` |
+| **Label-Grant** | ❌ | ✅ Labels-Board | `set_label_grant` | ✅ `label_grants` |
+| **Entity-Override** | ❌ | ❌ | ❌ | ✅ `entity_overrides` |
+| **Mitgliedschaft** (Nutzer → Rollen) | ❌ | ❌ | `set_membership` | ✅ `memberships` |
+| D9-Freigabe | ❌ | ❌ | `acknowledge_component` / `revoke_component_ack` | — |
+
+> [!NOTE]
+> **Aktuelle Klick-UI-Lücken (Roadmap).** Drei Einstellungen haben noch keinen Klick-Weg und werden per
+> `tessera.import` (oder den genannten Service) gesetzt: **`is_admin`** (bewusst — es ist die stärkste
+> Stufe), **Entity-Overrides** (der einzige Einzel-Entity-Regler — nur `import`) und
+> **Nutzer→Rollen-Mitgliedschaften** (`tessera.set_membership` oder `import`). Das Modell *setzt* alle
+> drei voll durch; nur die Editier-UI fehlt noch. Zwei Store-Felder sind bewusst **inert**:
+> `membership.by_group` (OIDC-Gruppe→Rolle, zurückgestellt — v1 nutzt `by_user`) und `policy.staging`
+> (reservierter interner Puffer). Beide zu setzen hat heute keine Wirkung.
 
 ---
 
@@ -418,6 +488,13 @@ Prüfe der Reihe nach:
 In `monitor` schreibt Tessera **nichts** — Änderungen sind erst im Panel/Preview sichtbar, aber
 nicht durchgesetzt. Für echte Wirkung: `enforce`.
 
+### Ein Label-Grant trifft mehr (oder weniger) Entitäten als erwartet
+
+Ein Label-Grant expandiert über die **Entitäten + deren Geräte + deren Bereiche** des Labels. Klappe die
+Label-Zeile im Panel (Monitor) auf, um die exakt aufgelöste Menge zu sehen. Ist sie leer, ist dem Label
+noch nichts zugewiesen — tagge Entitäten/Geräte/Bereiche zuerst in HA (**Einstellungen → Labels** oder
+die Mehrfachzuweisung in den Entitäten-/Geräte-Tabellen).
+
 ---
 
 ## FAQ
@@ -438,6 +515,11 @@ HA-Admin-Bypass.
 
 **Kann ich einzelne Entitäten statt ganzer Bereiche freigeben?**
 Ja, additiv über `entity_overrides` (via `tessera.import`).
+
+**Kann ich ein Recht vergeben, das über Räume hinweg gilt (z. B. alle Kameras)?**
+Ja — ein **Label-Grant**. Tagge die Entitäten/Geräte mit einem Home-Assistant-Label und vergib dann
+`read`/`control` auf dieses Label (Labels-Board oder `tessera.set_label_grant`). Das Label muss in HA
+bereits existieren.
 
 **Werden Daten in die Cloud gesendet?**
 Nein. Tessera arbeitet **rein lokal** (HA-Auth-Store + eigener Store), keine Cloud, keine Telemetrie.

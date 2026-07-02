@@ -22,8 +22,8 @@ Tessera compiles declarative policies (**role × area × action**) into **native
 - **Declarative policies** — roles × areas × actions. Per area × role you grant, in the panel,
   **Read** (view) and/or **Control** (operate); a third level **change** corresponds to HA's global
   `is_admin` (see [security model](#security-model-honest)).
-- **Compiler** — translates policies into native HA `PolicyPermissions` (expands areas to entity IDs,
-  including the area-less direct entities that HA's `area_ids` alone misses).
+- **Compiler** — translates policies into native HA `PolicyPermissions` (expands areas, floors and
+  labels to entity IDs, including the area-less direct entities that HA's `area_ids` alone misses).
 - **Linter** — checks policies for conflicts and gaps before applying.
 - **Dual-mode membership** — local roles (`by_user`, the baseline, no external dependency) **or**
   additively a mapping from an external IdP (`by_group`, e.g. Authentik/OIDC — optional).

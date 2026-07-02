@@ -7,7 +7,7 @@
 [Deutsch](GUIDE.de.md) · **English**
 
 [![HACS](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=flat-square)](https://github.com/NoSilver78/tessera)
-[![Version](https://img.shields.io/badge/version-0.8.1-blue.svg?style=flat-square)](https://github.com/NoSilver78/tessera/releases)
+[![Version](https://img.shields.io/badge/version-0.9.0-blue.svg?style=flat-square)](https://github.com/NoSilver78/tessera/releases)
 [![HA](https://img.shields.io/badge/Home%20Assistant-2026.7.0-41BDF5.svg?style=flat-square)](#prerequisites)
 [![License](https://img.shields.io/badge/license-MIT-green.svg?style=flat-square)](../LICENSE)
 
@@ -179,6 +179,7 @@ A **grant** links **area/floor × role** with `read` and/or `control`:
 |---|---|---|
 | **Area grant** | panel click or `add_area_grant` | rights for **one area** (primary, ~90% of maintenance) |
 | **Floor grant** | panel click or `tessera.set_floor_grant` | rights for the **whole floor** (all its areas) |
+| **Label grant** | Labels board click or `tessera.set_label_grant` | additive rights for **everything a label resolves to** (entity + its device + its area) |
 | **Entity override** | `tessera.import` (`entity_overrides`) | additive per-entity rights |
 
 Meaning of the levels per role:
@@ -188,6 +189,25 @@ Meaning of the levels per role:
 | `read` | view state | — |
 | `control` | view **and** operate | implies `read` |
 | `change` | global admin rights | HA's `is_admin` (not area-scoped) |
+
+**Label grants** are the cross-cutting dimension: a label is a tag you apply *across* the house, so a
+label grant cuts through floors and areas. A label grant covers the **union** of — entities carrying the
+label directly **+** entities of *devices* carrying it **+** entities of *areas* carrying it (mirroring
+how Home Assistant itself expands a label target). Like every grant it is additive/allow-only and
+`control` implies `read`. Set it on the **Labels board** (see the
+[panel](#the-tessera-admin-panel-area-board)) or via `tessera.set_label_grant` / `tessera.import`
+(`label_grants`).
+
+> [!TIP]
+> A label is the right tool for a concern that **spans rooms** — e.g. a `security` label on every
+> camera, lock and door sensor, granted `read` to a `guest` role — instead of hand-picking entity
+> overrides. The label must already exist in HA: create/assign it under **Settings → Labels** (or
+> bulk-assign in the entity/device tables) first, then grant over it in Tessera.
+
+> [!CAUTION]
+> A label grant can be **much broader than it looks**: device + area inheritance can pull in far more
+> entities than are literally tagged. **Expand the label row in the panel (monitor mode) and read the
+> resolved entity count before you enforce.**
 
 ### 3. Memberships
 
@@ -210,8 +230,9 @@ The whole model can also be provisioned in **one** idempotent call — see
 
 ## The "Tessera" admin panel (Area-Board)
 
-In the sidebar (administrators only) you get the **Tessera** page — the **Area-Board**. It is the
-central visual maintenance surface for grants.
+In the sidebar (administrators only) you get the **Tessera** page. A header toggle
+**`Bereiche ↔ Labels`** switches between two boards: the **Area-Board** (grants by floor/area) and the
+**Labels board** (grants by label). Together they are the central visual maintenance surface for grants.
 
 ![Area-Board: grouped by floor, per role the Floor and Area columns, with the double marker and expandable entities](images/panel-areaboard-en.svg)
 
@@ -229,6 +250,14 @@ central visual maintenance surface for grants.
   (redundant, not an error).
 - **Expand** (chevron on the area row) lists the **entities** Tessera resolves for the area — they
   inherit the area right and therefore carry no value columns of their own.
+
+**The Labels board** (toggle → **Labels**) lists your Home Assistant **labels** as rows, each with a
+colour dot (the label's HA colour) and the number of entities it resolves. Per role there is one
+editable cell that cycles `none → read → read+control → none`; expanding a label row shows exactly the
+entities the grant covers — often spanning several floors and areas. Labels are **tagged in HA first**;
+Tessera only grants over existing ones.
+
+![Labels board: the Bereiche↔Labels toggle, labels as rows with a read/control cell per role, one label expanded to the entities it resolves across areas](images/panel-labels-en.svg)
 
 > [!TIP]
 > At the top the panel shows a **preview** (roles, entities, read/control grants) — in `monitor` this
@@ -320,6 +349,13 @@ The most important section. Please read before production use.
 Tessera only grants (additive). There are no deny rules; Tessera never overrides HA's own admin rights.
 Where floor and area overlap, the result is their **union** (marked "doppelt" in the panel).
 
+### Label breadth & inheritance
+
+A **label grant** resolves over entity **+** device **+** area, so its scope is at least what's tagged
+and often more. Read-heavy label scopes also interact with the [known leak paths](#known-leak-paths)
+below. Before enforce, **expand the label row in the panel (monitor)** and read the resolved entity
+count. Labels are tagged in HA first — Tessera grants an existing label, it does not create one.
+
 ### Known leak paths
 
 HA permissions do **not** act identically on every surface. Tessera **cannot** close these HA-internal
@@ -368,16 +404,46 @@ fail-safe-to-monitor path.
 | `tessera.recompile` | — | recompile all entries for the current mode (in `enforce`: native re-apply) |
 | `tessera.set_membership` | `user_id` (required), `role_ids` (object/list, required) | map a user → role(s) |
 | `tessera.set_floor_grant` | `floor_id`, `role_id`, `read`, `control` (all required) | set a floor grant |
+| `tessera.set_label_grant` | `label_id`, `role_id`, `read`, `control` (all required) | set/remove a label grant |
 | `tessera.acknowledge_component` | `domain` (required) | acknowledge a D9-blocking component |
 | `tessera.revoke_component_ack` | `domain` (required) | revoke a D9 acknowledgement |
-| `tessera.import` | `roles`, `memberships`, `area_grants`, `floor_grants`, `entity_overrides` (all object, optional) | provision the whole model in **one** idempotent call (provided = replaced, omitted = kept) |
+| `tessera.import` | `roles`, `memberships`, `area_grants`, `floor_grants`, `label_grants`, `entity_overrides` (all object, optional) | provision the whole model in **one** idempotent call (provided = replaced, omitted = kept) |
 
 > [!TIP]
 > `tessera.import` is the fastest way to set up a complete household model or maintain it in a versioned
 > way (e.g. from a script). A role's `is_admin` is set here via `roles`.
 
 Area grants themselves are set in the panel by click (WebSocket `tessera/matrix/set_grant`) or through
-the options flow (**Add area grant** / **Remove area grant**).
+the options flow (**Add area grant** / **Remove area grant**). Floor and label grants are set on their
+panel cells (`tessera/matrix/set_floor_grant` / `set_label_grant`) or the matching services — the
+options flow currently covers area grants only.
+
+### Configuration reference — where each setting lives
+
+Tessera is configured through the **options flow** (Configure), the **panel**, **services**, or
+`tessera.import` — **never** `configuration.yaml`. This maps every setting to how you set it, and flags
+the ones that today have **no point-and-click path** and need a service or `import`:
+
+| Setting | Options flow | Panel | Service | `import` |
+|---|:---:|:---:|:---:|:---:|
+| Operating `mode` | ✅ Set mode | — | `set_mode` | — |
+| Create / delete **role** | ✅ Add/Remove role | — | — | ✅ `roles` |
+| Role **name** / description | ✅ | — | — | ✅ `roles` |
+| Role **`is_admin`** (the `change` level) | ❌ | ❌ | ❌ | ✅ `roles` |
+| **Area grant** | ✅ Add/Remove area grant | ✅ Area cell | — | ✅ `area_grants` |
+| **Floor grant** | ❌ | ✅ Floor cell | `set_floor_grant` | ✅ `floor_grants` |
+| **Label grant** | ❌ | ✅ Labels board | `set_label_grant` | ✅ `label_grants` |
+| **Entity override** | ❌ | ❌ | ❌ | ✅ `entity_overrides` |
+| **Membership** (user → roles) | ❌ | ❌ | `set_membership` | ✅ `memberships` |
+| D9 acknowledgement | ❌ | ❌ | `acknowledge_component` / `revoke_component_ack` | — |
+
+> [!NOTE]
+> **Current click-UI gaps (roadmap).** Three settings have no point-and-click path yet and are set via
+> `tessera.import` (or the noted service): **`is_admin`** (deliberately — it is the strongest level),
+> **entity overrides** (the sole per-entity knob — `import` only), and **user → role memberships**
+> (`tessera.set_membership` or `import`). The model *enforces* all of them fully; only the editing UI is
+> pending. Two store fields are **inert** on purpose: `membership.by_group` (OIDC group→role, deferred —
+> v1 uses `by_user`) and `policy.staging` (a reserved internal buffer). Setting either has no effect today.
 
 ---
 
@@ -413,6 +479,13 @@ Check in order:
 In `monitor` Tessera **writes nothing** — changes are visible in the panel/preview but not enforced.
 For real effect: `enforce`.
 
+### A label grant covers more (or fewer) entities than expected
+
+A label grant expands over the label's **entities + their devices + their areas**. Expand the label row
+in the panel (monitor mode) to see the exact resolved set. If it's empty, the label isn't assigned to
+anything yet — tag entities/devices/areas in HA first (**Settings → Labels**, or the bulk-assign in the
+entity/device tables).
+
 ---
 
 ## FAQ
@@ -431,6 +504,10 @@ residents in the Authentik `admins` group, or the HA admin bypass kicks in.
 
 **Can I grant individual entities instead of whole areas?**
 Yes, additively via `entity_overrides` (through `tessera.import`).
+
+**Can I grant a right that spans rooms (e.g. all cameras)?**
+Yes — a **label grant**. Tag the entities/devices with a Home Assistant label, then grant `read`/`control`
+on that label (Labels board or `tessera.set_label_grant`). The label must already exist in HA.
 
 **Is any data sent to the cloud?**
 No. Tessera works **purely locally** (HA auth store + its own store), no cloud, no telemetry.

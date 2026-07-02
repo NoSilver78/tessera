@@ -22,8 +22,8 @@ Home-Assistant-Auth-Store. **Kein Monkeypatch, kein Core-Fork.**
 - **Deklarative Policies** — Rollen × Bereiche × Aktionen. Pro Bereich × Rolle vergibst du im Panel
   **Read** (ansehen) und/oder **Control** (bedienen); eine dritte Stufe **change** entspricht
   HAs globalem `is_admin` (siehe [Sicherheitsmodell](#sicherheitsmodell-ehrlich)).
-- **Compiler** — übersetzt Policies in native HA-`PolicyPermissions` (expandiert Bereiche zu
-  Entity-IDs, inkl. der area-losen Direkt-Entitäten, die HAs `area_ids` allein verfehlt).
+- **Compiler** — übersetzt Policies in native HA-`PolicyPermissions` (expandiert Bereiche, Etagen und
+  Labels zu Entity-IDs, inkl. der area-losen Direkt-Entitäten, die HAs `area_ids` allein verfehlt).
 - **Linter** — prüft Policies vor dem Anwenden auf Konflikte und Lücken.
 - **Dual-Mode-Mitgliedschaft** — lokale Rollen (`by_user`, Baseline, ohne Fremdabhängigkeit) **oder**
   additiv ein Mapping aus einem externen IdP (`by_group`, z. B. Authentik/OIDC — optional).
