@@ -14,7 +14,7 @@ Schutzschichten.
 ## Schutzschichten
 
 1. **Code-Guard auf die exakt getestete HA-Version.** Der Auth-Schreibpfad prüft im Code gegen die
-   getestete HA-Version (derzeit **`2026.6.4`**, `SUPPORTED_HA_AUTH_VERSION`). Auf einer abweichenden
+   getestete HA-Version (derzeit **`2026.7.0`**, `SUPPORTED_HA_AUTH_VERSION`). Auf einer abweichenden
    Version wird der Enforce-/Schreibpfad **fail-closed blockiert** (`compute_enforce_plan` liefert
    einen `blocked`-Plan) — **kein** nativer Write; wirksam bleibt der read-only `monitor`-Zustand.
    Das ist ein bewusst strenger Fail-closed-Block, kein blindes Weiterschreiben.

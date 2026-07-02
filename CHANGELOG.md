@@ -7,6 +7,19 @@ Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-07-02
+
+### Geändert
+- **HA-Auth-Version-Guard auf `2026.7.0` angehoben.** Der Laufzeit-Guard `SUPPORTED_HA_AUTH_VERSION`
+  (exakter Gleichheits-Match, fail-closed auf `monitor`) unterstützt jetzt HA **2026.7.0** statt
+  `2026.6.4`. **Verifiziert:** der native Auth-Write-Pfad (Gruppen-`PolicyPermissions` + `group_ids`-
+  Rebind + Snapshot) wurde live gegen eine HA-2026.7.0-Dev-Instanz bewiesen — allow-only-Policies,
+  korrekte Rollen-Bindungen, Owner unangetastet, sauberes Journal, kein Fail-Safe. Auf HA ≠ `2026.7.0`
+  bleibt der Schreibpfad fail-closed blockiert (enforce → read-only `monitor`).
+- **Hinweis für Updater:** Nach einem HA-Update, das den Guard auslöst, persistiert der Fail-Safe den
+  Modus auf `monitor`. Nach dem Anheben des Guards muss `enforce` daher **explizit** neu gesetzt werden
+  (`tessera.set_mode`); die zuvor angewandte native Durchsetzung bleibt bis dahin bestehen.
+
 ## [0.7.0] — 2026-07-02
 
 ### Geändert

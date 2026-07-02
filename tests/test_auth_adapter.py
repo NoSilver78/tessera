@@ -247,7 +247,7 @@ async def test_policy_store_writes_only_tessera_namespaced_groups() -> None:
     """Policy writes are persisted only for Tessera-managed group ids."""
     hass = FakeHass()
     adapter = AuthPolicyStoreAdapter(
-        hass, ha_version="2026.6.4", group_factory=fake_group_factory
+        hass, ha_version="2026.7.0", group_factory=fake_group_factory
     )
 
     await adapter.async_set_group_policy(
@@ -281,7 +281,7 @@ async def test_policy_store_lists_only_tessera_groups_for_restore() -> None:
         ),
     }
     adapter = AuthPolicyStoreAdapter(
-        hass, ha_version="2026.6.4", group_factory=fake_group_factory
+        hass, ha_version="2026.7.0", group_factory=fake_group_factory
     )
 
     assert await adapter.async_list_tessera_group_ids() == [
@@ -295,7 +295,7 @@ async def test_policy_store_rejects_non_allow_only_policy_shapes() -> None:
     """Native policies are fail-closed to Tessera's entity allow-list shape."""
     hass = FakeHass()
     adapter = AuthPolicyStoreAdapter(
-        hass, ha_version="2026.6.4", group_factory=fake_group_factory
+        hass, ha_version="2026.7.0", group_factory=fake_group_factory
     )
 
     with pytest.raises(AllowOnlyPolicyViolation):
@@ -324,7 +324,7 @@ async def test_user_binding_writes_full_superset_and_invalidates_cache() -> None
     """User binding uses HA's public REPLACE API with the full superset."""
     hass = FakeHass()
     user = FakeUser("user-1", [])
-    adapter = UserBindingAdapter(hass, ha_version="2026.6.4")
+    adapter = UserBindingAdapter(hass, ha_version="2026.7.0")
 
     await adapter.async_bind_full_superset(
         user,
@@ -342,7 +342,7 @@ async def test_user_binding_rejects_delta_and_forbidden_groups() -> None:
     """User binding fails closed for deltas and allow-all groups."""
     hass = FakeHass()
     user = FakeUser("user-1", ["tessera:old"])
-    adapter = UserBindingAdapter(hass, ha_version="2026.6.4")
+    adapter = UserBindingAdapter(hass, ha_version="2026.7.0")
 
     with pytest.raises(TypeError):
         await adapter.async_bind_full_superset(user, ["tessera:viewer"])  # type: ignore[call-arg]
@@ -386,7 +386,7 @@ async def test_user_binding_allows_admin_role_promotion() -> None:
     """
     hass = FakeHass()
     user = FakeUser("user-1", ["system-read-only", "tessera:viewer"])
-    adapter = UserBindingAdapter(hass, ha_version="2026.6.4")
+    adapter = UserBindingAdapter(hass, ha_version="2026.7.0")
 
     await adapter.async_bind_full_superset(
         user,
@@ -404,7 +404,7 @@ async def test_user_binding_restore_exact_can_drop_tessera_groups() -> None:
     """Restore exact binding may return a user to pre-install system groups."""
     hass = FakeHass()
     user = FakeUser("user-1", ["system-read-only", "tessera:viewer"])
-    adapter = UserBindingAdapter(hass, ha_version="2026.6.4")
+    adapter = UserBindingAdapter(hass, ha_version="2026.7.0")
 
     await adapter.async_restore_exact_groups(user, ["system-read-only"])
 
@@ -417,7 +417,7 @@ async def test_system_generated_targets_are_rejected() -> None:
     """System-generated groups and users are never managed by Tessera."""
     hass = FakeHass()
     policy = AuthPolicyStoreAdapter(
-        hass, ha_version="2026.6.4", group_factory=fake_group_factory
+        hass, ha_version="2026.7.0", group_factory=fake_group_factory
     )
     hass.auth._store._groups["tessera:generated"] = FakeGroup(
         "tessera:generated",
@@ -433,7 +433,7 @@ async def test_system_generated_targets_are_rejected() -> None:
     with pytest.raises(UnsafeAuthTarget):
         await policy.async_remove_group("tessera:generated")
     with pytest.raises(UnsafeAuthTarget):
-        await UserBindingAdapter(hass, ha_version="2026.6.4").async_bind_full_superset(
+        await UserBindingAdapter(hass, ha_version="2026.7.0").async_bind_full_superset(
             FakeUser("generated-user", ["tessera:viewer"], system_generated=True),
             ["tessera:viewer"],
             expected_tessera_group_ids=["tessera:viewer"],
@@ -464,7 +464,7 @@ async def test_user_binding_version_guard_has_zero_write_calls() -> None:
 async def test_user_binding_refuses_owner_and_admin_demotion() -> None:
     """Owner/admin users are protected from unsafe binding changes."""
     hass = FakeHass()
-    adapter = UserBindingAdapter(hass, ha_version="2026.6.4")
+    adapter = UserBindingAdapter(hass, ha_version="2026.7.0")
 
     with pytest.raises(LockoutRisk):
         await adapter.async_bind_full_superset(
@@ -550,7 +550,7 @@ async def test_recovery_snapshot_restore_and_no_admin_lockout() -> None:
     managed = FakeUser("managed", ["system-read-only", "tessera:viewer"])
     admin = FakeUser("admin", ["system-admin"])
     hass.auth.users = [managed, admin]
-    binding = UserBindingAdapter(hass, ha_version="2026.6.4")
+    binding = UserBindingAdapter(hass, ha_version="2026.7.0")
     recovery = RecoveryController(hass, binding)
 
     snapshot = await recovery.async_snapshot()
@@ -577,7 +577,7 @@ async def test_recovery_snapshot_skips_unmanaged_users() -> None:
     raised UnsafeAuthTarget and blocked enforce (caught by the ha-tessera-dev E2E).
     """
     hass = FakeHass()
-    recovery = RecoveryController(hass, UserBindingAdapter(hass, ha_version="2026.6.4"))
+    recovery = RecoveryController(hass, UserBindingAdapter(hass, ha_version="2026.7.0"))
 
     snapshot = await recovery.async_snapshot(
         [
@@ -604,7 +604,7 @@ async def test_recovery_snapshot_captures_system_users_member_verbatim() -> None
     test user had empty group_ids.
     """
     hass = FakeHass()
-    recovery = RecoveryController(hass, UserBindingAdapter(hass, ha_version="2026.6.4"))
+    recovery = RecoveryController(hass, UserBindingAdapter(hass, ha_version="2026.7.0"))
 
     snapshot = await recovery.async_snapshot(
         [FakeUser("normal", ["system-users"])],
@@ -621,7 +621,7 @@ async def test_user_binding_restore_exact_allows_system_users() -> None:
     """Pre-install restore writes the captured original back, incl. ``system-users``."""
     hass = FakeHass()
     user = FakeUser("user-1", ["tessera:viewer"])
-    adapter = UserBindingAdapter(hass, ha_version="2026.6.4")
+    adapter = UserBindingAdapter(hass, ha_version="2026.7.0")
 
     await adapter.async_restore_exact_groups(user, ["system-users"])
 
@@ -633,7 +633,7 @@ async def test_user_binding_restore_exact_allows_system_users() -> None:
 async def test_recovery_restore_rejects_unsafe_groups_and_admin_demotion() -> None:
     """Recovery restore keeps namespace and no-lockout guards fail-closed."""
     hass = FakeHass()
-    recovery = RecoveryController(hass, UserBindingAdapter(hass, ha_version="2026.6.4"))
+    recovery = RecoveryController(hass, UserBindingAdapter(hass, ha_version="2026.7.0"))
 
     with pytest.raises(UnsafeAuthTarget):
         await recovery.async_restore(
@@ -669,7 +669,7 @@ async def test_recovery_detects_lockout_and_can_fail_safe_to_off() -> None:
     """Recovery fails closed on lockout and can persist mode off."""
     hass = FakeHass()
     hass.auth.users = [FakeUser("managed", ["tessera:viewer"])]
-    recovery = RecoveryController(hass, UserBindingAdapter(hass, ha_version="2026.6.4"))
+    recovery = RecoveryController(hass, UserBindingAdapter(hass, ha_version="2026.7.0"))
     store = FakeConfigStore("enforce")
 
     with pytest.raises(LockoutRisk):
@@ -690,7 +690,7 @@ async def test_recovery_treats_falsey_active_flag_as_inactive() -> None:
     """Falsey non-bool active flags are not owner/admin recovery survivors."""
     hass = FakeHass()
     hass.auth.users = [FakeUser("admin", ["system-admin"], is_active=0)]
-    recovery = RecoveryController(hass, UserBindingAdapter(hass, ha_version="2026.6.4"))
+    recovery = RecoveryController(hass, UserBindingAdapter(hass, ha_version="2026.7.0"))
 
     assert await recovery.async_has_owner_or_admin() is False
     with pytest.raises(LockoutRisk):

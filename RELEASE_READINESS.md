@@ -269,7 +269,7 @@ Wartungsrisiko**. Weder `hassfest` noch `hacs/action` prüfen Laufzeit-/API-Stab
 
 ### Der Tracking-Prozess (pro HA-Release)
 1. **Laufzeit-Guard auf die exakt getestete HA-Version** (`SUPPORTED_HA_AUTH_VERSION`, derzeit
-   `2026.6.4`, exakter Gleichheits-Match) — **dies ist die aktive Absicherung.** Vor jedem nativen
+   `2026.7.0`, exakter Gleichheits-Match) — **dies ist die aktive Absicherung.** Vor jedem nativen
    Write geprüft; auf abweichender Version fail-closed → kein Write, `enforce` fällt auf `monitor`.
    **Bei jeder verifizierten neuen HA-Version anheben.** Optionaler Zusatz beim Public-Flip: ein
    Minimum-HA-Pin in `hacs.json` (`"homeassistant": "…"`), der HACS-Download/Update auf älterem HA
