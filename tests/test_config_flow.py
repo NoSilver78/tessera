@@ -15,8 +15,10 @@ from custom_components.tessera.config_flow import (
     add_role,
     remove_area_grant,
     remove_floor_grant,
+    remove_label_grant,
     remove_role,
     set_floor_grant,
+    set_label_grant,
     set_mode,
     set_user_membership,
 )
@@ -376,6 +378,88 @@ def test_remove_floor_grant_deletes_empty_floor_bucket() -> None:
     )
 
     assert remove_floor_grant(policy, "eg::viewer")["floor_grants"] == {}
+
+
+def test_set_label_grant_is_schema_aware_and_control_implies_read() -> None:
+    """Label grants store normalized allow-only permission leaves."""
+    config = add_role(default_config_data(), "operator")
+
+    policy = set_label_grant(
+        config,
+        default_policy_data(),
+        label_id="cozy",
+        role_id="operator",
+        read=False,
+        control=True,
+    )
+
+    leaf = policy["label_grants"]["cozy"]["operator"]
+    assert leaf == {"read": True, "control": True}
+    assert leaf is not True
+    assert validate_policy_data(policy) == policy
+
+
+def test_set_label_grant_rejects_unknown_role() -> None:
+    """Label grant writes fail closed when the role is unknown."""
+    config = add_role(default_config_data(), "viewer")
+
+    with pytest.raises(TesseraSchemaError):
+        set_label_grant(
+            config,
+            default_policy_data(),
+            label_id="cozy",
+            role_id="ghost",
+            read=True,
+            control=False,
+        )
+
+
+def test_set_label_grant_false_false_removes_idempotently() -> None:
+    """False/false is the label-grant removal form and tolerates repeats."""
+    config = add_role(default_config_data(), "viewer")
+    policy = set_label_grant(
+        config,
+        default_policy_data(),
+        label_id="cozy",
+        role_id="viewer",
+        read=True,
+        control=False,
+    )
+
+    removed = set_label_grant(
+        config,
+        policy,
+        label_id="cozy",
+        role_id="viewer",
+        read=False,
+        control=False,
+    )
+    removed_again = set_label_grant(
+        config,
+        removed,
+        label_id="cozy",
+        role_id="viewer",
+        read=False,
+        control=False,
+    )
+
+    assert removed["label_grants"] == {}
+    assert removed_again["label_grants"] == {}
+
+
+def test_remove_label_grant_deletes_empty_label_bucket() -> None:
+    """Removing the final label role grant removes the empty label target."""
+    config = add_role(default_config_data(), "viewer")
+    policy = set_label_grant(
+        config,
+        default_policy_data(),
+        label_id="cozy",
+        role_id="viewer",
+        read=True,
+        control=False,
+    )
+
+    assert remove_label_grant(policy, "cozy::viewer")["label_grants"] == {}
 
 
 def test_remove_area_grant_deletes_empty_area_bucket() -> None:

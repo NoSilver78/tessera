@@ -27,9 +27,10 @@ Tessera compiles declarative policies (**role × area × action**) into **native
 - **Linter** — checks policies for conflicts and gaps before applying.
 - **Dual-mode membership** — local roles (`by_user`, the baseline, no external dependency) **or**
   additively a mapping from an external IdP (`by_group`, e.g. Authentik/OIDC — optional).
-- **Admin panel** "Tessera" (Area-Board) in the HA sidebar (administrators only): per role the
-  provenance columns **Floor | Area** (clickable to set grants), a double-grant marker, and
-  expandable areas down to entity level.
+- **Admin panel** "Tessera" in the HA sidebar (administrators only), with a `Bereiche ↔ Labels`
+  toggle between two boards: an **Area-Board** (per role the provenance columns **Floor | Area**,
+  clickable to set grants, a double-grant marker, expandable to entity level) and a **Labels board**
+  — labels as rows with an editable cell per role, expandable to the entities a label resolves to.
 - **Three operating modes** with a non-intrusive default — see below.
 
 ## Project status

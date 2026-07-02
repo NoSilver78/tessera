@@ -11,12 +11,14 @@ from homeassistant.components.websocket_api import decorators as websocket_decor
 from homeassistant.components.websocket_api.connection import ActiveConnection
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import floor_registry as fr
+from homeassistant.helpers import label_registry as lr
 
 from .config_flow import (
     add_area_grant,
     encode_grant,
     remove_area_grant,
     set_floor_grant,
+    set_label_grant,
 )
 from .const import DOMAIN, MODE_ENFORCE
 from .linter import LintReport
@@ -41,6 +43,7 @@ if TYPE_CHECKING:
 TYPE_MATRIX_GET = "tessera/matrix/get"
 TYPE_MATRIX_SET_GRANT = "tessera/matrix/set_grant"
 TYPE_MATRIX_SET_FLOOR_GRANT = "tessera/matrix/set_floor_grant"
+TYPE_MATRIX_SET_LABEL_GRANT = "tessera/matrix/set_label_grant"
 
 
 class MatrixArea(TypedDict):
@@ -77,6 +80,15 @@ class MatrixFloor(TypedDict):
     order: int
 
 
+class MatrixLabel(TypedDict):
+    """Label row metadata returned to the Labels board."""
+
+    id: str
+    name: str
+    icon: str | None
+    color: str | None
+
+
 class MatrixResponse(TypedDict):
     """Complete matrix payload returned by Tessera WebSocket commands."""
 
@@ -85,6 +97,9 @@ class MatrixResponse(TypedDict):
     grants: dict[str, dict[str, MatrixGrant]]
     floor_grants: dict[str, dict[str, MatrixGrant]]
     area_floor: dict[str, MatrixFloor | None]
+    labels: list[MatrixLabel]
+    label_grants: dict[str, dict[str, MatrixGrant]]
+    entities_by_label: dict[str, list[str]]
     entities_by_area: dict[str, list[str]]
     preview: MonitorPreview
     lint: LintReport
@@ -95,6 +110,7 @@ def async_register(hass: HomeAssistant) -> None:
     async_register_command(hass, websocket_matrix_get)
     async_register_command(hass, websocket_matrix_set_grant)
     async_register_command(hass, websocket_matrix_set_floor_grant)
+    async_register_command(hass, websocket_matrix_set_label_grant)
 
 
 @websocket_decorators.require_admin
@@ -170,6 +186,41 @@ async def websocket_matrix_set_floor_grant(
         result = await async_set_matrix_floor_grant(
             hass,
             floor_id=cast(str, msg["floor_id"]),
+            role_id=cast(str, msg["role_id"]),
+            read=cast(bool, msg["read"]),
+            control=cast(bool, msg["control"]),
+        )
+    except TesseraSchemaError as err:
+        connection.send_error(msg["id"], websocket_const.ERR_INVALID_FORMAT, str(err))
+        return
+    except LookupError as err:
+        connection.send_error(msg["id"], websocket_const.ERR_NOT_FOUND, str(err))
+        return
+
+    connection.send_result(msg["id"], result)
+
+
+@websocket_decorators.require_admin
+@websocket_decorators.websocket_command(
+    {
+        vol.Required("type"): TYPE_MATRIX_SET_LABEL_GRANT,
+        vol.Required("label_id"): str,
+        vol.Required("role_id"): str,
+        vol.Required("read"): bool,
+        vol.Required("control"): bool,
+    }
+)
+@websocket_decorators.async_response
+async def websocket_matrix_set_label_grant(
+    hass: HomeAssistant,
+    connection: ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Persist one Label x Role grant and return the refreshed matrix."""
+    try:
+        result = await async_set_matrix_label_grant(
+            hass,
+            label_id=cast(str, msg["label_id"]),
             role_id=cast(str, msg["role_id"]),
             read=cast(bool, msg["read"]),
             control=cast(bool, msg["control"]),
@@ -299,6 +350,57 @@ async def async_set_matrix_floor_grant(
         return _matrix_response(hass, config, policy, preview)
 
 
+async def async_set_matrix_label_grant(
+    hass: HomeAssistant,
+    *,
+    label_id: str,
+    role_id: str,
+    read: bool,
+    control: bool,
+) -> MatrixResponse:
+    """Persist one schema-aware label grant and return the refreshed matrix.
+
+    A label grant covers every entity carrying the label — directly, or through
+    its device or area (mirroring HA's own label expansion) — so the refreshed
+    payload updates that label's row. In enforce a saved label grant re-applies
+    natively through the central guarded mode handler (CXR-02), like an area
+    grant; the write is serialized under the mutation lock.
+    """
+    async with mutation_lock(hass):
+        entry_id, entry_data = _get_loaded_entry_data(hass)
+        store = cast(TesseraStore, entry_data["store"])
+        config = await store.async_load_config()
+        policy = await store.async_load_policy()
+
+        known_label_ids = {label["id"] for label in _labels(hass)}
+        if label_id not in known_label_ids:
+            raise LookupError(f"Unknown Tessera label: {label_id}")
+        if role_id not in config["roles"]:
+            raise LookupError(f"Unknown Tessera role: {role_id}")
+
+        policy = set_label_grant(
+            config,
+            policy,
+            label_id=label_id,
+            role_id=role_id,
+            read=read,
+            control=control,
+        )
+
+        await store.async_save_policy(policy)
+        preview = await _refresh_preview(
+            hass, entry_id, entry_data, store, config, policy
+        )
+        if config["mode"] == MODE_ENFORCE:
+            # CXR-02: enforce must re-apply the saved label grant to native auth,
+            # not merely refresh the preview. Same guarded path as area/floor
+            # grants; runs INSIDE the held lock with raw saves (must not re-acquire).
+            from . import _compile_for_mode_safely
+
+            await _compile_for_mode_safely(hass, entry_id, entry_data)
+        return _matrix_response(hass, config, policy, preview)
+
+
 async def _refresh_preview(
     hass: HomeAssistant,
     entry_id: str,
@@ -332,12 +434,16 @@ def _matrix_response(
     areas = _areas(hass)
     roles = _roles(config)
     area_floor = _area_floor(hass)
+    labels = _labels(hass)
     return {
         "areas": areas,
         "roles": roles,
         "grants": _grants(policy, areas, roles),
         "floor_grants": _floor_grants(policy, areas, roles, area_floor),
         "area_floor": area_floor,
+        "labels": labels,
+        "label_grants": _label_grants(policy, labels, roles),
+        "entities_by_label": _entities_by_label(hass, labels),
         "entities_by_area": _entities_by_area(hass, areas),
         "preview": preview,
         "lint": preview["lint"],
@@ -441,6 +547,48 @@ def _floor_grants(
             role_id: _grant_leaf(role_map.get(role_id)) for role_id in role_ids
         }
     return result
+
+
+def _labels(hass: HomeAssistant) -> list[MatrixLabel]:
+    """Return sorted Home Assistant labels for the Labels board rows."""
+    registry = lr.async_get(hass)
+    return [
+        {
+            "id": label.label_id,
+            "name": label.name,
+            "icon": label.icon,
+            "color": label.color,
+        }
+        for label in sorted(registry.async_list_labels(), key=lambda item: item.name)
+    ]
+
+
+def _label_grants(
+    policy: TesseraPolicyData,
+    labels: list[MatrixLabel],
+    roles: list[MatrixRole],
+) -> dict[str, dict[str, MatrixGrant]]:
+    """Return explicit bool grants for each visible Label x Role cell."""
+    role_ids = [role["id"] for role in roles]
+    result: dict[str, dict[str, MatrixGrant]] = {}
+    for label in labels:
+        label_id = label["id"]
+        role_map = policy["label_grants"].get(label_id, {})
+        result[label_id] = {
+            role_id: _grant_leaf(role_map.get(role_id)) for role_id in role_ids
+        }
+    return result
+
+
+def _entities_by_label(
+    hass: HomeAssistant, labels: list[MatrixLabel]
+) -> dict[str, list[str]]:
+    """Return the entity ids Tessera resolves for each label (for the expand)."""
+    resolver = AreaEntityResolver.from_hass(hass)
+    return {
+        label["id"]: list(resolver.entity_ids_for_label(label["id"]))
+        for label in labels
+    }
 
 
 def _entities_by_area(

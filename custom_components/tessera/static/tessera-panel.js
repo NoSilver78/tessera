@@ -16,11 +16,18 @@
  * Each area row expands (chevron) to list the entities Tessera resolves for it;
  * those entities inherit the area right, so they carry no per-entity columns.
  *
+ * A header toggle switches between two boards: the Area-Board (above) and a
+ * Labels board — labels as rows (colour dot + entity count), one editable cell
+ * per role that cycles none -> read -> read+control via
+ * `tessera/matrix/set_label_grant`. Each label row expands to the entities it
+ * resolves (entity + device + area labels), which inherit the label right.
+ *
  * WebSocket:
  *   - `tessera/matrix/get`             load areas, roles, per-source grants,
- *                                      floors (id/name/level), entities, preview
+ *                                      floors, labels, entities, preview
  *   - `tessera/matrix/set_grant`       persist one Area cell, return refreshed matrix
  *   - `tessera/matrix/set_floor_grant` persist one Floor cell, return refreshed matrix
+ *   - `tessera/matrix/set_label_grant` persist one Label cell, return refreshed matrix
  */
 class TesseraMatrixPanel extends HTMLElement {
   constructor() {
@@ -32,6 +39,7 @@ class TesseraMatrixPanel extends HTMLElement {
     this._pending = "";
     this._loading = false;
     this._expanded = new Set();
+    this._board = "areas";
   }
 
   set hass(hass) {
@@ -376,11 +384,28 @@ class TesseraMatrixPanel extends HTMLElement {
           color: var(--secondary-text-color);
         }
         .empty { padding: 32px 24px; color: var(--secondary-text-color); }
+        .segbar { display: inline-flex; border: 1px solid var(--divider-color); border-radius: 999px; overflow: hidden; }
+        .segbar .seg { border: none; border-radius: 0; padding: 8px 16px; background: transparent; }
+        .segbar .seg + .seg { border-left: 1px solid var(--divider-color); }
+        .segbar .seg.active { background: var(--primary-color); color: var(--text-primary-color); }
+        .segbar .seg:hover { border-color: transparent; }
+        .ldot {
+          width: 10px; height: 10px; border-radius: 50%; display: inline-block;
+          margin: 0 6px 0 2px; vertical-align: middle; border: 1px solid var(--divider-color);
+        }
+        td.lname { text-align: left; padding-left: 12px; }
+        td.lname ha-icon { margin-right: 6px; vertical-align: middle; --mdc-icon-size: 18px; }
       </style>
       <div class="card">
         <header>
           <h1>Tessera Matrix</h1>
           <div class="actions">
+            <div class="segbar" role="tablist" aria-label="Board">
+              <button type="button" id="board-areas" class="seg ${this._board === "areas" ? "active" : ""}"
+                role="tab" aria-selected="${this._board === "areas" ? "true" : "false"}">Bereiche</button>
+              <button type="button" id="board-labels" class="seg ${this._board === "labels" ? "active" : ""}"
+                role="tab" aria-selected="${this._board === "labels" ? "true" : "false"}">Labels</button>
+            </div>
             ${this._loading ? "<span>Loading...</span>" : ""}
             <button type="button" id="refresh" ${this._disabledAttr(this._loading || this._pending)}>
               Refresh
@@ -390,7 +415,7 @@ class TesseraMatrixPanel extends HTMLElement {
         ${this._error ? `<div class="error">${this._escape(this._error)}</div>` : ""}
         ${roles.length ? this._legendTemplate() : ""}
         ${this._previewTemplate(preview)}
-        ${this._matrixTemplate(roles)}
+        ${this._board === "labels" ? this._labelBoard(roles) : this._matrixTemplate(roles)}
       </div>
     `;
 
@@ -418,15 +443,35 @@ class TesseraMatrixPanel extends HTMLElement {
         }
       });
     });
+    this.shadowRoot.getElementById("board-areas")?.addEventListener("click", () => {
+      this._setBoard("areas");
+    });
+    this.shadowRoot.getElementById("board-labels")?.addEventListener("click", () => {
+      this._setBoard("labels");
+    });
+    this.shadowRoot.querySelectorAll("[data-label][data-role]").forEach((button) => {
+      button.addEventListener("click", () => {
+        if (button.dataset.label && button.dataset.role) {
+          this._toggleLabel(button.dataset.label, button.dataset.role);
+        }
+      });
+    });
   }
 
   _legendTemplate() {
+    const labels = this._board === "labels";
+    const dbl = labels
+      ? ""
+      : '<span><span class="swatch dbl"></span>doppelt (Etage + Bereich)</span>';
+    const prov = labels
+      ? "Label × Rolle — klicken zum Ändern (none → read → control)"
+      : "Floor auf der Etagen-Zeile · Area je Bereich — klicken zum Ändern";
     return `
       <section class="legend" aria-label="Legend">
         <span><span class="swatch read"></span>read</span>
         <span><span class="swatch control"></span>control (implies read)</span>
-        <span><span class="swatch dbl"></span>doppelt (Etage + Bereich)</span>
-        <span>Floor auf der Etagen-Zeile · Area je Bereich — klicken zum Ändern</span>
+        ${dbl}
+        <span>${prov}</span>
       </section>
     `;
   }
@@ -591,6 +636,145 @@ class TesseraMatrixPanel extends HTMLElement {
       <tr class="entrow">
         <td colspan="${colspan}">
           <div class="ehint">${ids.length} Entities · erben das Area-Recht</div>
+          <div class="eboxes">${boxes}</div>
+        </td>
+      </tr>
+    `;
+  }
+
+  _setBoard(board) {
+    if (this._board === board) {
+      return;
+    }
+    this._board = board;
+    this._render();
+  }
+
+  /** Advance one Label x Role cell to its next grant state and persist it. */
+  async _toggleLabel(labelId, roleId) {
+    if (!this._hass || this._pending) {
+      return;
+    }
+    this._pending = `label::${labelId}::${roleId}`;
+    this._error = "";
+    this._render();
+    try {
+      this._data = await this._hass.connection.sendMessagePromise({
+        type: "tessera/matrix/set_label_grant",
+        label_id: labelId,
+        role_id: roleId,
+        ...this._nextGrant(this._labelGrantFor(labelId, roleId)),
+      });
+    } catch (err) {
+      this._error = this._messageFromError(err);
+    } finally {
+      this._pending = "";
+      this._render();
+    }
+  }
+
+  /** Direct Label grant for a cell, defaulting to no permission. */
+  _labelGrantFor(labelId, roleId) {
+    return (
+      this._data?.label_grants?.[labelId]?.[roleId] || {
+        read: false,
+        control: false,
+      }
+    );
+  }
+
+  /** Resolve a HA label colour token to a themed CSS colour for the row dot. */
+  _labelDot(color) {
+    const token = String(color || "").replace(/[^a-z0-9-]/gi, "");
+    return token
+      ? `var(--${token}-color, var(--primary-color))`
+      : "var(--secondary-text-color)";
+  }
+
+  _labelBoard(roles) {
+    if (!roles.length) {
+      return '<div class="empty">Add Tessera roles in the integration options first.</div>';
+    }
+    const labels = this._data?.labels || [];
+    if (!labels.length) {
+      return `
+        <div class="empty">
+          Keine Home-Assistant-Labels gefunden. Labels in den HA-Einstellungen
+          anlegen und Entitäten, Geräten oder Bereichen zuweisen — dann erscheinen
+          sie hier.
+        </div>`;
+    }
+    const roleHead = roles
+      .map(
+        (role) => `<th class="role-h bl" scope="col">${this._escape(role.name)}</th>`,
+      )
+      .join("");
+    const body = labels.map((label) => this._labelRow(label, roles)).join("");
+    return `
+      <div class="matrix-wrap">
+        <table>
+          <thead>
+            <tr><th scope="col">Label</th>${roleHead}</tr>
+          </thead>
+          <tbody>${body}</tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  _labelRow(label, roles) {
+    const key = `label:${label.id}`;
+    const expanded = this._expanded.has(key);
+    const ids = this._data?.entities_by_label?.[label.id] || [];
+    const icon = label.icon
+      ? `<ha-icon icon="${this._escape(label.icon)}"></ha-icon>`
+      : "";
+    const cells = roles
+      .map((role) => {
+        const state = this._state(this._labelGrantFor(label.id, role.id));
+        const pending = this._pending === `label::${label.id}::${role.id}`;
+        return `
+          <td class="bl">
+            <button
+              type="button"
+              class="cell ${state}"
+              data-label="${this._escape(label.id)}"
+              data-role="${this._escape(role.id)}"
+              ${this._disabledAttr(pending)}
+              title="Label-Grant ${this._escape(label.name)} / ${this._escape(role.name)}"
+            >
+              ${pending ? "Saving..." : state}
+            </button>
+          </td>`;
+      })
+      .join("");
+    const nameCell = `
+      <td class="lname">
+        <button type="button" class="chev" data-expand="${this._escape(key)}"
+          aria-label="Toggle entities" aria-expanded="${expanded ? "true" : "false"}">
+          ${expanded ? "▾" : "▸"}
+        </button><span class="ldot" style="background: ${this._labelDot(label.color)}"></span>${icon}${this._escape(label.name)}
+        <span class="fmeta">· ${ids.length} ${ids.length === 1 ? "Entität" : "Entitäten"}</span>
+      </td>`;
+    const rows = [`<tr>${nameCell}${cells}</tr>`];
+    if (expanded) {
+      rows.push(this._labelEntityRow(label, roles.length));
+    }
+    return rows.join("");
+  }
+
+  _labelEntityRow(label, roleCount) {
+    const ids = this._data?.entities_by_label?.[label.id] || [];
+    const colspan = 1 + roleCount;
+    const boxes = ids.length
+      ? ids
+          .map((id) => `<span class="ebox">${this._escape(this._entityName(id))}</span>`)
+          .join("")
+      : '<span class="ebox">— keine Entitäten —</span>';
+    return `
+      <tr class="entrow">
+        <td colspan="${colspan}">
+          <div class="ehint">${ids.length} Entitäten · erben das Label-Recht</div>
           <div class="eboxes">${boxes}</div>
         </td>
       </tr>

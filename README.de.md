@@ -27,9 +27,11 @@ Home-Assistant-Auth-Store. **Kein Monkeypatch, kein Core-Fork.**
 - **Linter** — prüft Policies vor dem Anwenden auf Konflikte und Lücken.
 - **Dual-Mode-Mitgliedschaft** — lokale Rollen (`by_user`, Baseline, ohne Fremdabhängigkeit) **oder**
   additiv ein Mapping aus einem externen IdP (`by_group`, z. B. Authentik/OIDC — optional).
-- **Admin-Panel** „Tessera" (Area-Board) in der HA-Seitenleiste (nur Administratoren): je Rolle die
-  Herkunftsspalten **Floor | Area** (klickbar zum Setzen von Grants), Doppelvergabe-Markierung und
-  aufklappbare Bereiche bis auf Entity-Ebene.
+- **Admin-Panel** „Tessera" in der HA-Seitenleiste (nur Administratoren), mit Umschalter
+  `Bereiche ↔ Labels` zwischen zwei Boards: einem **Area-Board** (je Rolle die Herkunftsspalten
+  **Floor | Area**, klickbar zum Setzen von Grants, Doppelvergabe-Markierung, aufklappbar bis auf
+  Entity-Ebene) und einem **Labels-Board** — Labels als Zeilen mit editierbarer Zelle je Rolle,
+  aufklappbar bis zu den Entitäten, die ein Label auflöst.
 - **Drei Betriebsmodi** mit nicht-eingreifendem Default — siehe unten.
 
 ## Projektstatus

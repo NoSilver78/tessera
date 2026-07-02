@@ -36,6 +36,14 @@ class FakeAreaRegistry:
         return self._areas
 
 
+class FakeLabelRegistry:
+    """Label registry double returning no labels for concurrency tests."""
+
+    def async_list_labels(self) -> list[Any]:
+        """Return no labels."""
+        return []
+
+
 class FakeResolver:
     """Deterministic resolver double."""
 
@@ -45,6 +53,10 @@ class FakeResolver:
 
     def entity_ids_for_floor(self, floor_id: str) -> tuple[str, ...]:
         """No floor entities in these tests."""
+        return ()
+
+    def entity_ids_for_label(self, label_id: str) -> tuple[str, ...]:
+        """No label entities in these tests."""
         return ()
 
     def entity_ids_for_areas(self, area_ids: Any) -> AreaEntityResolution:
@@ -116,6 +128,10 @@ def _install(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "custom_components.tessera.websocket.ar.async_get",
         lambda hass: FakeAreaRegistry(AREAS),
+    )
+    monkeypatch.setattr(
+        "custom_components.tessera.websocket.lr.async_get",
+        lambda hass: FakeLabelRegistry(),
     )
     monkeypatch.setattr(
         "custom_components.tessera.websocket.AreaEntityResolver.from_hass",
