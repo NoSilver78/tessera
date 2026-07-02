@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 320" font-family="system-ui,-apple-system,Segoe UI,Roboto,sans-serif" role="img" aria-label="Options flow Set mode with the options off, monitor, enforce">
+  <rect width="560" height="320" rx="10" fill="#111318"/>
+  <rect x="40" y="30" width="480" height="260" rx="12" fill="#1f2229" stroke="#34383f"/>
+  <text x="64" y="66" fill="#e3e5e8" font-size="18" font-weight="600">Tessera</text>
+  <text x="64" y="88" fill="#9aa0a6" font-size="13">Action: Set mode</text>
+  <line x1="40" y1="104" x2="520" y2="104" stroke="#34383f"/>
+  <text x="64" y="136" fill="#9aa0a6" font-size="13">Mode</text>
+  <rect x="64" y="146" width="432" height="42" rx="8" fill="#111318" stroke="#03a9f4"/>
+  <text x="80" y="172" fill="#e3e5e8" font-size="15">monitor</text>
+  <path d="M472 162 l8 9 l8 -9" fill="none" stroke="#9aa0a6" stroke-width="2"/>
+  <rect x="64" y="192" width="432" height="86" rx="8" fill="#181b21" stroke="#34383f"/>
+  <text x="80" y="216" fill="#9aa0a6" font-size="14">off</text>
+  <rect x="68" y="224" width="424" height="26" rx="6" fill="#0d2b3a"/>
+  <text x="80" y="242" fill="#03a9f4" font-size="14" font-weight="600">monitor</text>
+  <text x="80" y="270" fill="#9aa0a6" font-size="14">enforce</text>
+  <text x="380" y="242" fill="#4caf50" font-size="11">start here</text>
+</svg>
