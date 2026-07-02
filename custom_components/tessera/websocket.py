@@ -69,10 +69,12 @@ class MatrixGrant(TypedDict):
 
 
 class MatrixFloor(TypedDict):
-    """Floor metadata for an area — labels and floor-sourced grants."""
+    """Floor metadata for an area — labels, ordering, and floor-sourced grants."""
 
     id: str
     name: str
+    level: int | None
+    order: int
 
 
 class MatrixResponse(TypedDict):
@@ -391,6 +393,7 @@ def _area_floor(hass: HomeAssistant) -> dict[str, MatrixFloor | None]:
     so instances (and tests) without floors never touch it.
     """
     floor_reg: Any = None
+    floor_order: dict[str, int] = {}
     result: dict[str, MatrixFloor | None] = {}
     for area in ar.async_get(hass).async_list_areas():
         floor_id = area.floor_id
@@ -399,10 +402,18 @@ def _area_floor(hass: HomeAssistant) -> dict[str, MatrixFloor | None]:
             continue
         if floor_reg is None:
             floor_reg = fr.async_get(hass)
+            # Registry order is the physical-ish fallback the panel uses to sort
+            # floors that carry no explicit ``level``.
+            floor_order = {
+                floor.floor_id: index
+                for index, floor in enumerate(floor_reg.async_list_floors())
+            }
         floor = floor_reg.async_get_floor(floor_id)
         result[area.id] = {
             "id": floor_id,
             "name": floor.name if floor is not None else floor_id,
+            "level": floor.level if floor is not None else None,
+            "order": floor_order.get(floor_id, 0),
         }
     return result
 

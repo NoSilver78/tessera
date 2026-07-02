@@ -2,20 +2,25 @@
  * Tessera matrix panel — a custom element (<tessera-matrix-panel>) for the
  * admin-only Tessera sidebar page. Home Assistant assigns the `hass` property.
  *
- * The matrix splits each role into two provenance columns:
- *   - Floor: the grant inherited from the area's floor (display-only here).
- *   - Area:  the direct Area x Role grant, editable — clicking a cell cycles
- *            none -> read -> read+control -> none via `tessera/matrix/set_grant`.
- * When both sources grant the same area, the row is flagged "doppelt" (a
- * redundant double: removing one source won't change effective access).
+ * The matrix is grouped by floor, and each role keeps a two-column provenance
+ * split (Floor | Area):
+ *   - Floor header row: one per floor. Its Floor cell is the editable floor x
+ *     role grant (click cycles none -> read -> read+control -> none via
+ *     `tessera/matrix/set_floor_grant`). The floor grant is edited here, once.
+ *   - Area rows (indented under the floor): the Floor cell shows the inherited
+ *     floor grant (display-only), the Area cell is the editable direct Area x
+ *     Role grant (`tessera/matrix/set_grant`). When both the floor and the area
+ *     grant a cell, the row is flagged "doppelt" (a redundant double).
+ *   - Areas without a floor group under a non-editable "Ohne Etage" header.
  *
  * Each area row expands (chevron) to list the entities Tessera resolves for it;
  * those entities inherit the area right, so they carry no per-entity columns.
  *
  * WebSocket:
- *   - `tessera/matrix/get`       load areas, roles, per-source grants, floors,
- *                                entities-by-area, monitor preview
- *   - `tessera/matrix/set_grant` persist one Area cell, return the refreshed matrix
+ *   - `tessera/matrix/get`             load areas, roles, per-source grants,
+ *                                      floors (id/name/level), entities, preview
+ *   - `tessera/matrix/set_grant`       persist one Area cell, return refreshed matrix
+ *   - `tessera/matrix/set_floor_grant` persist one Floor cell, return refreshed matrix
  */
 class TesseraMatrixPanel extends HTMLElement {
   constructor() {
@@ -61,14 +66,6 @@ class TesseraMatrixPanel extends HTMLElement {
     if (!this._hass || this._pending) {
       return;
     }
-    const current = this._grantFor(areaId, roleId);
-    // Cycle the Area cell: none -> read -> read+control -> none.
-    const next = current.control
-      ? { read: false, control: false }
-      : current.read
-        ? { read: true, control: true }
-        : { read: true, control: false };
-
     this._pending = `${areaId}::${roleId}`;
     this._error = "";
     this._render();
@@ -77,8 +74,7 @@ class TesseraMatrixPanel extends HTMLElement {
         type: "tessera/matrix/set_grant",
         area_id: areaId,
         role_id: roleId,
-        read: next.read,
-        control: next.control,
+        ...this._nextGrant(this._grantFor(areaId, roleId)),
       });
     } catch (err) {
       this._error = this._messageFromError(err);
@@ -89,33 +85,19 @@ class TesseraMatrixPanel extends HTMLElement {
   }
 
   /** Advance one Floor x Role cell to its next grant state and persist it. */
-  async _toggleFloor(areaId, roleId) {
+  async _toggleFloor(floorId, roleId) {
     if (!this._hass || this._pending) {
       return;
     }
-    const floor = this._data?.area_floor?.[areaId];
-    if (!floor) {
-      return;
-    }
-    const current = this._floorGrantFor(areaId, roleId);
-    // Cycle the Floor cell: none -> read -> read+control -> none. A floor grant
-    // covers every area on the floor, so the refreshed matrix updates them all.
-    const next = current.control
-      ? { read: false, control: false }
-      : current.read
-        ? { read: true, control: true }
-        : { read: true, control: false };
-
-    this._pending = `floor::${floor.id}::${roleId}`;
+    this._pending = `floor::${floorId}::${roleId}`;
     this._error = "";
     this._render();
     try {
       this._data = await this._hass.connection.sendMessagePromise({
         type: "tessera/matrix/set_floor_grant",
-        floor_id: floor.id,
+        floor_id: floorId,
         role_id: roleId,
-        read: next.read,
-        control: next.control,
+        ...this._nextGrant(this._floorGrantById(floorId, roleId)),
       });
     } catch (err) {
       this._error = this._messageFromError(err);
@@ -123,6 +105,17 @@ class TesseraMatrixPanel extends HTMLElement {
       this._pending = "";
       this._render();
     }
+  }
+
+  /** Cycle a grant: none -> read -> read+control -> none. */
+  _nextGrant(current) {
+    if (current.control) {
+      return { read: false, control: false };
+    }
+    if (current.read) {
+      return { read: true, control: true };
+    }
+    return { read: true, control: false };
   }
 
   _toggleExpand(areaId) {
@@ -141,7 +134,7 @@ class TesseraMatrixPanel extends HTMLElement {
     );
   }
 
-  /** Floor-inherited grant for a cell, defaulting to no permission. */
+  /** Floor-inherited grant for an area cell, defaulting to no permission. */
   _floorGrantFor(areaId, roleId) {
     return (
       this._data?.floor_grants?.[areaId]?.[roleId] || {
@@ -149,6 +142,17 @@ class TesseraMatrixPanel extends HTMLElement {
         control: false,
       }
     );
+  }
+
+  /** The floor grant addressed by floor id (any area on the floor mirrors it). */
+  _floorGrantById(floorId, roleId) {
+    const areaFloor = this._data?.area_floor || {};
+    for (const [areaId, floor] of Object.entries(areaFloor)) {
+      if (floor && floor.id === floorId) {
+        return this._floorGrantFor(areaId, roleId);
+      }
+    }
+    return { read: false, control: false };
   }
 
   /** A cell is a "double" when both the floor and the area grant it. */
@@ -167,6 +171,51 @@ class TesseraMatrixPanel extends HTMLElement {
     return state?.attributes?.friendly_name || entityId;
   }
 
+  /**
+   * Group areas by floor for the matrix body.
+   * Returns ordered floors (by level asc, then name) each with their areas, plus
+   * the floorless areas. Areas keep the WS order (already sorted by name).
+   */
+  _floorGroups() {
+    const areas = this._data?.areas || [];
+    const areaFloor = this._data?.area_floor || {};
+    const byFloor = new Map();
+    const floorless = [];
+    for (const area of areas) {
+      const floor = areaFloor[area.id];
+      if (!floor) {
+        floorless.push(area);
+        continue;
+      }
+      let group = byFloor.get(floor.id);
+      if (!group) {
+        group = {
+          id: floor.id,
+          name: floor.name,
+          level: floor.level == null ? null : floor.level,
+          order: floor.order == null ? 0 : floor.order,
+          areas: [],
+        };
+        byFloor.set(floor.id, group);
+      }
+      group.areas.push(area);
+    }
+    // Order by explicit floor level when set; otherwise fall back to the HA
+    // floor-registry order (physical-ish), and only then to the name.
+    const floors = [...byFloor.values()].sort((a, b) => {
+      const la = a.level == null ? Number.POSITIVE_INFINITY : a.level;
+      const lb = b.level == null ? Number.POSITIVE_INFINITY : b.level;
+      if (la !== lb) {
+        return la - lb;
+      }
+      if (a.order !== b.order) {
+        return a.order - b.order;
+      }
+      return a.name.localeCompare(b.name);
+    });
+    return { floors, floorless };
+  }
+
   _messageFromError(err) {
     if (err && typeof err === "object" && "message" in err) {
       return String(err.message);
@@ -176,7 +225,6 @@ class TesseraMatrixPanel extends HTMLElement {
 
   _render() {
     const data = this._data;
-    const areas = data?.areas || [];
     const roles = data?.roles || [];
     const preview = data?.preview;
 
@@ -270,17 +318,38 @@ class TesseraMatrixPanel extends HTMLElement {
         }
         th.role-h { z-index: 1; }
         .bl { border-left: 1px solid var(--divider-color); }
-        .cell {
-          min-width: 84px;
-          border-radius: 10px;
-          font: inherit;
-          padding: 6px 10px;
+        tr.floorrow td {
+          background: var(--secondary-background-color);
+          border-bottom: 1px solid var(--divider-color);
         }
-        .cell.none { color: var(--secondary-text-color); background: var(--secondary-background-color); }
+        tr.floorrow td:first-child {
+          background: var(--secondary-background-color);
+          font-weight: 500;
+        }
+        .fname { display: inline-flex; align-items: center; gap: 8px; }
+        .fmark {
+          width: 4px; height: 16px; border-radius: 2px;
+          background: var(--primary-color); display: inline-block;
+        }
+        .fmeta { color: var(--secondary-text-color); font-weight: 400; font-size: 12px; }
+        .cell {
+          display: inline-flex; align-items: center; justify-content: center;
+          box-sizing: border-box;
+          min-width: 88px; min-height: 34px;
+          border: 1px solid transparent;
+          border-radius: 10px;
+          padding: 4px 10px;
+          font: inherit;
+        }
+        .cell.none { color: var(--secondary-text-color); background: var(--secondary-background-color); border-color: var(--divider-color); }
         .cell.read { color: var(--primary-text-color); background: var(--warning-color); }
         .cell.control { color: var(--text-primary-color); background: var(--success-color); }
-        .cell.floor { display: inline-block; border: none; cursor: default; opacity: 0.92; }
+        .cell.finherit { background: transparent; border-style: dashed; border-color: var(--divider-color); cursor: default; }
+        .cell.finherit.read { color: var(--warning-color); background: transparent; }
+        .cell.finherit.control { color: var(--success-color); background: transparent; }
+        .cell.finherit.none { color: var(--secondary-text-color); background: transparent; }
         .cell.dbl { outline: 2px solid var(--error-color); outline-offset: 1px; }
+        td.aname { padding-left: 34px; }
         .chev {
           border: none; background: none; padding: 0 6px 0 0;
           color: var(--secondary-text-color); cursor: pointer; font-size: 13px;
@@ -292,7 +361,7 @@ class TesseraMatrixPanel extends HTMLElement {
         }
         tr.entrow td {
           background: var(--secondary-background-color);
-          text-align: left; padding: 8px 12px 10px 34px;
+          text-align: left; padding: 8px 12px 10px 44px;
         }
         .ehint {
           font-size: 11px; color: var(--secondary-text-color);
@@ -321,7 +390,7 @@ class TesseraMatrixPanel extends HTMLElement {
         ${this._error ? `<div class="error">${this._escape(this._error)}</div>` : ""}
         ${roles.length ? this._legendTemplate() : ""}
         ${this._previewTemplate(preview)}
-        ${this._matrixTemplate(areas, roles)}
+        ${this._matrixTemplate(roles)}
       </div>
     `;
 
@@ -335,15 +404,13 @@ class TesseraMatrixPanel extends HTMLElement {
         }
       });
     });
-    this.shadowRoot
-      .querySelectorAll("[data-floorarea][data-role]")
-      .forEach((button) => {
-        button.addEventListener("click", () => {
-          if (button.dataset.floorarea && button.dataset.role) {
-            this._toggleFloor(button.dataset.floorarea, button.dataset.role);
-          }
-        });
+    this.shadowRoot.querySelectorAll("[data-floor][data-role]").forEach((button) => {
+      button.addEventListener("click", () => {
+        if (button.dataset.floor && button.dataset.role) {
+          this._toggleFloor(button.dataset.floor, button.dataset.role);
+        }
       });
+    });
     this.shadowRoot.querySelectorAll("[data-expand]").forEach((button) => {
       button.addEventListener("click", () => {
         if (button.dataset.expand) {
@@ -358,8 +425,8 @@ class TesseraMatrixPanel extends HTMLElement {
       <section class="legend" aria-label="Legend">
         <span><span class="swatch read"></span>read</span>
         <span><span class="swatch control"></span>control (implies read)</span>
-        <span><span class="swatch dbl"></span>doppelt (floor + area)</span>
-        <span>Floor + Area: click to edit</span>
+        <span><span class="swatch dbl"></span>doppelt (Etage + Bereich)</span>
+        <span>Floor auf der Etagen-Zeile · Area je Bereich — klicken zum Ändern</span>
       </section>
     `;
   }
@@ -387,11 +454,12 @@ class TesseraMatrixPanel extends HTMLElement {
     `;
   }
 
-  _matrixTemplate(areas, roles) {
+  _matrixTemplate(roles) {
     if (!roles.length) {
       return '<div class="empty">Add Tessera roles in the integration options first.</div>';
     }
-    if (!areas.length) {
+    const { floors, floorless } = this._floorGroups();
+    if (!floors.length && !floorless.length) {
       return '<div class="empty">No Home Assistant areas found.</div>';
     }
     const roleHead = roles
@@ -403,89 +471,112 @@ class TesseraMatrixPanel extends HTMLElement {
     const subHead = roles
       .map(() => '<th class="sub bl" scope="col">Floor</th><th class="sub" scope="col">Area</th>')
       .join("");
+    const body = [];
+    for (const floor of floors) {
+      body.push(this._floorRow(floor, roles));
+      for (const area of floor.areas) {
+        body.push(this._areaRow(area, roles));
+      }
+    }
+    if (floorless.length) {
+      body.push(this._floorlessRow(roles.length));
+      for (const area of floorless) {
+        body.push(this._areaRow(area, roles));
+      }
+    }
     return `
       <div class="matrix-wrap">
         <table>
           <thead>
-            <tr>
-              <th rowspan="2" scope="col">Bereich</th>
-              ${roleHead}
-            </tr>
+            <tr><th rowspan="2" scope="col">Bereich</th>${roleHead}</tr>
             <tr>${subHead}</tr>
           </thead>
-          <tbody>
-            ${areas.map((area) => this._areaRow(area, roles)).join("")}
-          </tbody>
+          <tbody>${body.join("")}</tbody>
         </table>
       </div>
     `;
   }
 
+  _floorRow(floor, roles) {
+    const count = floor.areas.length;
+    const meta = `· Etage · ${count} ${count === 1 ? "Bereich" : "Bereiche"}`;
+    const cells = roles
+      .map((role) => {
+        const state = this._state(this._floorGrantById(floor.id, role.id));
+        const pending = this._pending === `floor::${floor.id}::${role.id}`;
+        return `
+          <td class="bl">
+            <button
+              type="button"
+              class="cell ${state}"
+              data-floor="${this._escape(floor.id)}"
+              data-role="${this._escape(role.id)}"
+              ${this._disabledAttr(pending)}
+              title="Etagen-Grant ${this._escape(floor.name)} / ${this._escape(role.name)}"
+            >
+              ${pending ? "Saving..." : state}
+            </button>
+          </td>
+          <td></td>`;
+      })
+      .join("");
+    return `
+      <tr class="floorrow">
+        <td>
+          <span class="fname"><span class="fmark"></span>${this._escape(floor.name)}
+            <span class="fmeta">${meta}</span></span>
+        </td>
+        ${cells}
+      </tr>`;
+  }
+
+  _floorlessRow(roleCount) {
+    return `
+      <tr class="floorrow">
+        <td><span class="fname">Ohne Etage</span></td>
+        <td class="bl" colspan="${roleCount * 2}"></td>
+      </tr>`;
+  }
+
   _areaRow(area, roles) {
-    const floor = this._data?.area_floor?.[area.id];
-    const label = floor ? `${area.name} · ${floor.name}` : area.name;
     const expanded = this._expanded.has(area.id);
     const rowDouble = roles.some((role) => this._isDouble(area.id, role.id));
     const cells = roles
-      .map((role) => this._floorCell(area, role) + this._areaCell(area, role))
+      .map((role) => {
+        const floorState = this._state(this._floorGrantFor(area.id, role.id));
+        const areaState = this._state(this._grantFor(area.id, role.id));
+        const dbl = this._isDouble(area.id, role.id) ? " dbl" : "";
+        const pending = this._pending === `${area.id}::${role.id}`;
+        return `
+          <td class="bl">
+            <span class="cell finherit ${floorState}">${floorState}</span>
+          </td>
+          <td>
+            <button
+              type="button"
+              class="cell ${areaState}${dbl}"
+              data-area="${this._escape(area.id)}"
+              data-role="${this._escape(role.id)}"
+              ${this._disabledAttr(pending)}
+              title="Bereich-Grant ${this._escape(area.name)} / ${this._escape(role.name)}"
+            >
+              ${pending ? "Saving..." : areaState}
+            </button>
+          </td>`;
+      })
       .join("");
     const nameCell = `
-      <td>
+      <td class="aname">
         <button type="button" class="chev" data-expand="${this._escape(area.id)}"
           aria-label="Toggle entities" aria-expanded="${expanded ? "true" : "false"}">
           ${expanded ? "▾" : "▸"}
-        </button>${this._escape(label)}${rowDouble ? '<span class="doppelt">doppelt</span>' : ""}
+        </button>${this._escape(area.name)}${rowDouble ? '<span class="doppelt">doppelt</span>' : ""}
       </td>`;
     const rows = [`<tr>${nameCell}${cells}</tr>`];
     if (expanded) {
       rows.push(this._entityRow(area, roles.length));
     }
     return rows.join("");
-  }
-
-  _floorCell(area, role) {
-    const floor = this._data?.area_floor?.[area.id];
-    const state = this._state(this._floorGrantFor(area.id, role.id));
-    const dbl = this._isDouble(area.id, role.id) ? " dbl" : "";
-    if (!floor) {
-      // Floorless area: no floor grant to toggle, render display-only.
-      return `<td class="bl"><span class="cell floor ${state}">${state}</span></td>`;
-    }
-    const pending = this._pending === `floor::${floor.id}::${role.id}`;
-    return `
-      <td class="bl">
-        <button
-          type="button"
-          class="cell ${state}${dbl}"
-          data-floorarea="${this._escape(area.id)}"
-          data-role="${this._escape(role.id)}"
-          ${this._disabledAttr(pending)}
-          title="Toggle floor grant ${this._escape(floor.name)} / ${this._escape(role.name)}"
-        >
-          ${pending ? "Saving..." : state}
-        </button>
-      </td>
-    `;
-  }
-
-  _areaCell(area, role) {
-    const state = this._state(this._grantFor(area.id, role.id));
-    const dbl = this._isDouble(area.id, role.id) ? " dbl" : "";
-    const pending = this._pending === `${area.id}::${role.id}`;
-    return `
-      <td>
-        <button
-          type="button"
-          class="cell ${state}${dbl}"
-          data-area="${this._escape(area.id)}"
-          data-role="${this._escape(role.id)}"
-          ${this._disabledAttr(pending)}
-          title="Toggle area grant ${this._escape(area.name)} / ${this._escape(role.name)}"
-        >
-          ${pending ? "Saving..." : state}
-        </button>
-      </td>
-    `;
   }
 
   _entityRow(area, roleCount) {

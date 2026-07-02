@@ -33,6 +33,7 @@ class FakeFloor:
 
     floor_id: str
     name: str
+    level: int | None = None
 
 
 class FakeFloorRegistry:
@@ -45,6 +46,10 @@ class FakeFloorRegistry:
     def async_get_floor(self, floor_id: str) -> FakeFloor | None:
         """Return the floor for ``floor_id`` (or None)."""
         return self._floors.get(floor_id)
+
+    def async_list_floors(self) -> list[FakeFloor]:
+        """Return floors in registry order (the panel's ordering fallback)."""
+        return list(self._floors.values())
 
 
 class FakeAreaRegistry:
@@ -192,7 +197,7 @@ def _install_floor_doubles(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     monkeypatch.setattr(
         "custom_components.tessera.websocket.fr.async_get",
-        lambda hass: FakeFloorRegistry([FakeFloor("ground", "Ground")]),
+        lambda hass: FakeFloorRegistry([FakeFloor("ground", "Ground", level=0)]),
     )
     monkeypatch.setattr(
         "custom_components.tessera.websocket.AreaEntityResolver.from_hass",
@@ -450,7 +455,7 @@ async def test_matrix_get_splits_floor_and_area_sources_with_entities(
     )
     monkeypatch.setattr(
         "custom_components.tessera.websocket.fr.async_get",
-        lambda hass: FakeFloorRegistry([FakeFloor("ground", "Ground")]),
+        lambda hass: FakeFloorRegistry([FakeFloor("ground", "Ground", level=0)]),
     )
     monkeypatch.setattr(
         "custom_components.tessera.websocket.AreaEntityResolver.from_hass",
@@ -460,7 +465,12 @@ async def test_matrix_get_splits_floor_and_area_sources_with_entities(
     result = await async_get_matrix(hass)
 
     # area -> floor labels (floorless area resolves to None)
-    assert result["area_floor"]["living"] == {"id": "ground", "name": "Ground"}
+    assert result["area_floor"]["living"] == {
+        "id": "ground",
+        "name": "Ground",
+        "level": 0,
+        "order": 0,
+    }
     assert result["area_floor"]["attic"] is None
     # the double: living/viewer is granted via BOTH the floor and a direct area grant
     assert result["floor_grants"]["living"]["viewer"] == {"read": True, "control": True}
