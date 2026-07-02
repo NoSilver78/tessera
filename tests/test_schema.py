@@ -35,6 +35,7 @@ def test_policy_schema_accepts_read_control_leafs() -> None:
     policy["entity_overrides"] = {
         "light.table": {"operator": {"read": True, "control": True}}
     }
+    policy["label_grants"] = {"cozy": {"guest": {"read": True, "control": True}}}
 
     assert validate_policy_data(policy) == policy
 
@@ -69,6 +70,7 @@ def test_policy_schema_accepts_legitimate_control_and_removal_leafs() -> None:
     [
         ("floor_grants", "ground"),
         ("area_grants", "living_room"),
+        ("label_grants", "cozy"),
         ("entity_overrides", "light.table"),
     ],
 )
@@ -114,3 +116,13 @@ def test_policy_schema_defaults_missing_floor_grants_for_existing_stores() -> No
     validated = validate_policy_data(policy)
 
     assert validated["floor_grants"] == {}
+
+
+def test_policy_schema_defaults_missing_label_grants_for_existing_stores() -> None:
+    """Policy payloads predating the label dimension remain loadable."""
+    policy = default_policy_data()
+    policy.pop("label_grants")
+
+    validated = validate_policy_data(policy)
+
+    assert validated["label_grants"] == {}

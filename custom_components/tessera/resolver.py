@@ -90,6 +90,49 @@ class AreaEntityResolver:
         ]
         return self.entity_ids_for_areas(area_ids).entity_ids
 
+    def entity_ids_for_label(self, label_id: str) -> tuple[str, ...]:
+        """Resolve one label id to sorted, de-duplicated entity ids.
+
+        Scope is the union of the three label sources Home Assistant itself
+        expands a label target into (``helpers/service.py``): entities carrying the
+        label directly, entities whose device carries it, and entities whose
+        effective area carries it. Like Tessera's area/floor resolution — and unlike
+        HA's *service-target* filtering — it deliberately does NOT drop
+        config/diagnostic (``entity_category``) or hidden entities: a scope grant
+        covers everything registry-assigned to that scope (mirrors
+        ``entity_ids_for_areas``, asserted by ``test_includes_hidden_entities``).
+        Disabled entities are excluded.
+
+        Fail closed on a falsy label id: an empty string or ``None`` must never
+        match entries that structurally carry no label and leak everything. Device
+        keys are likewise guarded so a falsy device id can never collide with
+        device-less entities (parity with the floor path's None-key defenses).
+        """
+        if not label_id:
+            return ()
+        labeled_devices = {
+            device_id
+            for device_id, device in self._device_registry.devices.items()
+            if device_id and label_id in _entry_labels(device)
+        }
+        labeled_areas = {
+            area_id
+            for area_id, area_labels in self._area_labels_by_id().items()
+            if label_id in area_labels
+        }
+        device_areas = self._device_area_by_id()
+        matched: set[str] = set()
+        for entity_id, entry in self._entity_registry.entities.items():
+            if _is_disabled(entry):
+                continue
+            if (
+                label_id in _entry_labels(entry)
+                or _entry_value(entry, "device_id") in labeled_devices
+                or _effective_area_id(entry, device_areas) in labeled_areas
+            ):
+                matched.add(str(entity_id))
+        return tuple(sorted(matched))
+
     def entity_ids_for_areas(self, area_ids: Iterable[str]) -> AreaEntityResolution:
         """Resolve multiple area ids to sorted, de-duplicated entity ids."""
         requested = tuple(dict.fromkeys(area_ids))
@@ -138,6 +181,14 @@ class AreaEntityResolver:
             and (area_floor_id := _entry_str_value(area, "floor_id"))
         }
 
+    def _area_labels_by_id(self) -> dict[str, frozenset[str]]:
+        """Map area id to its label-id set, for label→entity area inheritance."""
+        return {
+            area_id: _entry_labels(area)
+            for area in self._area_registry.async_list_areas()
+            if (area_id := _entry_str_value(area, "id")) is not None
+        }
+
 
 def _effective_area_id(
     entry: Any, device_areas: Mapping[Any, str | None]
@@ -163,6 +214,14 @@ def _entry_str_value(entry: Any, key: str) -> str | None:
     if isinstance(value, str):
         return value
     return None
+
+
+def _entry_labels(entry: Any) -> frozenset[str]:
+    """Return a registry entry's label ids from object or mapping entries."""
+    value = _entry_value(entry, "labels")
+    if isinstance(value, (set, frozenset, list, tuple)):
+        return frozenset(str(label) for label in value)
+    return frozenset()
 
 
 def _is_disabled(entry: Any) -> bool:

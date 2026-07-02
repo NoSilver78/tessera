@@ -21,10 +21,12 @@ class FakeResolver:
         self,
         areas: dict[str, tuple[str, ...]],
         floors: dict[str, tuple[str, ...]] | None = None,
+        labels: dict[str, tuple[str, ...]] | None = None,
     ) -> None:
         """Initialize area-to-entity fixtures."""
         self._areas = areas
         self._floors = floors or {}
+        self._labels = labels or {}
 
     def entity_ids_for_area(self, area_id: str) -> tuple[str, ...]:
         """Resolve one area id."""
@@ -33,6 +35,10 @@ class FakeResolver:
     def entity_ids_for_floor(self, floor_id: str) -> tuple[str, ...]:
         """Resolve one floor id."""
         return self._floors.get(floor_id, ())
+
+    def entity_ids_for_label(self, label_id: str) -> tuple[str, ...]:
+        """Resolve one label id."""
+        return self._labels.get(label_id, ())
 
 
 def test_area_grant_compiles_to_entity_policy_leafs() -> None:
@@ -415,3 +421,73 @@ def test_compile_rejects_invalid_config_mode() -> None:
 
     with pytest.raises(TesseraSchemaError, match=r"config\.mode"):
         compile_policies(config, default_policy_data(), FakeResolver({}))
+
+
+def test_label_grant_compiles_to_entity_policy_leafs() -> None:
+    """Label grants expand through the resolver into explicit entity leaves."""
+    config = default_config_data()
+    config["roles"] = {"viewer": {"name": "Viewer"}}
+    policy = default_policy_data()
+    policy["label_grants"] = {"cozy": {"viewer": {"read": True}}}
+
+    compiled = compile_policies(
+        config,
+        policy,
+        FakeResolver({}, labels={"cozy": ("light.sofa", "sensor.temp")}),
+    )
+
+    assert compiled["viewer"]["entities"]["entity_ids"] == {
+        "light.sofa": {"read": True},
+        "sensor.temp": {"read": True},
+    }
+
+
+def test_control_only_label_grant_implies_read() -> None:
+    """A control-only label grant compiles to read+control."""
+    config = default_config_data()
+    config["roles"] = {"operator": {"name": "Operator"}}
+    policy = default_policy_data()
+    policy["label_grants"] = {"media": {"operator": {"control": True}}}
+
+    compiled = compile_policies(
+        config, policy, FakeResolver({}, labels={"media": ("media_player.tv",)})
+    )
+
+    assert compiled["operator"]["entities"]["entity_ids"] == {
+        "media_player.tv": {"read": True, "control": True},
+    }
+
+
+def test_overlapping_label_and_area_grants_union_permissions() -> None:
+    """Label grants union additively with area grants (max permission)."""
+    config = default_config_data()
+    config["roles"] = {"operator": {"name": "Operator"}}
+    policy = default_policy_data()
+    policy["area_grants"] = {"living": {"operator": {"read": True}}}
+    policy["label_grants"] = {"cozy": {"operator": {"control": True}}}
+
+    compiled = compile_policies(
+        config,
+        policy,
+        FakeResolver(
+            {"living": ("light.shared", "light.area_only")},
+            labels={"cozy": ("light.shared", "light.label_only")},
+        ),
+    )
+
+    assert compiled["operator"]["entities"]["entity_ids"] == {
+        "light.area_only": {"read": True},
+        "light.label_only": {"read": True, "control": True},
+        "light.shared": {"read": True, "control": True},
+    }
+
+
+def test_label_grant_unknown_role_is_rejected() -> None:
+    """A label grant referencing an unknown role fails closed before compile."""
+    config = default_config_data()
+    config["roles"] = {"viewer": {"name": "Viewer"}}
+    policy = default_policy_data()
+    policy["label_grants"] = {"cozy": {"ghost": {"read": True}}}
+
+    with pytest.raises(TesseraSchemaError, match=r"policy\.label_grants"):
+        compile_policies(config, policy, FakeResolver({}, labels={"cozy": ("x.y",)}))

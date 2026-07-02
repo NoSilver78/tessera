@@ -13,6 +13,7 @@ from custom_components.tessera.websocket import (
     async_get_matrix,
     async_set_matrix_floor_grant,
     async_set_matrix_grant,
+    async_set_matrix_label_grant,
     websocket_matrix_get,
 )
 from homeassistant.exceptions import Unauthorized
@@ -64,6 +65,28 @@ class FakeAreaRegistry:
         return self._areas
 
 
+@dataclass(frozen=True)
+class FakeLabel:
+    """Small LabelEntry-compatible test double."""
+
+    label_id: str
+    name: str
+    icon: str | None = None
+    color: str | None = None
+
+
+class FakeLabelRegistry:
+    """Label registry double for matrix tests."""
+
+    def __init__(self, labels: list[FakeLabel]) -> None:
+        """Initialize label rows."""
+        self._labels = labels
+
+    def async_list_labels(self) -> list[FakeLabel]:
+        """Return fake labels."""
+        return self._labels
+
+
 class FakeResolver:
     """Deterministic area resolver for preview compilation and the panel expand."""
 
@@ -74,6 +97,10 @@ class FakeResolver:
     def entity_ids_for_floor(self, floor_id: str) -> tuple[str, ...]:
         """Resolve a floor to its entities."""
         return ("light.sofa", "switch.lamp") if floor_id == "ground" else ()
+
+    def entity_ids_for_label(self, label_id: str) -> tuple[str, ...]:
+        """Resolve a label to its entities."""
+        return ("light.sofa",) if label_id == "cozy" else ()
 
     def entity_ids_for_areas(self, area_ids: Any) -> AreaEntityResolution:
         """Resolve multiple areas at once (used by the panel entity expand)."""
@@ -179,6 +206,10 @@ def _install_matrix_doubles(monkeypatch: pytest.MonkeyPatch) -> None:
         ),
     )
     monkeypatch.setattr(
+        "custom_components.tessera.websocket.lr.async_get",
+        lambda hass: FakeLabelRegistry([FakeLabel("cozy", "Cozy", color="amber")]),
+    )
+    monkeypatch.setattr(
         "custom_components.tessera.websocket.AreaEntityResolver.from_hass",
         classmethod(lambda cls, hass: FakeResolver()),
     )
@@ -198,6 +229,10 @@ def _install_floor_doubles(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "custom_components.tessera.websocket.fr.async_get",
         lambda hass: FakeFloorRegistry([FakeFloor("ground", "Ground", level=0)]),
+    )
+    monkeypatch.setattr(
+        "custom_components.tessera.websocket.lr.async_get",
+        lambda hass: FakeLabelRegistry([]),
     )
     monkeypatch.setattr(
         "custom_components.tessera.websocket.AreaEntityResolver.from_hass",
@@ -366,6 +401,9 @@ async def test_matrix_preview_includes_cross_role_lint_report(
         def entity_ids_for_floor(self, floor_id: str) -> tuple[str, ...]:
             return ()
 
+        def entity_ids_for_label(self, label_id: str) -> tuple[str, ...]:
+            return ()
+
         def entity_ids_for_areas(self, area_ids: Any) -> AreaEntityResolution:
             by_area = {aid: self.entity_ids_for_area(aid) for aid in area_ids}
             entity_ids = {eid for ids in by_area.values() for eid in ids}
@@ -374,6 +412,10 @@ async def test_matrix_preview_includes_cross_role_lint_report(
     monkeypatch.setattr(
         "custom_components.tessera.websocket.ar.async_get",
         lambda hass: FakeAreaRegistry([FakeArea("living", "Living Room")]),
+    )
+    monkeypatch.setattr(
+        "custom_components.tessera.websocket.lr.async_get",
+        lambda hass: FakeLabelRegistry([]),
     )
     monkeypatch.setattr(
         "custom_components.tessera.websocket.AreaEntityResolver.from_hass",
@@ -456,6 +498,10 @@ async def test_matrix_get_splits_floor_and_area_sources_with_entities(
     monkeypatch.setattr(
         "custom_components.tessera.websocket.fr.async_get",
         lambda hass: FakeFloorRegistry([FakeFloor("ground", "Ground", level=0)]),
+    )
+    monkeypatch.setattr(
+        "custom_components.tessera.websocket.lr.async_get",
+        lambda hass: FakeLabelRegistry([]),
     )
     monkeypatch.setattr(
         "custom_components.tessera.websocket.AreaEntityResolver.from_hass",
@@ -564,6 +610,94 @@ async def test_matrix_set_floor_grant_in_enforce_reapplies_native(
 
     await async_set_matrix_floor_grant(
         hass, floor_id="ground", role_id="operator", read=True, control=False
+    )
+
+    assert store.saved_policies, "policy must be persisted before re-apply"
+    assert len(calls) == 1
+    assert calls[0][1] == "entry-1"
+
+
+@pytest.mark.asyncio
+async def test_matrix_get_includes_labels_and_label_grants(
+    matrix_hass: FakeHass,
+) -> None:
+    """The matrix payload exposes labels, per-cell label grants, and entities."""
+    result = await async_get_matrix(matrix_hass)
+
+    assert result["labels"] == [
+        {"id": "cozy", "name": "Cozy", "icon": None, "color": "amber"}
+    ]
+    assert result["label_grants"]["cozy"]["operator"] == {
+        "read": False,
+        "control": False,
+    }
+    assert result["entities_by_label"]["cozy"] == ["light.sofa"]
+
+
+@pytest.mark.asyncio
+async def test_matrix_set_label_grant_writes_and_control_implies_read(
+    matrix_hass: FakeHass,
+) -> None:
+    """A label grant write is schema-aware and control implies read."""
+    result = await async_set_matrix_label_grant(
+        matrix_hass, label_id="cozy", role_id="operator", read=False, control=True
+    )
+    store = matrix_hass.data[DOMAIN]["entry-1"]["store"]
+
+    assert store.policy["label_grants"]["cozy"]["operator"] == {
+        "read": True,
+        "control": True,
+    }
+    assert result["label_grants"]["cozy"]["operator"] == {
+        "read": True,
+        "control": True,
+    }
+    assert store.saved_policies == [store.policy]
+
+
+@pytest.mark.asyncio
+async def test_matrix_set_label_grant_rejects_unknown_label_and_role(
+    matrix_hass: FakeHass,
+) -> None:
+    """Unknown label or role ids fail closed before any policy write."""
+    store = matrix_hass.data[DOMAIN]["entry-1"]["store"]
+
+    with pytest.raises(LookupError, match="Unknown Tessera label"):
+        await async_set_matrix_label_grant(
+            matrix_hass, label_id="ghost", role_id="operator", read=True, control=False
+        )
+    with pytest.raises(LookupError, match="Unknown Tessera role"):
+        await async_set_matrix_label_grant(
+            matrix_hass, label_id="cozy", role_id="ghost", read=True, control=False
+        )
+
+    assert store.saved_policies == []
+
+
+@pytest.mark.asyncio
+async def test_matrix_set_label_grant_in_enforce_reapplies_native(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CXR-02: saving a label grant in enforce re-applies via the central handler."""
+    config = _config()
+    config["mode"] = "enforce"
+    store = FakeStore(config, default_policy_data())
+    hass = FakeHass(store)
+    _install_matrix_doubles(monkeypatch)
+
+    calls: list[tuple[Any, str, dict[str, Any]]] = []
+
+    async def _spy_compile(
+        spy_hass: Any, entry_id: str, entry_data: dict[str, Any]
+    ) -> None:
+        calls.append((spy_hass, entry_id, entry_data))
+
+    monkeypatch.setattr(
+        "custom_components.tessera._compile_for_mode_safely", _spy_compile
+    )
+
+    await async_set_matrix_label_grant(
+        hass, label_id="cozy", role_id="operator", read=True, control=False
     )
 
     assert store.saved_policies, "policy must be persisted before re-apply"

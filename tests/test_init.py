@@ -13,6 +13,7 @@ from custom_components.tessera import (
     DATA_ACK_SERVICES_REGISTERED,
     DATA_FLOOR_GRANT_SERVICE_REGISTERED,
     DATA_IMPORT_SERVICE_REGISTERED,
+    DATA_LABEL_GRANT_SERVICE_REGISTERED,
     DATA_MEMBERSHIP_SERVICE_REGISTERED,
     DATA_PREFLIGHT_SERVICE_REGISTERED,
     DATA_SERVICE_REGISTERED,
@@ -24,6 +25,7 @@ from custom_components.tessera import (
     SERVICE_RECOMPILE,
     SERVICE_REVOKE_COMPONENT_ACK,
     SERVICE_SET_FLOOR_GRANT,
+    SERVICE_SET_LABEL_GRANT,
     SERVICE_SET_MEMBERSHIP,
     SERVICE_SET_MODE,
 )
@@ -430,6 +432,7 @@ async def test_unload_entry_keeps_bucket_and_removes_service_after_last_entry(
     assert DATA_ACK_SERVICES_REGISTERED not in hass.data[DOMAIN]
     assert DATA_MEMBERSHIP_SERVICE_REGISTERED not in hass.data[DOMAIN]
     assert DATA_FLOOR_GRANT_SERVICE_REGISTERED not in hass.data[DOMAIN]
+    assert DATA_LABEL_GRANT_SERVICE_REGISTERED not in hass.data[DOMAIN]
     assert DATA_IMPORT_SERVICE_REGISTERED not in hass.data[DOMAIN]
     assert DATA_PREFLIGHT_SERVICE_REGISTERED not in hass.data[DOMAIN]
     assert DATA_SET_MODE_SERVICE_REGISTERED not in hass.data[DOMAIN]
@@ -439,6 +442,7 @@ async def test_unload_entry_keeps_bucket_and_removes_service_after_last_entry(
         (DOMAIN, SERVICE_REVOKE_COMPONENT_ACK),
         (DOMAIN, SERVICE_SET_MEMBERSHIP),
         (DOMAIN, SERVICE_SET_FLOOR_GRANT),
+        (DOMAIN, SERVICE_SET_LABEL_GRANT),
         (DOMAIN, SERVICE_IMPORT),
         (DOMAIN, SERVICE_PREFLIGHT),
         (DOMAIN, SERVICE_SET_MODE),
@@ -533,6 +537,26 @@ def _patch_floor_registry(
     monkeypatch.setattr(
         "homeassistant.helpers.floor_registry.async_get",
         lambda _hass: FakeFloorRegistry(floor_ids),
+    )
+
+
+def _patch_label_registry(
+    monkeypatch: pytest.MonkeyPatch, label_ids: tuple[str, ...] = ("cozy",)
+) -> None:
+    """Replace HA's label registry with a deterministic fake."""
+
+    class FakeLabelRegistry:
+        """Minimal label registry double."""
+
+        def __init__(self, known_label_ids: tuple[str, ...]) -> None:
+            self._known_label_ids = set(known_label_ids)
+
+        def async_get_label(self, label_id: str) -> object | None:
+            return object() if label_id in self._known_label_ids else None
+
+    monkeypatch.setattr(
+        "homeassistant.helpers.label_registry.async_get",
+        lambda _hass: FakeLabelRegistry(label_ids),
     )
 
 
@@ -1094,6 +1118,60 @@ async def test_set_floor_grant_service_is_admin_only_and_persists(
 
 
 @pytest.mark.asyncio
+async def test_set_label_grant_service_is_admin_only_and_persists(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The label grant writer is admin-only and recompiles after policy save."""
+    hass = FakeHass()
+    admin_services = _patch_admin_service_registration(monkeypatch)
+    _patch_label_registry(monkeypatch, ("cozy",))
+    store = FloorGrantStore(roles=("viewer", "operator"))
+    entry_data: dict[str, Any] = {"store": store}
+    hass.data[DOMAIN] = {"entry-1": entry_data}
+    compile_calls: list[str] = []
+
+    async def fake_compile(
+        _hass: Any, entry_id: str, _entry_data: dict[str, Any]
+    ) -> None:
+        compile_calls.append(entry_id)
+
+    monkeypatch.setattr(tessera_init, "_compile_for_mode_safely", fake_compile)
+    tessera_init._register_label_grant_service(hass)
+    handler = hass.services.handlers[(DOMAIN, SERVICE_SET_LABEL_GRANT)]
+
+    with pytest.raises(Unauthorized):
+        await handler(
+            FakeServiceCall(
+                {
+                    "label_id": "cozy",
+                    "role_id": "viewer",
+                    "read": True,
+                    "control": False,
+                },
+                is_admin=False,
+            )
+        )
+    await handler(
+        FakeServiceCall(
+            {
+                "label_id": "cozy",
+                "role_id": "operator",
+                "read": False,
+                "control": True,
+            }
+        )
+    )
+
+    assert admin_services == [(DOMAIN, SERVICE_SET_LABEL_GRANT)]
+    assert hass.data[DOMAIN][DATA_LABEL_GRANT_SERVICE_REGISTERED] is True
+    assert store.policy["label_grants"] == {
+        "cozy": {"operator": {"read": True, "control": True}}
+    }
+    assert store.save_policy_calls == 1
+    assert compile_calls == ["entry-1"]
+
+
+@pytest.mark.asyncio
 async def test_set_mode_service_is_admin_only_and_routes_through_guarded_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1168,6 +1246,40 @@ async def test_set_floor_grant_service_unknown_floor_fails_closed_without_save(
 
     assert store.save_policy_calls == 0
     assert store.policy["floor_grants"] == {}
+
+
+@pytest.mark.asyncio
+async def test_set_label_grant_service_unknown_label_fails_closed_without_save(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unknown HA label ids are rejected before policy writes or recompiles."""
+    hass = FakeHass()
+    _patch_admin_service_registration(monkeypatch)
+    _patch_label_registry(monkeypatch, ())
+    store = FloorGrantStore()
+    hass.data[DOMAIN] = {"entry-1": {"store": store}}
+
+    async def fail_compile(*_args: Any, **_kwargs: Any) -> None:
+        raise AssertionError("compile must not run for unknown label")
+
+    monkeypatch.setattr(tessera_init, "_compile_for_mode_safely", fail_compile)
+    tessera_init._register_label_grant_service(hass)
+    handler = hass.services.handlers[(DOMAIN, SERVICE_SET_LABEL_GRANT)]
+
+    with pytest.raises(HomeAssistantError, match="unknown label"):
+        await handler(
+            FakeServiceCall(
+                {
+                    "label_id": "missing",
+                    "role_id": "viewer",
+                    "read": True,
+                    "control": False,
+                }
+            )
+        )
+
+    assert store.save_policy_calls == 0
+    assert store.policy["label_grants"] == {}
 
 
 @pytest.mark.asyncio
@@ -1868,6 +1980,34 @@ async def test_import_service_is_admin_only_and_provisions_full_model(
 
 
 @pytest.mark.asyncio
+async def test_import_service_provisions_label_grants(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Import provisions the label-grant dimension declaratively."""
+    hass = FakeHass()
+    _patch_admin_service_registration(monkeypatch)
+    store = ImportStore(mode="monitor", roles=("guest",))
+    hass.data[DOMAIN] = {"entry-1": {"store": store}}
+
+    async def _noop(*_args: Any, **_kwargs: Any) -> None:
+        return None
+
+    monkeypatch.setattr(tessera_init, "_compile_for_mode_safely", _noop)
+    tessera_init._register_import_service(hass)
+    handler = hass.services.handlers[(DOMAIN, SERVICE_IMPORT)]
+
+    await handler(
+        FakeServiceCall(
+            {"label_grants": {"cozy": {"guest": {"read": True, "control": True}}}}
+        )
+    )
+
+    assert store.policy["label_grants"] == {
+        "cozy": {"guest": {"read": True, "control": True}}
+    }
+
+
+@pytest.mark.asyncio
 async def test_import_service_replaces_provided_and_preserves_operational(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2018,6 +2158,7 @@ def test_preflight_response_redacts_and_aggregates() -> None:
     policy = default_policy_data()
     policy["floor_grants"] = {"og": {"og_nutzer": {"read": True, "control": True}}}
     policy["area_grants"] = {"a1": {"ug_nutzer": {"read": True, "control": True}}}
+    policy["label_grants"] = {"cozy": {"og_nutzer": {"read": True}}}
     compiled = {
         "ug_nutzer": {"entities": {"entity_ids": {"light.a": {"read": True}}}},
         "og_nutzer": {
@@ -2083,6 +2224,7 @@ def test_preflight_response_redacts_and_aggregates() -> None:
     assert resp["model"]["members"] == 1
     assert resp["model"]["floor_grants"] == 1
     assert resp["model"]["area_grants"] == 1
+    assert resp["model"]["label_grants"] == 1
     assert resp["model"]["compiled_entities_per_role"] == {
         "ug_nutzer": 1,
         "og_nutzer": 2,

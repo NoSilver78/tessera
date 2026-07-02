@@ -32,7 +32,12 @@ from .auth_adapter import (
     UserBindingAdapter,
 )
 from .compiler import compile_policies
-from .config_flow import set_floor_grant, set_mode, set_user_membership
+from .config_flow import (
+    set_floor_grant,
+    set_label_grant,
+    set_mode,
+    set_user_membership,
+)
 from .const import DOMAIN, MODE_ENFORCE, MODE_MONITOR, MODE_OFF, MODES
 from .d9_gate import compute_component_ack_target, evaluate_d9_gate
 from .linter import lint_cross_role
@@ -80,6 +85,15 @@ SERVICE_SET_FLOOR_GRANT_SCHEMA = vol.Schema(
         vol.Required("control"): cv.boolean,
     }
 )
+SERVICE_SET_LABEL_GRANT = "set_label_grant"
+SERVICE_SET_LABEL_GRANT_SCHEMA = vol.Schema(
+    {
+        vol.Required("label_id"): cv.string,
+        vol.Required("role_id"): cv.string,
+        vol.Required("read"): cv.boolean,
+        vol.Required("control"): cv.boolean,
+    }
+)
 SERVICE_IMPORT = "import"
 SERVICE_IMPORT_SCHEMA = vol.Schema(
     {
@@ -88,6 +102,7 @@ SERVICE_IMPORT_SCHEMA = vol.Schema(
         vol.Optional("area_grants"): dict,
         vol.Optional("floor_grants"): dict,
         vol.Optional("entity_overrides"): dict,
+        vol.Optional("label_grants"): dict,
     }
 )
 SERVICE_PREFLIGHT = "preflight"
@@ -102,6 +117,7 @@ DATA_WEBSOCKET_REGISTERED = "__websocket_registered"
 DATA_PANEL_REGISTERED = "__panel_registered"
 DATA_MEMBERSHIP_SERVICE_REGISTERED = "__membership_service_registered"
 DATA_FLOOR_GRANT_SERVICE_REGISTERED = "__floor_grant_service_registered"
+DATA_LABEL_GRANT_SERVICE_REGISTERED = "__label_grant_service_registered"
 DATA_IMPORT_SERVICE_REGISTERED = "__import_service_registered"
 DATA_PREFLIGHT_SERVICE_REGISTERED = "__preflight_service_registered"
 DATA_SET_MODE_SERVICE_REGISTERED = "__set_mode_service_registered"
@@ -129,6 +145,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     _register_ack_services(hass)
     _register_membership_service(hass)
     _register_floor_grant_service(hass)
+    _register_label_grant_service(hass)
     _register_import_service(hass)
     _register_preflight_service(hass)
     _register_set_mode_service(hass)
@@ -170,6 +187,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.services.async_remove(DOMAIN, SERVICE_REVOKE_COMPONENT_ACK)
         hass.services.async_remove(DOMAIN, SERVICE_SET_MEMBERSHIP)
         hass.services.async_remove(DOMAIN, SERVICE_SET_FLOOR_GRANT)
+        hass.services.async_remove(DOMAIN, SERVICE_SET_LABEL_GRANT)
         hass.services.async_remove(DOMAIN, SERVICE_IMPORT)
         hass.services.async_remove(DOMAIN, SERVICE_PREFLIGHT)
         hass.services.async_remove(DOMAIN, SERVICE_SET_MODE)
@@ -177,6 +195,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         domain_data.pop(DATA_ACK_SERVICES_REGISTERED, None)
         domain_data.pop(DATA_MEMBERSHIP_SERVICE_REGISTERED, None)
         domain_data.pop(DATA_FLOOR_GRANT_SERVICE_REGISTERED, None)
+        domain_data.pop(DATA_LABEL_GRANT_SERVICE_REGISTERED, None)
         domain_data.pop(DATA_IMPORT_SERVICE_REGISTERED, None)
         domain_data.pop(DATA_PREFLIGHT_SERVICE_REGISTERED, None)
         domain_data.pop(DATA_SET_MODE_SERVICE_REGISTERED, None)
@@ -439,6 +458,62 @@ def _register_floor_grant_service(hass: HomeAssistant) -> None:
     domain_data[DATA_FLOOR_GRANT_SERVICE_REGISTERED] = True
 
 
+def _register_label_grant_service(hass: HomeAssistant) -> None:
+    """Register the admin-only label grant writer once per HA instance."""
+    domain_data = _domain_data(hass)
+    if domain_data.get(DATA_LABEL_GRANT_SERVICE_REGISTERED) is True:
+        return
+
+    async def _handle_set_label_grant(call: ServiceCall) -> None:
+        label_id = str(call.data["label_id"])
+        role_id = str(call.data["role_id"])
+        read = bool(call.data["read"])
+        control = bool(call.data["control"])
+        _assert_label_exists(hass, label_id)
+
+        prepared_policies: list[
+            tuple[str, dict[str, Any], TesseraStore, TesseraPolicyData]
+        ]
+        prepared_policies = []
+        async with mutation_lock(hass):
+            for key, entry_data in list(_domain_data(hass).items()):
+                if not isinstance(entry_data, dict):
+                    continue
+                store = cast(TesseraStore, entry_data["store"])
+                config = await store.async_load_config()
+                policy = await store.async_load_policy()
+                next_policy = set_label_grant(
+                    config,
+                    policy,
+                    label_id=label_id,
+                    role_id=role_id,
+                    read=read,
+                    control=control,
+                )
+                prepared_policies.append((key, entry_data, store, next_policy))
+
+            for key, entry_data, store, next_policy in prepared_policies:
+                await store.async_save_policy(next_policy)
+                await _compile_for_mode_safely(hass, key, entry_data)
+                LOGGER.warning(
+                    "Tessera label grant updated: "
+                    "label_id=%s role_id=%s read=%s control=%s",
+                    label_id,
+                    role_id,
+                    read,
+                    control,
+                )
+
+    async_register_admin_service(
+        hass,
+        DOMAIN,
+        SERVICE_SET_LABEL_GRANT,
+        _handle_set_label_grant,
+        schema=SERVICE_SET_LABEL_GRANT_SCHEMA,
+    )
+    domain_data[DATA_LABEL_GRANT_SERVICE_REGISTERED] = True
+
+
 def _register_import_service(hass: HomeAssistant) -> None:
     """Register the admin-only declarative model-import service once per instance.
 
@@ -485,11 +560,12 @@ def _register_import_service(hass: HomeAssistant) -> None:
                 await _compile_for_mode_safely(hass, key, entry_data)
                 LOGGER.warning(
                     "Tessera model imported: roles=%d memberships=%d area_grants=%d "
-                    "floor_grants=%d entity_overrides=%d",
+                    "floor_grants=%d label_grants=%d entity_overrides=%d",
                     len(next_config["roles"]),
                     len(next_config["membership"]["by_user"]),
                     sum(len(m) for m in next_policy["area_grants"].values()),
                     sum(len(m) for m in next_policy["floor_grants"].values()),
+                    sum(len(m) for m in next_policy["label_grants"].values()),
                     sum(len(m) for m in next_policy["entity_overrides"].values()),
                 )
 
@@ -526,6 +602,8 @@ def _import_into_policy(
         next_policy["floor_grants"] = payload["floor_grants"]
     if "entity_overrides" in payload:
         next_policy["entity_overrides"] = payload["entity_overrides"]
+    if "label_grants" in payload:
+        next_policy["label_grants"] = payload["label_grants"]
     return validate_policy_data(next_policy)
 
 
@@ -537,6 +615,7 @@ def _assert_import_roles_resolve(
     for name, matrix in (
         ("area_grants", policy["area_grants"]),
         ("floor_grants", policy["floor_grants"]),
+        ("label_grants", policy["label_grants"]),
         ("entity_overrides", policy["entity_overrides"]),
     ):
         for target, role_map in matrix.items():
@@ -662,6 +741,7 @@ def _preflight_response(
             "members": len(config["membership"]["by_user"]),
             "floor_grants": sum(len(m) for m in policy["floor_grants"].values()),
             "area_grants": sum(len(m) for m in policy["area_grants"].values()),
+            "label_grants": sum(len(m) for m in policy["label_grants"].values()),
             "entity_overrides": sum(
                 len(m) for m in policy["entity_overrides"].values()
             ),
@@ -695,6 +775,18 @@ def _assert_floor_exists(hass: HomeAssistant, floor_id: str) -> None:
     if fr.async_get(hass).async_get_floor(floor_id) is None:
         raise HomeAssistantError(
             f"Cannot set Tessera grant for unknown floor: {floor_id}"
+        )
+
+
+def _assert_label_exists(hass: HomeAssistant, label_id: str) -> None:
+    """Fail closed unless ``label_id`` exists in Home Assistant's label registry."""
+    if not label_id:
+        raise HomeAssistantError("Cannot set Tessera grant for empty label id")
+    from homeassistant.helpers import label_registry as lr
+
+    if lr.async_get(hass).async_get_label(label_id) is None:
+        raise HomeAssistantError(
+            f"Cannot set Tessera grant for unknown label: {label_id}"
         )
 
 

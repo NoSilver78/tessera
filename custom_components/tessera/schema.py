@@ -60,6 +60,7 @@ class _TesseraPolicyRequiredData(TypedDict):
     floor_grants: dict[str, dict[str, PermissionLeaf]]
     area_grants: dict[str, dict[str, PermissionLeaf]]
     entity_overrides: dict[str, dict[str, PermissionLeaf]]
+    label_grants: dict[str, dict[str, PermissionLeaf]]
 
 
 class TesseraPolicyData(_TesseraPolicyRequiredData, total=False):
@@ -101,6 +102,7 @@ def default_policy_data() -> TesseraPolicyData:
         "floor_grants": {},
         "area_grants": {},
         "entity_overrides": {},
+        "label_grants": {},
         "staging": {},
     }
 
@@ -194,6 +196,9 @@ def validate_policy_data(data: object) -> TesseraPolicyData:
         ),
         "entity_overrides": _validate_grant_matrix(
             payload.get("entity_overrides"), "policy.entity_overrides"
+        ),
+        "label_grants": _validate_grant_matrix(
+            payload.get("label_grants", {}), "policy.label_grants"
         ),
         "staging": deepcopy(
             _require_mapping(payload.get("staging", {}), "policy.staging")

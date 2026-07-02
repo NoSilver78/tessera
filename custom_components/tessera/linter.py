@@ -171,12 +171,14 @@ def _conflicts_for_user(
 def _scope_levels_by_role(
     policy: TesseraPolicyData, resolver: AreaEntityResolver
 ) -> dict[str, dict[str, set[LintLevel]]]:
-    """Return role/entity levels granted by floor and area rules."""
+    """Return role/entity levels granted by floor, area, and label rules."""
     levels: dict[str, dict[str, set[LintLevel]]] = {}
     for floor_id, role_map in sorted(policy["floor_grants"].items()):
         _add_resolved_levels(levels, resolver.entity_ids_for_floor(floor_id), role_map)
     for area_id, role_map in sorted(policy["area_grants"].items()):
         _add_resolved_levels(levels, resolver.entity_ids_for_area(area_id), role_map)
+    for label_id, role_map in sorted(policy["label_grants"].items()):
+        _add_resolved_levels(levels, resolver.entity_ids_for_label(label_id), role_map)
     return levels
 
 

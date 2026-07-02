@@ -141,6 +141,28 @@
         }
       }
     },
+    "set_label_grant": {
+      "name": "Set label grant",
+      "description": "Grant or remove a Tessera role's read/control access for every entity carrying a Home Assistant label (the entity itself, its device, or its area). Admin-only; in enforce mode this recompiles through Tessera's guarded apply path.",
+      "fields": {
+        "label_id": {
+          "name": "Label id",
+          "description": "The Home Assistant label id to manage."
+        },
+        "role_id": {
+          "name": "Role id",
+          "description": "The Tessera role id receiving or losing the label grant."
+        },
+        "read": {
+          "name": "Read",
+          "description": "Grant read access. Control also implies read."
+        },
+        "control": {
+          "name": "Control",
+          "description": "Grant control access. Set both read and control to false to remove this label grant."
+        }
+      }
+    },
     "import": {
       "name": "Import model",
       "description": "Provision the whole Tessera model in one declarative, idempotent call: each provided dimension replaces that dimension, omitted ones are preserved. Mode and D9 acks are never changed. Admin-only; in enforce mode this recompiles through Tessera's guarded apply path.",
@@ -164,6 +186,10 @@
         "entity_overrides": {
           "name": "Entity overrides",
           "description": "Overrides: entity id, then role id, then read/control booleans. Replaces policy.entity_overrides when provided."
+        },
+        "label_grants": {
+          "name": "Label grants",
+          "description": "Grants: label id, then role id, then read/control booleans. Replaces policy.label_grants when provided."
         }
       }
     },

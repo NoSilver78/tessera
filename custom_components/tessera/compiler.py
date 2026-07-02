@@ -47,9 +47,9 @@ def compile_policies(
     Returns:
         A role-id keyed mapping of native HA policy structures. The returned
         structure contains only allow grants and never HA shortcut booleans.
-        Floor grants, area grants, and entity overrides are additive allow-only
-        sources. They union positive read/control leaves and never emit a deny
-        or remove a grant from a broader source.
+        Floor grants, area grants, label grants, and entity overrides are additive
+        allow-only sources. They union positive read/control leaves and never emit a
+        deny or remove a grant from a broader source.
     """
     # Re-validate (and deep-copy) inputs as fail-closed defense in depth:
     # callers may pass raw store dicts, so this guarantees the compiler only
@@ -71,6 +71,10 @@ def compile_policies(
 
     for area_id, role_map in sorted(policy_data["area_grants"].items()):
         entity_ids = resolver.entity_ids_for_area(area_id)
+        _apply_grant_matrix(compiled, entity_ids, role_map)
+
+    for label_id, role_map in sorted(policy_data["label_grants"].items()):
+        entity_ids = resolver.entity_ids_for_label(label_id)
         _apply_grant_matrix(compiled, entity_ids, role_map)
 
     for entity_id, role_map in sorted(policy_data["entity_overrides"].items()):
@@ -139,6 +143,7 @@ def _validate_referenced_roles(
     for path, matrix in (
         ("policy.floor_grants", policy["floor_grants"]),
         ("policy.area_grants", policy["area_grants"]),
+        ("policy.label_grants", policy["label_grants"]),
         ("policy.entity_overrides", policy["entity_overrides"]),
     ):
         for target_id, role_map in sorted(matrix.items()):
