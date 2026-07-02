@@ -7,6 +7,15 @@ Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [0.6.1] — 2026-07-02
+
+### Geändert
+- **CI: die `brands`-Prüfung läuft jetzt ohne `ignore`-Key.** Empirisch verifiziert, dass die
+  `hacs/action`-Brands-Prüfung das Inline-`custom_components/tessera/brand/icon.png` eigenständig
+  akzeptiert — ein `home-assistant/brands`-Eintrag ist **nicht** nötig. `ignore: brands` wurde aus
+  `validate.yml` entfernt; damit erfüllt der HACS-Lauf die Anforderung des
+  `hacs/default`-Einreichungs-Templates (HACS-Action **ohne** `ignore`-Key grün).
+
 ## [0.6.0] — 2026-07-01
 
 ### Hinzugefügt

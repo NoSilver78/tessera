@@ -4,9 +4,9 @@ name: Validate
 # Der HACS-Job gatet jetzt ECHT (kein 'continue-on-error' mehr) und setzt ein
 # OEFFENTLICHES Repo voraus: hacs/action liest hacs.json/manifest ueber GitHub, was am
 # privaten Repo fehlschlaegt. Dieser Workflow-Stand gehoert damit zum Public-Flip —
-# vorher erwartet der HACS-Job rot. 'brands' bleibt ignoriert, bis 'tessera' in
-# home-assistant/brands eingetragen ist (Inline custom_components/tessera/brand/ deckt
-# HAs Icon-Rendering).
+# vorher erwartet der HACS-Job rot. 'brands' wird ohne 'ignore' geprueft und ueber das
+# Inline-Verzeichnis custom_components/tessera/brand/icon.png erfuellt (vom hacs/default-PR
+# gefordert: HACS-Action ohne 'ignore'-Key gruen).
 
 on:
   push:
@@ -29,9 +29,6 @@ jobs:
         with:
           category: integration
           comment: "false"
-          # 'brands' ignorieren, bis 'tessera' in home-assistant/brands eingetragen ist
-          # (Inline custom_components/tessera/brand/ deckt nur HAs Icon-Rendering).
-          ignore: brands
 
   hassfest:
     name: hassfest

@@ -189,8 +189,11 @@ Quelle der Bestandsaufnahme: lokales Datei-Listing (facet `repo-gap`), 2026-06-3
       grün, sobald das Repo öffentlich ist — dann `continue-on-error` entfernen.
 - [x] **`hassfest`-Workflow vorhanden** (`validate.yml`, Job `hassfest`) — grün.
 - [x] **Brand-Icon vorhanden** (`custom_components/tessera/brand/icon.png` + `icon@2x.png` + `icon.svg`,
-      PR #27). `brands` bleibt im HACS-Job ignoriert, bis `tessera` in `home-assistant/brands`
-      eingetragen ist (Inline-Pfad deckt HAs Icon-Rendering).
+      PR #27). **`brands` läuft ohne `ignore`-Key grün (2026-07-02 empirisch verifiziert):** die
+      `hacs/action`-Brands-Prüfung akzeptiert das Inline-`brand/icon.png` eigenständig — **kein
+      `home-assistant/brands`-Eintrag nötig** (bestätigt die Stance in §„Was NICHT zu tun ist"). Der
+      `ignore: brands`-Key wurde aus `validate.yml` entfernt (v0.6.1), womit der HACS-Lauf die
+      `hacs/default`-Template-Anforderung (Action **ohne** `ignore`-Key grün) erfüllt.
 - [x] **LICENSE vorhanden** (MIT, © 2026 Michael Scholz) — auf `release-prep`.
       **⚠️ UNSICHER als HARTER HACS-Gate:** Keine der gefetchten HACS-Check-Listen führt LICENSE
       als Auto-Check. **Aber:** Ohne Lizenz ist der Code rechtlich „all rights reserved" → blockiert
@@ -345,8 +348,11 @@ sollte — nicht etwas, das der Code erzwingt:
 - **Heute auslieferbar:** als **Pfad-A-Custom-Repo im `monitor`-Modus**, sobald Gate-1 grün ist —
   als kontrollierter Early-Access, NICHT als „aktiviere enforce".
 - **Noch NICHT auslieferbar:** Default-Store (Pfad B) und `enforce`-als-Default. `hacs.json`,
-  HACS+hassfest-CI und Brand-Icon sind erledigt; Default-Store braucht noch Public-Flip + Release +
-  Brands-Eintrag (`home-assistant/brands`) + ggf. Maintainer-Klärung zur Private-API-Frage. `enforce`
+  HACS+hassfest-CI (jetzt **ohne** `ignore: brands` grün) und Brand-Icon sind erledigt, Public-Flip und
+  Releases (v0.2.0–v0.6.1) ebenfalls; für den Default-Store fehlt nur noch der `hacs/default`-PR selbst
+  (Owner-Aktion, via `gh` als `NoSilver78`) — **kein `home-assistant/brands`-Eintrag nötig** (Inline-`brand/`
+  reicht der HACS-Action, 2026-07-02 verifiziert); die Private-API-Frage kann der HACS-Review aufwerfen
+  (dokumentiert in README/MAINTENANCE). `enforce`
   ist verdrahtet und schreibt, ist aber bis zum Praxis-Nachweis (Gate-2: Dev-E2E + Soak + Dogfood)
   nicht als Default zu empfehlen.
 - **Größtes Restrisiko:** die Private-Auth-API-Abhängigkeit ohne HA-Stabilitätsvertrag (§3) — sie
