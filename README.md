@@ -32,7 +32,7 @@ Home-Assistant-Auth-Store. **Kein Monkeypatch, kein Core-Fork.**
 
 ## Projektstatus
 
-**Veröffentlicht (v0.6.0) · `enforce` dev-erprobt und in einer Live-Instanz aktiv · breite Multi-Setup-Erprobung erwünscht.**
+**Veröffentlicht (v0.8.1) · `enforce` dev-erprobt und in einer Live-Instanz aktiv · breite Multi-Setup-Erprobung erwünscht.**
 
 | Baustein | Stand |
 |---|---|
@@ -43,15 +43,23 @@ Home-Assistant-Auth-Store. **Kein Monkeypatch, kein Core-Fork.**
 | **Area-Board-Panel** (Floor\|Area-Herkunft · Doppel-Markierung · Entity-Aufklappen · Area+Floor editierbar) | ✅ funktionsfähig |
 | **End-to-End gegen Dev-Instanz + Live-Betrieb** | ✅ Dev-E2E durchlaufen + Live-`enforce` verifiziert; **breiter Multi-Setup-Soak erwünscht** |
 | **HACS-Aktivierung** (`hacs.json` · HACS+hassfest-CI · Brand-Icon) | ✅ erledigt |
-| **HACS** (public · getaggte Releases) | ✅ v0.2.0–v0.6.0 · Default-Store-Listing geplant |
+| **HACS** (public · getaggte Releases) | ✅ v0.2.0–v0.8.1 · Default-Store-Einreichung eingereicht (in Review) |
 
 Die ganze Geschichte — Vision, Phasen, was als Nächstes kommt und **wo wir Unterstützung gut
 gebrauchen können** — steht in der **[ROADMAP](ROADMAP.md)** und in **[CONTRIBUTING](CONTRIBUTING.md)**.
 
+## Ausführliche Anleitung
+
+Vollständige **Einrichtung & Nutzung** — Installation, Betriebsmodi, Rollen/Grants/Mitgliedschaften,
+Area-Board-Panel, `enforce` mit Preflight, **„was zu beachten ist"** (Versions-Guard/HA-Updates!),
+Troubleshooting und FAQ — mit Screenshots:
+
+**📖 [English](docs/GUIDE.md) · [Deutsch](docs/GUIDE.de.md)**
+
 ## Installation (HACS — Custom Repository)
 
-> Tessera ist als **HACS Custom Repository** installierbar — es gibt getaggte Releases (aktuell **v0.6.0**).
-> Die Aufnahme in den **HACS-Default-Store** ist geplant; bis dahin über „Custom repositories":
+> Tessera ist als **HACS Custom Repository** installierbar — es gibt getaggte Releases (aktuell **v0.8.1**).
+> Die Aufnahme in den **HACS-Default-Store** ist eingereicht (in Review); bis dahin über „Custom repositories":
 
 1. HACS öffnen → Drei-Punkte-Menü oben rechts → **Custom repositories**.
 2. URL: `https://github.com/NoSilver78/tessera` · Kategorie: **Integration** → **ADD**.

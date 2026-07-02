@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 300" font-family="system-ui,-apple-system,Segoe UI,Roboto,sans-serif" role="img" aria-label="HACS Custom repositories dialog with the Tessera URL and category Integration">
+  <rect width="640" height="300" rx="10" fill="#111318"/>
+  <rect x="30" y="26" width="580" height="248" rx="12" fill="#1f2229" stroke="#34383f"/>
+  <text x="54" y="62" fill="#e3e5e8" font-size="18" font-weight="600">Custom repositories</text>
+  <line x1="30" y1="80" x2="610" y2="80" stroke="#34383f"/>
+  <text x="54" y="112" fill="#9aa0a6" font-size="13">Repository</text>
+  <rect x="54" y="122" width="368" height="44" rx="8" fill="#111318" stroke="#03a9f4"/>
+  <text x="70" y="149" fill="#e3e5e8" font-size="14">https://github.com/NoSilver78/tessera</text>
+  <text x="440" y="112" fill="#9aa0a6" font-size="13">Category</text>
+  <rect x="440" y="122" width="130" height="44" rx="8" fill="#111318" stroke="#34383f"/>
+  <text x="456" y="149" fill="#e3e5e8" font-size="14">Integration</text>
+  <path d="M548 140 l7 8 l7 -8" fill="none" stroke="#9aa0a6" stroke-width="2"/>
+  <rect x="470" y="212" width="100" height="40" rx="8" fill="#03a9f4"/>
+  <text x="520" y="238" fill="#06202b" font-size="15" font-weight="700" text-anchor="middle">ADD</text>
+  <text x="54" y="238" fill="#9aa0a6" font-size="12">Then: pick Tessera in the list → Download → restart Home Assistant</text>
+</svg>
