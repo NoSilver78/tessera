@@ -1,9 +1,20 @@
 # Tessera — RELEASE_READINESS
 
 Release-Engineering-Dossier für die Auslieferung von **Tessera** als HACS-Integration.
-Stand: **2026-06-30**. Quelle: HACS-Doku (`hacs.xyz`), HA-Developer-Docs, `home-assistant/brands`,
+Stand: **2026-06-30** · **Update 2026-07-01** (siehe Kasten). Quelle: HACS-Doku (`hacs.xyz`), HA-Developer-Docs, `home-assistant/brands`,
 adversariell gegengeprüft (VALIDATION). Korrekturen aus der Validierung sind eingearbeitet;
 Unsicheres ist explizit als **⚠️ UNSICHER** markiert.
+
+> **📌 Stand-Update 2026-07-01 (überholt die „ROT"-Status in §4):**
+> **Gate-1 (Verteilung) = GRÜN** — Repo public, Description+Topics gesetzt, Releases **v0.2.0–v0.6.0**
+> getaggt (manifest byte-genau), HACS+hassfest-CI grün, Brand-Assets inline, LICENSE/SECURITY/README
+> vorhanden. Tessera ist als **Custom Repository sauber installierbar**.
+> **Gate-2 (Reife) = weitgehend erfüllt** — `enforce` ist **dev-erprobt** (voller Dev-E2E gegen
+> `ha-tessera-dev`) **und in einer Live-Instanz aktiv verifiziert** (Bewohner real eingeschränkt,
+> Owner/Admin-Bypass, fail-safe intakt); ein **breiter Multi-Setup-Soak** bleibt erwünscht (Help-wanted).
+> **Verbleibend für den Default-Store (Pfad B):** ein PR gegen `hacs/default` vom Owner-Account +
+> Klärung/Erfüllung der `brands`-Prüfung (Inline-`brand/` vs. `home-assistant/brands`-Eintrag) —
+> beide sind **externe GitHub-PRs des Owners**, kein Code. Die Checklisten unten bleiben als Referenz.
 
 Repo: `/Users/michaelscholz/tessera` · Domain `tessera` · default branch `main` · origin `NoSilver78/tessera`.
 
