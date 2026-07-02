@@ -7,6 +7,17 @@ Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [0.8.1] — 2026-07-02
+
+### Behoben
+- **Modus jetzt über „Konfigurieren" schaltbar (Bug #26 sauber behoben).** Die Panel-Registrierung
+  setzte `config_panel_domain=DOMAIN`, was den Options-Flow verdeckte — „Konfigurieren" öffnete das
+  Matrix-Panel statt der Einstellungen. Der Shadow ist entfernt: **Einstellungen → Geräte & Dienste →
+  Tessera → Konfigurieren** öffnet jetzt den (admin-only) Options-Flow mit **Modus-Auswahl**
+  (`off`/`monitor`/`enforce`) über den guarded `_compile_for_mode_safely`-Pfad, plus Rollen/Grants. Das
+  Matrix-Panel bleibt über seinen admin-only Seitenleisten-Eintrag erreichbar; der `tessera.set_mode`-
+  Service bleibt für Automationen bestehen.
+
 ## [0.8.0] — 2026-07-02
 
 ### Geändert

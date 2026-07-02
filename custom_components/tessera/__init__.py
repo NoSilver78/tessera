@@ -734,7 +734,11 @@ async def _async_register_matrix_panel(hass: HomeAssistant) -> None:
         sidebar_icon="mdi:shield-account",
         module_url=module_url,
         require_admin=True,
-        config_panel_domain=DOMAIN,
+        # NB: intentionally NOT config_panel_domain=DOMAIN. Registering the panel
+        # as the domain's config panel shadows the options flow, so the "Configure"
+        # button opens the matrix instead of the mode/roles settings (bug #26). The
+        # panel stays reachable via its admin-only sidebar entry; "Configure" now
+        # opens the options flow (mode selector + roles/grants).
     )
     domain_data[DATA_PANEL_REGISTERED] = True
 

@@ -1808,6 +1808,9 @@ async def test_panel_registers_admin_only_and_is_idempotent(
 
     assert len(panel_calls) == 1
     assert panel_calls[0]["require_admin"] is True
+    # Must NOT register as the domain config panel: that shadows the options flow
+    # so "Configure" opens the matrix instead of the mode/roles settings (bug #26).
+    assert "config_panel_domain" not in panel_calls[0]
     assert panel_calls[0]["frontend_url_path"] == tessera_init.PANEL_URL_PATH
     assert panel_calls[0]["webcomponent_name"] == tessera_init.PANEL_WEBCOMPONENT
     assert panel_calls[0]["module_url"] == f"{tessera_init.PANEL_STATIC_URL}?v=9.9.9"
