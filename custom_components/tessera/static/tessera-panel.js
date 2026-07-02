@@ -2,18 +2,16 @@
  * Tessera matrix panel — a custom element (<tessera-matrix-panel>) for the
  * admin-only Tessera sidebar page. Home Assistant assigns the `hass` property.
  *
- * The matrix is grouped by floor. Each floor is a first-class row:
- *   - Floor row:  the floor x role grant, editable — clicking a cell cycles
- *                 none -> read -> read+control -> none via
- *                 `tessera/matrix/set_floor_grant`. It is shown once per floor.
- *   - Area rows:  the direct Area x Role grant (indented under the floor),
- *                 editable via `tessera/matrix/set_grant`. A cell is flagged
- *                 "doppelt" when the area also grants what its floor already
- *                 grants (a redundant double). Areas without a floor are grouped
- *                 under a non-editable "Ohne Etage" header.
- * Provenance is read from the row level (floor row vs area row), so each role
- * needs only a single column. Effective access for an area is the union of its
- * floor row and its own row.
+ * The matrix is grouped by floor, and each role keeps a two-column provenance
+ * split (Floor | Area):
+ *   - Floor header row: one per floor. Its Floor cell is the editable floor x
+ *     role grant (click cycles none -> read -> read+control -> none via
+ *     `tessera/matrix/set_floor_grant`). The floor grant is edited here, once.
+ *   - Area rows (indented under the floor): the Floor cell shows the inherited
+ *     floor grant (display-only), the Area cell is the editable direct Area x
+ *     Role grant (`tessera/matrix/set_grant`). When both the floor and the area
+ *     grant a cell, the row is flagged "doppelt" (a redundant double).
+ *   - Areas without a floor group under a non-editable "Ohne Etage" header.
  *
  * Each area row expands (chevron) to list the entities Tessera resolves for it;
  * those entities inherit the area right, so they carry no per-entity columns.
@@ -195,17 +193,23 @@ class TesseraMatrixPanel extends HTMLElement {
           id: floor.id,
           name: floor.name,
           level: floor.level == null ? null : floor.level,
+          order: floor.order == null ? 0 : floor.order,
           areas: [],
         };
         byFloor.set(floor.id, group);
       }
       group.areas.push(area);
     }
+    // Order by explicit floor level when set; otherwise fall back to the HA
+    // floor-registry order (physical-ish), and only then to the name.
     const floors = [...byFloor.values()].sort((a, b) => {
       const la = a.level == null ? Number.POSITIVE_INFINITY : a.level;
       const lb = b.level == null ? Number.POSITIVE_INFINITY : b.level;
       if (la !== lb) {
         return la - lb;
+      }
+      if (a.order !== b.order) {
+        return a.order - b.order;
       }
       return a.name.localeCompare(b.name);
     });
@@ -295,7 +299,7 @@ class TesseraMatrixPanel extends HTMLElement {
         }
         .metric strong { display: block; margin-top: 4px; font-size: 22px; font-weight: 500; }
         .matrix-wrap { overflow: auto; }
-        table { width: 100%; border-collapse: collapse; min-width: 520px; }
+        table { width: 100%; border-collapse: collapse; min-width: 640px; }
         th, td {
           border-bottom: 1px solid var(--divider-color);
           padding: 10px 12px;
@@ -307,10 +311,12 @@ class TesseraMatrixPanel extends HTMLElement {
           font-weight: 500;
           position: sticky; top: 0; z-index: 1;
         }
-        th:first-child, td:first-child {
+        th.sub { font-weight: 400; font-size: 12px; text-transform: none; }
+        th:first-child:not(.sub), td:first-child {
           position: sticky; left: 0; text-align: left;
           background: var(--card-background-color); z-index: 2;
         }
+        th.role-h { z-index: 1; }
         .bl { border-left: 1px solid var(--divider-color); }
         tr.floorrow td {
           background: var(--secondary-background-color);
@@ -327,22 +333,32 @@ class TesseraMatrixPanel extends HTMLElement {
         }
         .fmeta { color: var(--secondary-text-color); font-weight: 400; font-size: 12px; }
         .cell {
-          min-width: 84px;
+          display: inline-flex; align-items: center; justify-content: center;
+          box-sizing: border-box;
+          min-width: 88px; min-height: 34px;
+          border: 1px solid transparent;
           border-radius: 10px;
+          padding: 4px 10px;
           font: inherit;
-          padding: 6px 10px;
         }
-        .cell.none { color: var(--secondary-text-color); background: var(--secondary-background-color); }
+        .cell.none { color: var(--secondary-text-color); background: var(--secondary-background-color); border-color: var(--divider-color); }
         .cell.read { color: var(--primary-text-color); background: var(--warning-color); }
         .cell.control { color: var(--text-primary-color); background: var(--success-color); }
+        .cell.finherit { background: transparent; border-style: dashed; border-color: var(--divider-color); cursor: default; }
+        .cell.finherit.read { color: var(--warning-color); background: transparent; }
+        .cell.finherit.control { color: var(--success-color); background: transparent; }
+        .cell.finherit.none { color: var(--secondary-text-color); background: transparent; }
         .cell.dbl { outline: 2px solid var(--error-color); outline-offset: 1px; }
-        .dblhint { font-size: 11px; color: var(--error-color); margin-top: 3px; }
         td.aname { padding-left: 34px; }
         .chev {
           border: none; background: none; padding: 0 6px 0 0;
           color: var(--secondary-text-color); cursor: pointer; font-size: 13px;
         }
         .chev:hover { color: var(--primary-color); border: none; }
+        .doppelt {
+          margin-left: 8px; font-size: 11px; padding: 1px 8px; border-radius: 6px;
+          color: var(--primary-text-color); background: var(--warning-color);
+        }
         tr.entrow td {
           background: var(--secondary-background-color);
           text-align: left; padding: 8px 12px 10px 44px;
@@ -410,7 +426,7 @@ class TesseraMatrixPanel extends HTMLElement {
         <span><span class="swatch read"></span>read</span>
         <span><span class="swatch control"></span>control (implies read)</span>
         <span><span class="swatch dbl"></span>doppelt (Etage + Bereich)</span>
-        <span>Etagen- und Bereich-Zellen: klicken zum Ändern</span>
+        <span>Floor auf der Etagen-Zeile · Area je Bereich — klicken zum Ändern</span>
       </section>
     `;
   }
@@ -447,7 +463,13 @@ class TesseraMatrixPanel extends HTMLElement {
       return '<div class="empty">No Home Assistant areas found.</div>';
     }
     const roleHead = roles
-      .map((role) => `<th class="bl" scope="col">${this._escape(role.name)}</th>`)
+      .map(
+        (role) =>
+          `<th class="role-h bl" colspan="2" scope="colgroup">${this._escape(role.name)}</th>`,
+      )
+      .join("");
+    const subHead = roles
+      .map(() => '<th class="sub bl" scope="col">Floor</th><th class="sub" scope="col">Area</th>')
       .join("");
     const body = [];
     for (const floor of floors) {
@@ -457,7 +479,7 @@ class TesseraMatrixPanel extends HTMLElement {
       }
     }
     if (floorless.length) {
-      body.push(this._floorlessRow(floorless.length, roles.length));
+      body.push(this._floorlessRow(roles.length));
       for (const area of floorless) {
         body.push(this._areaRow(area, roles));
       }
@@ -466,7 +488,8 @@ class TesseraMatrixPanel extends HTMLElement {
       <div class="matrix-wrap">
         <table>
           <thead>
-            <tr><th scope="col">Bereich</th>${roleHead}</tr>
+            <tr><th rowspan="2" scope="col">Bereich</th>${roleHead}</tr>
+            <tr>${subHead}</tr>
           </thead>
           <tbody>${body.join("")}</tbody>
         </table>
@@ -493,7 +516,8 @@ class TesseraMatrixPanel extends HTMLElement {
             >
               ${pending ? "Saving..." : state}
             </button>
-          </td>`;
+          </td>
+          <td></td>`;
       })
       .join("");
     return `
@@ -506,35 +530,38 @@ class TesseraMatrixPanel extends HTMLElement {
       </tr>`;
   }
 
-  _floorlessRow(count, roleCount) {
-    const meta = `· ${count} ${count === 1 ? "Bereich" : "Bereiche"}`;
+  _floorlessRow(roleCount) {
     return `
       <tr class="floorrow">
-        <td><span class="fname">Ohne Etage <span class="fmeta">${meta}</span></span></td>
-        <td class="bl" colspan="${roleCount}"></td>
+        <td><span class="fname">Ohne Etage</span></td>
+        <td class="bl" colspan="${roleCount * 2}"></td>
       </tr>`;
   }
 
   _areaRow(area, roles) {
     const expanded = this._expanded.has(area.id);
+    const rowDouble = roles.some((role) => this._isDouble(area.id, role.id));
     const cells = roles
       .map((role) => {
-        const state = this._state(this._grantFor(area.id, role.id));
-        const isDouble = this._isDouble(area.id, role.id);
+        const floorState = this._state(this._floorGrantFor(area.id, role.id));
+        const areaState = this._state(this._grantFor(area.id, role.id));
+        const dbl = this._isDouble(area.id, role.id) ? " dbl" : "";
         const pending = this._pending === `${area.id}::${role.id}`;
         return `
           <td class="bl">
+            <span class="cell finherit ${floorState}">${floorState}</span>
+          </td>
+          <td>
             <button
               type="button"
-              class="cell ${state}${isDouble ? " dbl" : ""}"
+              class="cell ${areaState}${dbl}"
               data-area="${this._escape(area.id)}"
               data-role="${this._escape(role.id)}"
               ${this._disabledAttr(pending)}
               title="Bereich-Grant ${this._escape(area.name)} / ${this._escape(role.name)}"
             >
-              ${pending ? "Saving..." : state}
+              ${pending ? "Saving..." : areaState}
             </button>
-            ${isDouble ? '<div class="dblhint">doppelt</div>' : ""}
           </td>`;
       })
       .join("");
@@ -543,7 +570,7 @@ class TesseraMatrixPanel extends HTMLElement {
         <button type="button" class="chev" data-expand="${this._escape(area.id)}"
           aria-label="Toggle entities" aria-expanded="${expanded ? "true" : "false"}">
           ${expanded ? "▾" : "▸"}
-        </button>${this._escape(area.name)}
+        </button>${this._escape(area.name)}${rowDouble ? '<span class="doppelt">doppelt</span>' : ""}
       </td>`;
     const rows = [`<tr>${nameCell}${cells}</tr>`];
     if (expanded) {
@@ -554,7 +581,7 @@ class TesseraMatrixPanel extends HTMLElement {
 
   _entityRow(area, roleCount) {
     const ids = this._data?.entities_by_area?.[area.id] || [];
-    const colspan = 1 + roleCount;
+    const colspan = 1 + roleCount * 2;
     const boxes = ids.length
       ? ids
           .map((id) => `<span class="ebox">${this._escape(this._entityName(id))}</span>`)

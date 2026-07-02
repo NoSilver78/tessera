@@ -7,6 +7,19 @@ Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-07-02
+
+### Geändert
+- **Matrix-Panel nach Etage gruppiert (Floor-First-Class):** das Area-Board gruppiert Bereiche jetzt
+  unter ihrer Etage. Je Etage gibt es **eine** Kopfzeile mit dem editierbaren Floor-Grant
+  (`set_floor_grant`); die Bereich-Zeilen darunter zeigen den geerbten Floor-Grant **display-only**
+  (gestrichelt, farbiger Text) und ihren editierbaren Area-Grant. Damit ist der Floor-Grant genau
+  einmal editierbar (statt auf jeder Area-Zeile) und die Etagen↔Bereich-Hierarchie explizit; die
+  Zwei-Spalten-Provenance `Floor | Area` und die `doppelt`-Markierung bleiben erhalten. Bereiche ohne
+  Etage stehen unter „Ohne Etage". Etagen werden nach `level` sortiert, sonst nach HA-Registry-
+  Reihenfolge, sonst nach Name — dafür liefert die WS `MatrixFloor` jetzt zusätzlich `level` + `order`.
+  Kein Auth-/Enforce-Pfad berührt.
+
 ### Entfernt
 - **Spike-Harness-Komponente** (`spike/tools/tessera_spike/harness/`) aus dem Repo entfernt — die
   ladbare HA-Test-Komponente aus Phase 0, die `docs/spec-phase0.md` ausdrücklich als „nach Spike
