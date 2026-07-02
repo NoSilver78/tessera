@@ -69,10 +69,11 @@ class MatrixGrant(TypedDict):
 
 
 class MatrixFloor(TypedDict):
-    """Floor metadata for an area — labels and floor-sourced grants."""
+    """Floor metadata for an area — labels, ordering, and floor-sourced grants."""
 
     id: str
     name: str
+    level: int | None
 
 
 class MatrixResponse(TypedDict):
@@ -403,6 +404,7 @@ def _area_floor(hass: HomeAssistant) -> dict[str, MatrixFloor | None]:
         result[area.id] = {
             "id": floor_id,
             "name": floor.name if floor is not None else floor_id,
+            "level": floor.level if floor is not None else None,
         }
     return result
 
