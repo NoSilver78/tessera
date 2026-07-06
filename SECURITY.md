@@ -70,10 +70,12 @@ Custom-Components. Ihr Zweck ist **Konflikt-Vermeidung**, kein Malware-Sandbox:
 ## Unterstützte Versionen
 
 Tessera ist in aktiver Vor-Release-Entwicklung. Bis zum ersten stabilen Release wird **nur der
-aktuelle `main`-Stand** mit Sicherheitsfixes versorgt. Die aktuell getestete HA-Version ist
-**2026.7.0**, im Code-Guard `SUPPORTED_HA_AUTH_VERSION` (exakter Gleichheits-Match) verankert: Auf
-jeder abweichenden HA-Version blockiert der Laufzeit-Guard den `enforce`-Schreibpfad fail-closed und
-hält Tessera im read-only `monitor`-Zustand — das ist der **aktive** Schutz. Ein zusätzlicher
+aktuelle `main`-Stand** mit Sicherheitsfixes versorgt. Die aktuell validierte HA-**Feature-Linie** ist
+**2026.7** (2026.7.x; validiert auf 2026.7.1), im Code-Guard `SUPPORTED_HA_AUTH_FEATURE` verankert
+(`YEAR.MONTH`-Match — die Ebene, auf der HA Auth-Store-Breaking-Changes ausliefert): Jedes Patch
+innerhalb der Linie wird akzeptiert; auf einem **anderen Monats-Release** blockiert der Laufzeit-Guard
+den `enforce`-Schreibpfad fail-closed und hält Tessera im read-only `monitor`-Zustand — das ist der
+**aktive** Schutz. Ein zusätzlicher
 `hacs.json`-Pin (`homeassistant`) ist derzeit **nicht** gesetzt (die HACS-Validierung lehnte den Wert
 als künftiges Minimum ab) und kann beim Public-Flip als optionale zweite Hürde nachgezogen werden.
 

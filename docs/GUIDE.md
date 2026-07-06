@@ -7,8 +7,8 @@
 [Deutsch](GUIDE.de.md) · **English**
 
 [![HACS](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=flat-square)](https://github.com/NoSilver78/tessera)
-[![Version](https://img.shields.io/badge/version-0.9.0-blue.svg?style=flat-square)](https://github.com/NoSilver78/tessera/releases)
-[![HA](https://img.shields.io/badge/Home%20Assistant-2026.7.0-41BDF5.svg?style=flat-square)](#prerequisites)
+[![Version](https://img.shields.io/badge/version-0.9.1-blue.svg?style=flat-square)](https://github.com/NoSilver78/tessera/releases)
+[![HA](https://img.shields.io/badge/Home%20Assistant-2026.7.x-41BDF5.svg?style=flat-square)](#prerequisites)
 [![License](https://img.shields.io/badge/license-MIT-green.svg?style=flat-square)](../LICENSE)
 
 > [!WARNING]
@@ -22,6 +22,7 @@
 ## Contents
 
 - [What Tessera is & who it's for](#what-tessera-is--who-its-for)
+- [How Tessera compares to alternatives](#how-tessera-compares-to-alternatives)
 - [Architecture & data flow](#architecture--data-flow)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
@@ -66,6 +67,38 @@ auditable rights — security-conscious, but without needing to know HA's auth i
 
 ---
 
+## How Tessera compares to alternatives
+
+Tessera is not the first attempt to bring per-user rights to Home Assistant — the need is real and
+others have tackled it. Two alternatives are established in the HACS store; understanding how they
+differ helps you pick the right tool.
+
+| | **Enforcement mechanism** | **Scoping model** | **Labels** | **Rollout** |
+|---|---|---|---|---|
+| **Tessera** | **Native** HA `PolicyPermissions` written into the auth store — **no monkeypatch, no core fork** | **Area / Floor as a first-class axis** × role × *view / operate / change* | **Living dimension** — re-resolved on every compile | `off → monitor → enforce`, fail-closed gate + snapshot/restore |
+| [`SamAthanas/user-rbac`](https://github.com/SamAthanas/user-rbac) | Middleware that **intercepts / patches core service calls** (its README notes this may break on HA updates) | role × domain / entity, action-level | — | enable/disable component |
+| [`Darkdragon14/ha-access-control-manager`](https://github.com/Darkdragon14/ha-access-control-manager) | Native HA group permissions | group × entity, read / write | one-shot bulk helper (later entities with the same label do **not** inherit automatically, per its README) | direct group edits |
+
+**What sets Tessera apart:**
+
+- **No core patching.** Because rights compile into HA's *native* group `PolicyPermissions`, disabling
+  Tessera returns HA to stock behaviour — there is no interception layer that a core update can break,
+  and nothing to unwind by hand.
+- **Area / floor as the primary axis.** You grant the way you think about your house; entity-level
+  detail is available on expand but is not the unit of work.
+- **Labels stay live.** A label grant is re-resolved on every compile, so an entity tagged later is
+  covered automatically without re-touching the grant.
+- **Monitor-first safety.** You watch computed verdicts in `monitor` before anything is ever written,
+  behind a fail-closed gate sequence (version guard → compile → D9 gate → linter → lockout precheck →
+  immutable snapshot → apply), with automatic restore on any error.
+
+This is a positioning note, not a verdict: `user-rbac` is popular and mature if you want simple
+action-blocking and accept an interception layer; `ha-access-control-manager` fits if you already
+manage HA groups by hand. Tessera targets **area-centric, declarative rights compiled into native
+HA permissions, with a safe monitor-first rollout.**
+
+---
+
 ## Architecture & data flow
 
 Tessera follows the classic RBAC model (policy administration → decision → enforcement):
@@ -93,14 +126,16 @@ flowchart LR
 ## Prerequisites
 
 > [!IMPORTANT]
-> `enforce` requires **the exact, tested Home Assistant version**. Tessera writes through partly
-> **private HA auth APIs** without a stability guarantee and checks the version with an exact-equality
-> match. On **any** other HA version (even a patch) the write path is **fail-closed** and Tessera stays
-> in read-only `monitor`. See [The version guard](#the-version-guard-and-ha-updates).
+> `enforce` requires a **validated Home Assistant feature line**. Tessera writes through partly
+> **private HA auth APIs** without a stability guarantee and checks the version at the `YEAR.MONTH`
+> feature-line granularity — the level at which HA ships breaking auth-store changes. Any **patch**
+> inside the validated line is accepted; on a **different monthly release** the write path is
+> **fail-closed** and Tessera stays in read-only `monitor`. See
+> [The version guard](#the-version-guard-and-ha-updates).
 
 | Requirement | Value / note |
 |---|---|
-| Home Assistant (for `enforce`) | **exactly 2026.7.0** (`SUPPORTED_HA_AUTH_VERSION`) |
+| Home Assistant (for `enforce`) | **the 2026.7 line** (2026.7.x, `SUPPORTED_HA_AUTH_FEATURE`; validated on 2026.7.1) |
 | Home Assistant (for `off`/`monitor`) | any version — `monitor` is read-only and never writes |
 | HACS | installed (to install as a custom repository) |
 | Access | **administrator** (panel, options and services are admin-only) |
@@ -318,13 +353,16 @@ The most important section. Please read before production use.
 
 > [!IMPORTANT]
 > Tessera writes through **private/undocumented HA auth APIs**. A runtime guard
-> (`SUPPORTED_HA_AUTH_VERSION`) permits the write path **only** on the **exact tested** HA version
-> (currently **2026.7.0**, exact-equality match).
+> (`SUPPORTED_HA_AUTH_FEATURE`) permits the write path on the validated HA **feature line** (currently
+> **2026.7**, i.e. any **2026.7.x** patch; validated on **2026.7.1**). HA ships breaking auth-store
+> changes only in the monthly line, so patch updates keep working and only a **new monthly release**
+> pauses `enforce`.
 
-**What happens on an HA update** (expected and safe):
+**What happens on an HA monthly update** (expected and safe):
 
-1. After an HA core update the version no longer matches → the write path is **fail-closed** →
-   Tessera falls back to `monitor` and raises the repair **"Tessera fell back to monitor mode"**.
+1. After an HA update to a **new monthly line** the feature line no longer matches → the write path is
+   **fail-closed** → Tessera falls back to `monitor` and raises the repair
+   **"Tessera fell back to monitor mode"**. (A patch update within the validated line keeps `enforce`.)
 2. **The already-applied enforcement persists** — the native `tessera:*` groups live in the HA auth
    store and survive the restart. Your residents stay restricted; Tessera just no longer actively
    manages it.

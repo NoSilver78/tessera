@@ -8,6 +8,8 @@ from typing import Any
 import custom_components.tessera as tessera_init
 import pytest
 from custom_components.tessera.auth_adapter import (
+    SUPPORTED_HA_AUTH_FEATURE,
+    SUPPORTED_HA_AUTH_VERSION,
     AllowOnlyPolicyViolation,
     AuthPolicyStoreAdapter,
     AuthRecoverySnapshot,
@@ -20,9 +22,35 @@ from custom_components.tessera.auth_adapter import (
     UserBindingAdapter,
     UserGroupSnapshot,
     _assert_owner_or_admin_survives_in,
+    _assert_supported_auth_version,
 )
 from custom_components.tessera.const import DOMAIN
 from custom_components.tessera.state import default_state_data
+
+
+def test_version_guard_is_pinned_to_the_supported_feature_line() -> None:
+    """The validated patch constant sits inside the guarded feature line."""
+    assert SUPPORTED_HA_AUTH_VERSION.startswith(f"{SUPPORTED_HA_AUTH_FEATURE}.")
+
+
+@pytest.mark.parametrize(
+    "version",
+    [
+        SUPPORTED_HA_AUTH_VERSION,
+        f"{SUPPORTED_HA_AUTH_FEATURE}.0",
+        f"{SUPPORTED_HA_AUTH_FEATURE}.99",
+    ],
+)
+def test_version_guard_tolerates_any_patch_in_the_feature_line(version: str) -> None:
+    """Any patch within the validated feature line passes the guard."""
+    _assert_supported_auth_version(version)  # must not raise
+
+
+@pytest.mark.parametrize("version", ["2026.8.0", "2026.6.9", "2027.7.0", "1900.1.1"])
+def test_version_guard_blocks_other_feature_lines(version: str) -> None:
+    """A different monthly release is fail-closed regardless of patch."""
+    with pytest.raises(UnsupportedAuthVersion):
+        _assert_supported_auth_version(version)
 
 
 @dataclass

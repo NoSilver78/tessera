@@ -13,11 +13,13 @@ Schutzschichten.
 
 ## Schutzschichten
 
-1. **Code-Guard auf die exakt getestete HA-Version.** Der Auth-Schreibpfad prüft im Code gegen die
-   getestete HA-Version (derzeit **`2026.7.0`**, `SUPPORTED_HA_AUTH_VERSION`). Auf einer abweichenden
-   Version wird der Enforce-/Schreibpfad **fail-closed blockiert** (`compute_enforce_plan` liefert
-   einen `blocked`-Plan) — **kein** nativer Write; wirksam bleibt der read-only `monitor`-Zustand.
-   Das ist ein bewusst strenger Fail-closed-Block, kein blindes Weiterschreiben.
+1. **Code-Guard auf die validierte HA-Feature-Linie.** Der Auth-Schreibpfad prüft im Code gegen die
+   validierte HA-**Feature-Linie** `YEAR.MONTH` (derzeit **`2026.7`**, `SUPPORTED_HA_AUTH_FEATURE`;
+   validiert auf `2026.7.1`). Jedes Patch innerhalb der Linie (2026.7.x) passiert; auf einem **anderen
+   Monats-Release** wird der Enforce-/Schreibpfad **fail-closed blockiert** (`compute_enforce_plan`
+   liefert einen `blocked`-Plan) — **kein** nativer Write; wirksam bleibt der read-only `monitor`-
+   Zustand. HA liefert Auth-Store-Breaking-Changes nur in der Monats-Linie aus; die Patch-Toleranz ist
+   daher bewusst und kein blindes Weiterschreiben über Monatsgrenzen.
 2. **HACS-Mindestversion (optional, derzeit NICHT gesetzt).** `hacs.json` wird bereits ausgeliefert,
    enthält aber **keinen** `homeassistant`-Pin: die `hacs/action`-Validierung lehnte den Wert als
    künftiges Minimum ab. Der **aktive** Schutz ist daher allein der Code-Guard aus #1; ein
