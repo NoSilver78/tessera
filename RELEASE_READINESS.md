@@ -268,10 +268,12 @@ Wartungsrisiko**. Weder `hassfest` noch `hacs/action` prüfen Laufzeit-/API-Stab
 > Quelle: https://developers.home-assistant.io/docs/creating_integration_manifest/
 
 ### Der Tracking-Prozess (pro HA-Release)
-1. **Laufzeit-Guard auf die exakt getestete HA-Version** (`SUPPORTED_HA_AUTH_VERSION`, derzeit
-   `2026.7.0`, exakter Gleichheits-Match) — **dies ist die aktive Absicherung.** Vor jedem nativen
-   Write geprüft; auf abweichender Version fail-closed → kein Write, `enforce` fällt auf `monitor`.
-   **Bei jeder verifizierten neuen HA-Version anheben.** Optionaler Zusatz beim Public-Flip: ein
+1. **Laufzeit-Guard auf die validierte HA-Feature-Linie** (`SUPPORTED_HA_AUTH_FEATURE`, derzeit
+   `2026.7`, `YEAR.MONTH`-Match; validiert auf `2026.7.1` via `SUPPORTED_HA_AUTH_VERSION`) — **dies ist
+   die aktive Absicherung.** Vor jedem nativen Write geprüft; jedes Patch der Linie (2026.7.x) passiert,
+   ein anderes Monats-Release ist fail-closed → kein Write, `enforce` fällt auf `monitor`.
+   **Bei jeder verifizierten neuen HA-Monats-Linie `SUPPORTED_HA_AUTH_VERSION` anheben** (die Feature-
+   Linie wird daraus abgeleitet). Optionaler Zusatz beim Public-Flip: ein
    Minimum-HA-Pin in `hacs.json` (`"homeassistant": "…"`), der HACS-Download/Update auf älterem HA
    blockt — derzeit **nicht** gesetzt (die `hacs/action` lehnte ihn als künftiges Minimum ab).
    Quelle: https://www.hacs.xyz/docs/publish/start/

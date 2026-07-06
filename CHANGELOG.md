@@ -7,6 +7,23 @@ Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [0.9.1] — 2026-07-06
+
+### Geändert
+- **HA-Auth-Version-Guard von Exakt-Match auf Feature-Linie umgestellt.** Der Laufzeit-Guard prüft
+  jetzt die HA-**Feature-Linie** `YEAR.MONTH` (`SUPPORTED_HA_AUTH_FEATURE`, derzeit **2026.7**) statt
+  eine exakte Patch-Version. HA liefert Auth-Store-Breaking-Changes nur in der Monats-Linie aus, daher
+  wird jedes **Patch** darin (2026.7.x) akzeptiert, während ein **anderes Monats-Release** weiterhin
+  fail-closed auf `monitor` fällt. Dadurch bleibt `enforce` über HA-Patch-Updates hinweg aktiv statt
+  bei jedem Patch zu pausieren. Validiert auf HA **2026.7.1** (`SUPPORTED_HA_AUTH_VERSION`); die
+  Fail-Safe-Kette (Snapshot/Restore, Lockout-Precheck) bleibt unverändert. Anlass: Live-Instanz auf
+  2026.7.1 fiel gegen den 2026.7.0-Pin unnötig in `monitor`.
+
+### Dokumentation
+- **Abschnitt „Wie sich Tessera zu Alternativen verhält"** in README und GUIDE (EN + DE): ehrliche,
+  belegte Abgrenzung zu `SamAthanas/user-rbac` und `Darkdragon14/ha-access-control-manager`
+  (nativer Auth-Write statt Core-Patch · Bereich/Etage als erstklassige Achse · lebende Label-Dimension).
+
 ## [0.8.1] — 2026-07-02
 
 ### Behoben

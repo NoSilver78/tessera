@@ -33,6 +33,36 @@ Tessera compiles declarative policies (**role × area × action**) into **native
   — labels as rows with an editable cell per role, expandable to the entities a label resolves to.
 - **Three operating modes** with a non-intrusive default — see below.
 
+## How Tessera relates to other approaches
+
+Tessera is not the first attempt to bring per-user rights to Home Assistant — which is good news:
+it means the need is real. There are two established alternatives in the HACS store, and Tessera
+deliberately takes a different path. The honest comparison:
+
+| | **Enforcement mechanism** | **Scoping model** | **Labels** |
+|---|---|---|---|
+| **Tessera** | **Native** HA `PolicyPermissions`, written into the auth store — **no monkeypatch, no core fork**; every write is gated and fail-safe to `monitor` | **Area / Floor as a first-class axis** × role × *view / operate / change* | **Living dimension** — label × role; entities that match a label later are re-resolved on the next compile |
+| [`SamAthanas/user-rbac`](https://github.com/SamAthanas/user-rbac) | Middleware that **intercepts / patches core service calls** (its own README notes this may break on HA updates) | role × domain / entity, action-level | — |
+| [`Darkdragon14/ha-access-control-manager`](https://github.com/Darkdragon14/ha-access-control-manager) | Native HA group permissions | group × entity, read / write | one-shot bulk helper (per its README, later entities with the same label do **not** inherit automatically) |
+
+**Why you might pick Tessera:**
+
+- **It doesn't patch Home Assistant core.** Rights are compiled into HA's *native* group
+  `PolicyPermissions`. Disable Tessera and HA returns to stock behaviour — nothing to unwind, and
+  no interception layer that a core update can break.
+- **Areas and floors are the primary axis**, not an afterthought on top of entities — grants read
+  the way you think about your house.
+- **Labels stay live.** A label grant is re-resolved on every compile, so an entity you tag next
+  month is covered without re-touching the grant.
+- **Non-intrusive by default.** `off → monitor → enforce`: you *watch* the computed verdicts before
+  anything is ever written, behind a fail-closed gate sequence with an immutable snapshot and
+  automatic restore.
+
+If you want simple action-blocking today and don't mind an interception layer, `user-rbac` is
+popular and mature. If you already manage HA groups by hand, `ha-access-control-manager` fits that
+grain. Tessera is for you if you want **area-centric, declarative rights compiled into native HA
+permissions, with a safe monitor-first rollout.**
+
 ## Project status
 
 **Published (v0.9.0) · `enforce` dev-proven and active in a live instance · broad multi-setup testing wanted.**
@@ -61,7 +91,7 @@ HA updates!), troubleshooting and FAQ — with screenshots:
 
 ## Installation (HACS — custom repository)
 
-> Tessera is installable as a **HACS custom repository** — there are tagged releases (currently **v0.9.0**).
+> Tessera is installable as a **HACS custom repository** — there are tagged releases (currently **v0.9.1**).
 > Inclusion in the **HACS default store** has been submitted (in review); until then, use "Custom repositories":
 
 1. Open HACS → three-dot menu top right → **Custom repositories**.
@@ -70,9 +100,10 @@ HA updates!), troubleshooting and FAQ — with screenshots:
 4. **Restart Home Assistant.**
 5. **Settings → Devices & Services → Add Integration → Tessera**.
 
-**Tested HA version:** Home Assistant **2026.7.0** (see *[version guard](#version-guard-private-ha-apis)*).
-On any other HA version the runtime guard blocks the `enforce` write path and keeps Tessera in the
-read-only `monitor` state.
+**Tested HA line:** Home Assistant **2026.7.x** (validated on **2026.7.1**; see
+*[version guard](#version-guard-private-ha-apis)*). Within that feature line any patch release is
+accepted; on a **different** monthly release the runtime guard blocks the `enforce` write path and
+keeps Tessera in the read-only `monitor` state.
 
 ## Security model (honest)
 
@@ -115,11 +146,13 @@ paths — documented honestly here:
 Tessera writes partly through **private/undocumented HA auth APIs** for which Home Assistant gives
 **no** stability guarantee — they can break between releases. Protection:
 
-- **Active protection (runtime guard):** the auth write path checks in code for the **exact tested**
-  HA version (`SUPPORTED_HA_AUTH_VERSION`, currently **2026.7.0** — exact-equality match). On any other
-  version the write path is **fail-closed blocked** and `enforce` falls back to the read-only `monitor`
-  state — **no** native write. **Every HA core update therefore safely pauses `enforce`** until a
-  Tessera version verifies the new HA version (details:
+- **Active protection (runtime guard):** the auth write path checks in code for the validated HA
+  **feature line** (`SUPPORTED_HA_AUTH_FEATURE`, currently **2026.7**; validated on
+  `SUPPORTED_HA_AUTH_VERSION` = **2026.7.1**). HA ships breaking auth-store changes only in the
+  monthly feature line, so any **patch** inside it (2026.7.x) is accepted, while a **different monthly
+  release** leaves the write path **fail-closed** and `enforce` falls back to the read-only `monitor`
+  state — **no** native write. **Every HA monthly update therefore safely pauses `enforce`** until a
+  Tessera version verifies the new line (details:
   [guide → things to watch out for](docs/GUIDE.md#things-to-watch-out-for)).
 - An additional `hacs.json` pin of the minimum HA version is **deliberately not** set (HACS validation
   rejected the value as a future minimum); the real safeguard is and remains the runtime guard above.

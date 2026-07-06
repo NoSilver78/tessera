@@ -18,7 +18,15 @@ from ._user_helpers import _user_group_ids
 from .const import MODE_OFF
 from .schema import TesseraConfigData
 
-SUPPORTED_HA_AUTH_VERSION = "2026.7.0"
+# The newest HA release whose native auth store has been validated against
+# these adapters. Home Assistant ships breaking auth-store changes only in the
+# monthly *feature* line (YEAR.MONTH); patch releases within a line
+# (YEAR.MONTH.PATCH) are bugfix-only and do not migrate the auth store. Tessera
+# therefore validates a feature line and tolerates any patch inside it, so a
+# routine HA patch bump does not needlessly drop the enforce path to monitor.
+# Bump this constant once a new monthly line has been validated.
+SUPPORTED_HA_AUTH_VERSION = "2026.7.1"
+SUPPORTED_HA_AUTH_FEATURE = ".".join(SUPPORTED_HA_AUTH_VERSION.split(".")[:2])
 TESSERA_GROUP_PREFIX = "tessera:"
 GROUP_ID_ADMIN = "system-admin"
 GROUP_ID_READ_ONLY = "system-read-only"
@@ -473,12 +481,23 @@ def _validate_exact_restore_binding(user: Any, group_ids: Collection[str]) -> li
     return sorted(target_group_ids)
 
 
+def _ha_feature_line(ha_version: str) -> str:
+    """Return the ``YEAR.MONTH`` feature line of an HA version string."""
+    return ".".join(str(ha_version).split(".")[:2])
+
+
 def _assert_supported_auth_version(ha_version: str) -> None:
-    """Raise before writes when the current HA auth version is unsupported."""
-    if ha_version != SUPPORTED_HA_AUTH_VERSION:
+    """Raise before writes when the current HA auth feature line is unsupported.
+
+    Matches on the ``YEAR.MONTH`` feature line — the granularity at which HA
+    ships auth-store changes — so any patch inside the validated line is
+    accepted, while a different monthly release is fail-closed.
+    """
+    if _ha_feature_line(ha_version) != SUPPORTED_HA_AUTH_FEATURE:
         raise UnsupportedAuthVersion(
             f"unsupported HA auth version {ha_version}; "
-            f"expected {SUPPORTED_HA_AUTH_VERSION}"
+            f"expected the {SUPPORTED_HA_AUTH_FEATURE}.x line "
+            f"(validated: {SUPPORTED_HA_AUTH_VERSION})"
         )
 
 
