@@ -2,6 +2,12 @@
 name = "tessera"
 version = "0.1.0"
 description = "RBAC for Home Assistant — Rollen × Area/Entity × view/operate/change, durchgesetzt auf nativen HA-Policies."
+# Deliberately the *lowest* Python Tessera must still run on — not the one CI
+# runs. Current HA (2026.3+) requires Python >= 3.14.2, so CI installs 3.14 to
+# get a current Home Assistant, but `off`/`monitor` are documented as working on
+# any HA version, including older ones on Python 3.13. Raising the targets below
+# to py314 makes Black rewrite `except (A, B):` into the 3.14-only `except A, B:`
+# (PEP 758), which would break the import on those installs.
 requires-python = ">=3.13"
 readme = "README.md"
 license = { text = "MIT" }

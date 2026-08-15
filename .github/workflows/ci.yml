@@ -6,13 +6,19 @@ on:
   pull_request:
 
 jobs:
+  # Python 3.14 is what current Home Assistant needs (2026.3+ requires >=3.14.2).
+  # On 3.13 pip silently resolved pytest-homeassistant-custom-component down to an
+  # old build that pulled HA 2026.2.3, so the suite was testing against a Home
+  # Assistant seven months behind the validated line. The interpreter here is what
+  # decides how current that HA is — the toolchain targets in pyproject.toml stay
+  # at the lowest supported version on purpose (see the comment there).
   quality:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
-          python-version: "3.13"
+          python-version: "3.14"
       - name: Install tools
         run: pip install ruff black mypy pytest pytest-asyncio pytest-homeassistant-custom-component
       - name: ruff (lint)
@@ -25,7 +31,7 @@ jobs:
         # exit code 5 = "no tests collected" (ok solange noch keine Tests existieren)
         run: pytest -q || [ $? -eq 5 ]
       - name: HA version under test (context for the contract tests)
-        run: python -c "import homeassistant; print('homeassistant', homeassistant.const.__version__)"
+        run: python -c "from homeassistant.const import __version__ as v; print('homeassistant', v)"
 
       - name: stale-marker check (docs/QUALITY.md R4)
         # Verdrahteter Code darf sich nicht "dormant/not wired" nennen
@@ -53,10 +59,10 @@ jobs:
       matrix:
         ha: ["2026.7.1", "2026.8.1"]
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
-          python-version: "3.13"
+          python-version: "3.14"
       - name: Install Home Assistant ${{ matrix.ha }}
         run: pip install "homeassistant==${{ matrix.ha }}" pytest pytest-asyncio
       - name: Contract tests against the installed HA

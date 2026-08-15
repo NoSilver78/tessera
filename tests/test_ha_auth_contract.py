@@ -22,14 +22,21 @@ from custom_components.tessera.auth_adapter import (
     _ha_feature_line,
 )
 
-homeassistant = pytest.importorskip(
-    "homeassistant", reason="contract tests need a real Home Assistant install"
+# Import the submodule explicitly: ``import homeassistant`` alone does not bind
+# ``homeassistant.const``, so reaching through the package only works when some
+# other import happened to load it first (as pytest-homeassistant-custom-
+# component's conftest does). These tests must also run in a bare environment
+# that has nothing but Home Assistant itself installed.
+ha_const = pytest.importorskip(
+    "homeassistant.const", reason="contract tests need a real Home Assistant install"
 )
+
+HA_VERSION: str = ha_const.__version__
 
 
 def _installed_feature_line() -> str:
     """Return the ``YEAR.MONTH`` line of the installed Home Assistant."""
-    return _ha_feature_line(homeassistant.const.__version__)
+    return _ha_feature_line(HA_VERSION)
 
 
 def _line_sort_key(feature_line: str) -> tuple[int, int]:
@@ -58,7 +65,7 @@ def test_installed_ha_line_is_validated() -> None:
         )
 
     assert installed in SUPPORTED_HA_AUTH_FEATURES, (
-        f"Home Assistant {homeassistant.const.__version__} is newer than every "
+        f"Home Assistant {HA_VERSION} is newer than every "
         f"validated line {validated}. Diff HA's "
         "homeassistant/auth/auth_store.py, auth/models.py and auth/permissions/ "
         "against the newest validated tag; if the touched subset is unchanged, "
