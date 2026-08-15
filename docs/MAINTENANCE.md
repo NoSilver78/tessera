@@ -13,13 +13,20 @@ Schutzschichten.
 
 ## Schutzschichten
 
-1. **Code-Guard auf die validierte HA-Feature-Linie.** Der Auth-Schreibpfad prüft im Code gegen die
-   validierte HA-**Feature-Linie** `YEAR.MONTH` (derzeit **`2026.7`**, `SUPPORTED_HA_AUTH_FEATURE`;
-   validiert auf `2026.7.1`). Jedes Patch innerhalb der Linie (2026.7.x) passiert; auf einem **anderen
-   Monats-Release** wird der Enforce-/Schreibpfad **fail-closed blockiert** (`compute_enforce_plan`
-   liefert einen `blocked`-Plan) — **kein** nativer Write; wirksam bleibt der read-only `monitor`-
-   Zustand. HA liefert Auth-Store-Breaking-Changes nur in der Monats-Linie aus; die Patch-Toleranz ist
-   daher bewusst und kein blindes Weiterschreiben über Monatsgrenzen.
+1. **Code-Guard auf die validierten HA-Feature-Linien.** Der Auth-Schreibpfad prüft im Code gegen die
+   Menge validierter HA-**Feature-Linien** `YEAR.MONTH` (derzeit **`2026.7`** und **`2026.8`**,
+   `SUPPORTED_HA_AUTH_FEATURES`; neueste validiert `2026.8.1`). Jedes Patch innerhalb einer validierten
+   Linie (2026.7.x / 2026.8.x) passiert; auf einem **nicht validierten Monats-Release** wird der
+   Enforce-/Schreibpfad **fail-closed blockiert** (`compute_enforce_plan` liefert einen
+   `blocked`-Plan) — **kein** nativer Write; wirksam bleibt der read-only `monitor`-Zustand. HA liefert
+   Auth-Store-Breaking-Changes nur in der Monats-Linie aus; die Patch-Toleranz ist daher bewusst und
+   kein blindes Weiterschreiben über Monatsgrenzen. Mehrere Linien gleichzeitig zu führen ist Absicht:
+   wer eine HA-Version zurückhängt, verliert `enforce` nicht.
+
+   **Frühwarnung in CI:** `tests/test_ha_auth_contract.py` prüft gegen das *installierte* HA (nicht
+   gegen Test-Doubles) und wird **rot**, sobald CI auf einer Linie läuft, die noch niemand validiert
+   hat — plus Struktur-Checks auf genau den privaten Subset (`AuthStore._groups`/`_data_to_save`,
+   `models.Group`, `PolicyPermissions`), den die Adapter anfassen.
 2. **HACS-Mindestversion (optional, derzeit NICHT gesetzt).** `hacs.json` wird bereits ausgeliefert,
    enthält aber **keinen** `homeassistant`-Pin: die `hacs/action`-Validierung lehnte den Wert als
    künftiges Minimum ab. Der **aktive** Schutz ist daher allein der Code-Guard aus #1; ein
@@ -42,12 +49,23 @@ Schutzschichten.
 
 Für **jedes** neue Home-Assistant-Release:
 
-1. **Testen** — die Integrations-Tests gegen die neue HA-Version laufen lassen (idealerweise per
+1. **Quellen diffen (bevor irgendetwas angehoben wird).** Die neue Linie ist erst dann validiert, wenn
+   der von den Adaptern angefasste Subset unverändert ist. Konkret gegen den zuletzt validierten Tag:
+
+   ```
+   homeassistant/auth/auth_store.py     # _groups, _store, async_get_groups, _data_to_save
+   homeassistant/auth/models.py         # models.Group (id/name/policy/system_generated)
+   homeassistant/auth/permissions/      # PolicyPermissions + entities-Policy-Shape
+   ```
+
+   Ein reiner Versions-Bump ohne diesen Diff ist **kein** Validieren, sondern Raten.
+2. **Testen** — die Integrations-Tests gegen die neue HA-Version laufen lassen (idealerweise per
    nightly/matrix-CI, die mehrere HA-Versionen abdeckt). Besonderes Augenmerk: Auth-Store-Schreiben,
-   Rebind, Restore.
-2. **Bei grünem Lauf:** `SUPPORTED_HA_AUTH_VERSION` auf die neue getestete Version anheben, ggf. ein
-   neues PATCH/MINOR-Release schneiden.
-3. **Bei gebrochener interner API:**
+   Rebind, Restore. `tests/test_ha_auth_contract.py` prüft dabei das installierte HA selbst.
+3. **Bei grünem Lauf:** die neue Linie zu `SUPPORTED_HA_AUTH_FEATURES` hinzufügen (die alte Linie
+   **bleibt** drin, solange ihr Subset kompatibel ist) und `SUPPORTED_HA_AUTH_VERSION` auf die neueste
+   getestete Patch-Version setzen; ggf. ein neues PATCH/MINOR-Release schneiden.
+4. **Bei gebrochener interner API:**
    - den Versions-Guard anpassen (neue HA-Version erkennen, Enforce fail-closed blockieren),
    - (optional, sobald gesetzt) die `hacs.json`-Mindestversion anheben,
    - eine neue **MAJOR**-Version veröffentlichen (Bruch der Kompatibilität),

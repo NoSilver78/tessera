@@ -9,6 +9,7 @@ import custom_components.tessera as tessera_init
 import pytest
 from custom_components.tessera.auth_adapter import (
     SUPPORTED_HA_AUTH_FEATURE,
+    SUPPORTED_HA_AUTH_FEATURES,
     SUPPORTED_HA_AUTH_VERSION,
     AllowOnlyPolicyViolation,
     AuthPolicyStoreAdapter,
@@ -46,11 +47,22 @@ def test_version_guard_tolerates_any_patch_in_the_feature_line(version: str) -> 
     _assert_supported_auth_version(version)  # must not raise
 
 
-@pytest.mark.parametrize("version", ["2026.8.0", "2026.6.9", "2027.7.0", "1900.1.1"])
+@pytest.mark.parametrize("version", ["2026.9.0", "2026.6.9", "2027.7.0", "1900.1.1"])
 def test_version_guard_blocks_other_feature_lines(version: str) -> None:
-    """A different monthly release is fail-closed regardless of patch."""
+    """An unvalidated monthly release is fail-closed regardless of patch."""
     with pytest.raises(UnsupportedAuthVersion):
         _assert_supported_auth_version(version)
+
+
+@pytest.mark.parametrize("feature", sorted(SUPPORTED_HA_AUTH_FEATURES))
+def test_version_guard_accepts_every_validated_feature_line(feature: str) -> None:
+    """Users on any validated monthly line keep a working enforce path."""
+    _assert_supported_auth_version(f"{feature}.0")  # must not raise
+
+
+def test_newest_validated_version_is_inside_the_validated_set() -> None:
+    """The pinned patch constant belongs to one of the validated lines."""
+    assert SUPPORTED_HA_AUTH_FEATURE in SUPPORTED_HA_AUTH_FEATURES
 
 
 @dataclass

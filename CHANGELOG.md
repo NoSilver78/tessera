@@ -7,6 +7,29 @@ Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [0.9.2] — 2026-08-16
+
+### Hinzugefügt
+- **HA 2026.8 als validierte Auth-Linie.** Der Laufzeit-Guard führt jetzt eine **Menge** validierter
+  Feature-Linien (`SUPPORTED_HA_AUTH_FEATURES` = `{2026.7, 2026.8}`) statt einer einzelnen. Damit
+  läuft der `enforce`-Schreibpfad auf HA **2026.8.x** wieder, **ohne** Nutzer auszusperren, die noch
+  auf **2026.7.x** stehen — ein reines Verschieben der Linie hätte genau das getan.
+  `SUPPORTED_HA_AUTH_VERSION` benennt weiterhin die neueste validierte Patch-Version (**2026.8.1**).
+- **Contract-Tests gegen das installierte Home Assistant** (`tests/test_ha_auth_contract.py`). Die
+  übrige Suite prüft den Schreibpfad gegen `FakeHass`/`FakeGroup`-Doubles, die per Konstruktion zu den
+  `auth_adapter`-Protokollen passen — auch dann noch, wenn HA sich darunter ändert. Die neuen Tests
+  prüfen denselben Subset (`AuthStore._groups`/`_store`/`async_get_groups`/`_data_to_save`,
+  `models.Group`, `PolicyPermissions` mit Tesseras allow-only-Shape) am echten HA und werden **rot**,
+  sobald CI auf einer noch nicht validierten HA-Linie läuft. Ein Bruch wird damit in CI sichtbar,
+  statt sich erst als stiller Fail-Closed-Rückfall auf `monitor` auf einer fremden Instanz zu zeigen.
+
+### Verifikation
+- HA **2026.7.1 → 2026.8.1** quellseitig gediffed: `homeassistant/auth/auth_store.py` ist
+  **byte-identisch** (md5 `9d1a32ec…`), `auth/permissions/` unverändert, `models.Group` unverändert.
+  Die beiden Änderungen in `auth/__init__.py` (Wegfall des `credential_only`-Pfads, zusätzliches
+  `jwt.InvalidKeyError`) liegen im Login-/Token-Pfad und berühren keinen von Tessera genutzten
+  Aufruf. Die Linie ist damit **verifiziert**, nicht angenommen.
+
 ## [0.9.1] — 2026-07-06
 
 ### Geändert

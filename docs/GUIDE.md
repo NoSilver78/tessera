@@ -7,8 +7,8 @@
 [Deutsch](GUIDE.de.md) · **English**
 
 [![HACS](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=flat-square)](https://github.com/NoSilver78/tessera)
-[![Version](https://img.shields.io/badge/version-0.9.1-blue.svg?style=flat-square)](https://github.com/NoSilver78/tessera/releases)
-[![HA](https://img.shields.io/badge/Home%20Assistant-2026.7.x-41BDF5.svg?style=flat-square)](#prerequisites)
+[![Version](https://img.shields.io/badge/version-0.9.2-blue.svg?style=flat-square)](https://github.com/NoSilver78/tessera/releases)
+[![HA](https://img.shields.io/badge/Home%20Assistant-2026.7.x%20%7C%202026.8.x-41BDF5.svg?style=flat-square)](#prerequisites)
 [![License](https://img.shields.io/badge/license-MIT-green.svg?style=flat-square)](../LICENSE)
 
 > [!WARNING]
@@ -129,13 +129,13 @@ flowchart LR
 > `enforce` requires a **validated Home Assistant feature line**. Tessera writes through partly
 > **private HA auth APIs** without a stability guarantee and checks the version at the `YEAR.MONTH`
 > feature-line granularity — the level at which HA ships breaking auth-store changes. Any **patch**
-> inside the validated line is accepted; on a **different monthly release** the write path is
+> inside a validated line is accepted; on an **unvalidated monthly release** the write path is
 > **fail-closed** and Tessera stays in read-only `monitor`. See
 > [The version guard](#the-version-guard-and-ha-updates).
 
 | Requirement | Value / note |
 |---|---|
-| Home Assistant (for `enforce`) | **the 2026.7 line** (2026.7.x, `SUPPORTED_HA_AUTH_FEATURE`; validated on 2026.7.1) |
+| Home Assistant (for `enforce`) | **the 2026.7 and 2026.8 lines** (2026.7.x / 2026.8.x, `SUPPORTED_HA_AUTH_FEATURES`; newest validated 2026.8.1) |
 | Home Assistant (for `off`/`monitor`) | any version — `monitor` is read-only and never writes |
 | HACS | installed (to install as a custom repository) |
 | Access | **administrator** (panel, options and services are admin-only) |
@@ -353,10 +353,10 @@ The most important section. Please read before production use.
 
 > [!IMPORTANT]
 > Tessera writes through **private/undocumented HA auth APIs**. A runtime guard
-> (`SUPPORTED_HA_AUTH_FEATURE`) permits the write path on the validated HA **feature line** (currently
-> **2026.7**, i.e. any **2026.7.x** patch; validated on **2026.7.1**). HA ships breaking auth-store
-> changes only in the monthly line, so patch updates keep working and only a **new monthly release**
-> pauses `enforce`.
+> (`SUPPORTED_HA_AUTH_FEATURES`) permits the write path on the validated HA **feature lines**
+> (currently **2026.7** and **2026.8**, i.e. any **2026.7.x** or **2026.8.x** patch; newest validated
+> **2026.8.1**). HA ships breaking auth-store changes only in the monthly line, so patch updates keep
+> working and only an **unvalidated monthly release** pauses `enforce`.
 
 **What happens on an HA monthly update** (expected and safe):
 

@@ -24,9 +24,22 @@ from .schema import TesseraConfigData
 # (YEAR.MONTH.PATCH) are bugfix-only and do not migrate the auth store. Tessera
 # therefore validates a feature line and tolerates any patch inside it, so a
 # routine HA patch bump does not needlessly drop the enforce path to monitor.
-# Bump this constant once a new monthly line has been validated.
-SUPPORTED_HA_AUTH_VERSION = "2026.7.1"
+SUPPORTED_HA_AUTH_VERSION = "2026.8.1"
 SUPPORTED_HA_AUTH_FEATURE = ".".join(SUPPORTED_HA_AUTH_VERSION.split(".")[:2])
+
+# Every feature line validated against these adapters, not just the newest one.
+# A line stays in this set as long as its auth store is byte-compatible with the
+# subset the adapters touch (``_groups``, ``_data_to_save()``, ``models.Group``,
+# ``permissions``), so users who have not taken the latest monthly HA release
+# keep a working enforce path instead of silently dropping to monitor.
+#
+# Adding a line is a *verification* step, not a version bump: diff HA's
+# ``homeassistant/auth/auth_store.py``, ``auth/models.py`` and
+# ``auth/permissions/`` between the newest validated tag and the candidate tag,
+# and only add it when the touched subset is unchanged.
+#   2026.7 → 2026.8: auth_store.py byte-identical, permissions/ unchanged,
+#   models.Group unchanged (verified 2026-08-16).
+SUPPORTED_HA_AUTH_FEATURES = frozenset({"2026.7", SUPPORTED_HA_AUTH_FEATURE})
 TESSERA_GROUP_PREFIX = "tessera:"
 GROUP_ID_ADMIN = "system-admin"
 GROUP_ID_READ_ONLY = "system-read-only"
@@ -490,14 +503,15 @@ def _assert_supported_auth_version(ha_version: str) -> None:
     """Raise before writes when the current HA auth feature line is unsupported.
 
     Matches on the ``YEAR.MONTH`` feature line — the granularity at which HA
-    ships auth-store changes — so any patch inside the validated line is
-    accepted, while a different monthly release is fail-closed.
+    ships auth-store changes — so any patch inside a validated line is accepted,
+    while an unvalidated monthly release is fail-closed.
     """
-    if _ha_feature_line(ha_version) != SUPPORTED_HA_AUTH_FEATURE:
+    if _ha_feature_line(ha_version) not in SUPPORTED_HA_AUTH_FEATURES:
+        expected = ", ".join(f"{line}.x" for line in sorted(SUPPORTED_HA_AUTH_FEATURES))
         raise UnsupportedAuthVersion(
             f"unsupported HA auth version {ha_version}; "
-            f"expected the {SUPPORTED_HA_AUTH_FEATURE}.x line "
-            f"(validated: {SUPPORTED_HA_AUTH_VERSION})"
+            f"expected one of {expected} "
+            f"(newest validated: {SUPPORTED_HA_AUTH_VERSION})"
         )
 
 
