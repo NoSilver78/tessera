@@ -24,6 +24,9 @@ jobs:
       - name: pytest
         # exit code 5 = "no tests collected" (ok solange noch keine Tests existieren)
         run: pytest -q || [ $? -eq 5 ]
+      - name: HA version under test (context for the contract tests)
+        run: python -c "import homeassistant; print('homeassistant', homeassistant.const.__version__)"
+
       - name: stale-marker check (docs/QUALITY.md R4)
         # Verdrahteter Code darf sich nicht "dormant/not wired" nennen
         # (by-design `v1-inert`/`by_group` ist nicht betroffen).
@@ -33,3 +36,28 @@ jobs:
             echo "::error::Verdrahteter Code nennt sich dormant/not-wired — Docstring aktualisieren (docs/QUALITY.md R4)."
             exit 1
           fi
+
+  # The `quality` job installs pytest-homeassistant-custom-component, which
+  # trails Home Assistant by several months (it pulled HA 2026.2.3 while the
+  # validated lines were 2026.7/2026.8). That job therefore cannot prove the
+  # version guard's claim. This one installs each validated HA line directly —
+  # the contract tests need no HA test harness, only the real auth internals —
+  # so every line in SUPPORTED_HA_AUTH_FEATURES is actually exercised.
+  #
+  # Add the new line here in the same PR that adds it to the guard.
+  contract:
+    runs-on: ubuntu-latest
+    name: HA auth contract (${{ matrix.ha }})
+    strategy:
+      fail-fast: false
+      matrix:
+        ha: ["2026.7.1", "2026.8.1"]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install Home Assistant ${{ matrix.ha }}
+        run: pip install "homeassistant==${{ matrix.ha }}" pytest pytest-asyncio
+      - name: Contract tests against the installed HA
+        run: pytest tests/test_ha_auth_contract.py -v
