@@ -30,7 +30,12 @@ target-version = ["py313"]
 line-length = 88
 
 [tool.mypy]
-python_version = "3.13"
+# 3.14 unlike ruff/black above, because mypy parses the *installed Home
+# Assistant* too, and current HA uses PEP 758 `except A, B:` in its own source —
+# at 3.13 mypy aborts on homeassistant/core.py before it ever reaches Tessera.
+# Our own 3.13 compatibility is still enforced: ruff at target py313 rejects that
+# syntax in this repo (verified), so nothing here can drift into 3.14-only code.
+python_version = "3.14"
 strict = true
 warn_unreachable = true
 files = ["custom_components/tessera"]
