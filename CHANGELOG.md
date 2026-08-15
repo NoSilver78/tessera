@@ -7,6 +7,51 @@ Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [0.9.2] — 2026-08-16
+
+### Hinzugefügt
+- **HA 2026.8 als validierte Auth-Linie.** Der Laufzeit-Guard führt jetzt eine **Menge** validierter
+  Feature-Linien (`SUPPORTED_HA_AUTH_FEATURES` = `{2026.7, 2026.8}`) statt einer einzelnen. Damit
+  läuft der `enforce`-Schreibpfad auf HA **2026.8.x** wieder, **ohne** Nutzer auszusperren, die noch
+  auf **2026.7.x** stehen — ein reines Verschieben der Linie hätte genau das getan.
+  `SUPPORTED_HA_AUTH_VERSION` benennt weiterhin die neueste validierte Patch-Version (**2026.8.1**).
+- **Contract-Tests gegen das installierte Home Assistant** (`tests/test_ha_auth_contract.py`). Die
+  übrige Suite prüft den Schreibpfad gegen `FakeHass`/`FakeGroup`-Doubles, die per Konstruktion zu den
+  `auth_adapter`-Protokollen passen — auch dann noch, wenn HA sich darunter ändert. Die neuen Tests
+  prüfen denselben Subset (`AuthStore._groups`/`_store`/`async_get_groups`/`_data_to_save`,
+  `models.Group`, `PolicyPermissions` mit Tesseras allow-only-Shape) am echten HA und werden **rot**,
+  sobald CI auf einer noch nicht validierten HA-Linie läuft. Ein Bruch wird damit in CI sichtbar,
+  statt sich erst als stiller Fail-Closed-Rückfall auf `monitor` auf einer fremden Instanz zu zeigen.
+
+### CI
+- **CI läuft jetzt auf Python 3.14** — die Version, die aktuelles HA verlangt (2026.3+ fordert
+  `>=3.14.2`). Auf 3.13 löste pip `pytest-homeassistant-custom-component` still auf einen alten Build
+  herunter, der HA **2026.2.3** zog: die Suite testete sieben Monate an der validierten Linie vorbei,
+  ohne dass irgendetwas rot wurde. Zusätzlich neuer Matrix-Job **`HA auth contract`**, der **jede**
+  Linie aus `SUPPORTED_HA_AUTH_FEATURES` direkt installiert (`pip install homeassistant==<Linie>`) und
+  die Contract-Tests dagegen fährt — der Guard-Anspruch wird damit real geprüft, nicht behauptet.
+  Actions aktualisiert (`checkout` v4/v5 → v7, `setup-python` v6 → v7).
+- **Toolchain-Targets bleiben bewusst auf `py313`** (ruff/black), obwohl der Runner 3.14 ist: mit
+  `target py314` schreibt Black `except (A, B):` in das 3.14-only `except A, B:` (PEP 758) um, was den
+  Import auf älteren HA-Installationen zerlegen würde — und dort ist `off`/`monitor` dokumentiert
+  lauffähig. `mypy` läuft dagegen auf 3.14, weil es das *installierte* HA mitparst und an dessen
+  eigener PEP-758-Syntax sonst abbricht; die 3.13-Kompatibilität von Tesseras Code bewacht ruff.
+
+### Behoben
+- **mypy-strict-Bruch durch HA-2026.8-Umbau.** HA hat `StaticPathConfig` aus
+  `homeassistant/components/http/__init__.py` nach `http/server.py` verschoben und reicht sie nur noch
+  per `# noqa: F401` durch — für strict-mypy ein impliziter Re-Export. Der Import bleibt unverändert
+  (er funktioniert auf **beiden** validierten Linien; auf 2026.7 gibt es `http/server.py` gar nicht),
+  gelockert wird nur die Re-Export-Regel für genau dieses Modul. Die Existenzprüfung des Symbols
+  bleibt aktiv.
+
+### Verifikation
+- HA **2026.7.1 → 2026.8.1** quellseitig gediffed: `homeassistant/auth/auth_store.py` ist
+  **byte-identisch** (md5 `9d1a32ec…`), `auth/permissions/` unverändert, `models.Group` unverändert.
+  Die beiden Änderungen in `auth/__init__.py` (Wegfall des `credential_only`-Pfads, zusätzliches
+  `jwt.InvalidKeyError`) liegen im Login-/Token-Pfad und berühren keinen von Tessera genutzten
+  Aufruf. Die Linie ist damit **verifiziert**, nicht angenommen.
+
 ## [0.9.1] — 2026-07-06
 
 ### Geändert

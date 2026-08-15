@@ -7,8 +7,8 @@
 **Deutsch** · [English](GUIDE.md)
 
 [![HACS](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=flat-square)](https://github.com/NoSilver78/tessera)
-[![Version](https://img.shields.io/badge/version-0.9.1-blue.svg?style=flat-square)](https://github.com/NoSilver78/tessera/releases)
-[![HA](https://img.shields.io/badge/Home%20Assistant-2026.7.x-41BDF5.svg?style=flat-square)](#voraussetzungen)
+[![Version](https://img.shields.io/badge/version-0.9.2-blue.svg?style=flat-square)](https://github.com/NoSilver78/tessera/releases)
+[![HA](https://img.shields.io/badge/Home%20Assistant-2026.7.x%20%7C%202026.8.x-41BDF5.svg?style=flat-square)](#voraussetzungen)
 [![License](https://img.shields.io/badge/license-MIT-green.svg?style=flat-square)](../LICENSE)
 
 > [!WARNING]
@@ -130,13 +130,14 @@ flowchart LR
 > Für `enforce` ist eine **validierte Home-Assistant-Feature-Linie** erforderlich. Tessera schreibt
 > über teils **private HA-Auth-APIs** ohne Stabilitätsgarantie und prüft die Version auf der
 > `YEAR.MONTH`-Feature-Linien-Ebene — der Ebene, auf der HA Auth-Store-Breaking-Changes ausliefert.
-> Jedes **Patch** innerhalb der validierten Linie wird akzeptiert; auf einem **anderen Monats-Release**
-> blockiert der Schreibpfad **fail-closed** und Tessera bleibt im read-only `monitor`. Details:
+> Jedes **Patch** innerhalb einer validierten Linie wird akzeptiert; auf einem **nicht validierten
+> Monats-Release** blockiert der Schreibpfad **fail-closed** und Tessera bleibt im read-only
+> `monitor`. Details:
 > [Versions-Guard](#der-versions-guard-und-ha-updates).
 
 | Voraussetzung | Wert / Hinweis |
 |---|---|
-| Home Assistant (für `enforce`) | **die 2026.7-Linie** (2026.7.x, `SUPPORTED_HA_AUTH_FEATURE`; validiert auf 2026.7.1) |
+| Home Assistant (für `enforce`) | **die Linien 2026.7 und 2026.8** (2026.7.x / 2026.8.x, `SUPPORTED_HA_AUTH_FEATURES`; neueste validiert 2026.8.1) |
 | Home Assistant (für `off`/`monitor`) | jede Version — `monitor` ist read-only und schreibt nie |
 | HACS | installiert (für die Installation als Custom-Repository) |
 | Zugriff | **Administrator** (Panel, Optionen und Services sind admin-only) |
@@ -357,10 +358,11 @@ Der wichtigste Abschnitt. Bitte vor dem Produktivbetrieb lesen.
 
 > [!IMPORTANT]
 > Tessera schreibt über **private/undokumentierte HA-Auth-APIs**. Ein Laufzeit-Guard
-> (`SUPPORTED_HA_AUTH_FEATURE`) erlaubt den Schreibpfad auf der validierten HA-**Feature-Linie**
-> (aktuell **2026.7**, d. h. jedes **2026.7.x**-Patch; validiert auf **2026.7.1**). HA liefert
-> Auth-Store-Breaking-Changes nur in der Monats-Linie aus, daher funktionieren Patch-Updates weiter,
-> und nur ein **neues Monats-Release** pausiert `enforce`.
+> (`SUPPORTED_HA_AUTH_FEATURES`) erlaubt den Schreibpfad auf den validierten HA-**Feature-Linien**
+> (aktuell **2026.7** und **2026.8**, d. h. jedes **2026.7.x**- oder **2026.8.x**-Patch; neueste
+> validiert **2026.8.1**). HA liefert Auth-Store-Breaking-Changes nur in der Monats-Linie aus, daher
+> funktionieren Patch-Updates weiter, und nur ein **nicht validiertes Monats-Release** pausiert
+> `enforce`.
 
 **Was bei einem HA-Monats-Update passiert** (erwartet und sicher):
 

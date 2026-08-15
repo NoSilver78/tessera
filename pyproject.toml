@@ -2,6 +2,12 @@
 name = "tessera"
 version = "0.1.0"
 description = "RBAC for Home Assistant — Rollen × Area/Entity × view/operate/change, durchgesetzt auf nativen HA-Policies."
+# Deliberately the *lowest* Python Tessera must still run on — not the one CI
+# runs. Current HA (2026.3+) requires Python >= 3.14.2, so CI installs 3.14 to
+# get a current Home Assistant, but `off`/`monitor` are documented as working on
+# any HA version, including older ones on Python 3.13. Raising the targets below
+# to py314 makes Black rewrite `except (A, B):` into the 3.14-only `except A, B:`
+# (PEP 758), which would break the import on those installs.
 requires-python = ">=3.13"
 readme = "README.md"
 license = { text = "MIT" }
@@ -24,7 +30,12 @@ target-version = ["py313"]
 line-length = 88
 
 [tool.mypy]
-python_version = "3.13"
+# 3.14 unlike ruff/black above, because mypy parses the *installed Home
+# Assistant* too, and current HA uses PEP 758 `except A, B:` in its own source —
+# at 3.13 mypy aborts on homeassistant/core.py before it ever reaches Tessera.
+# Our own 3.13 compatibility is still enforced: ruff at target py313 rejects that
+# syntax in this repo (verified), so nothing here can drift into 3.14-only code.
+python_version = "3.14"
 strict = true
 warn_unreachable = true
 files = ["custom_components/tessera"]
@@ -32,6 +43,18 @@ files = ["custom_components/tessera"]
 [[tool.mypy.overrides]]
 module = "homeassistant.*"
 ignore_missing_imports = true
+
+# HA 2026.8 moved StaticPathConfig out of http/__init__.py into http/server.py
+# and re-exports it there with a bare `# noqa: F401`, which strict mode rejects
+# as an implicit re-export. Importing from the new location instead would break
+# on 2026.7, where http/server.py does not exist and the class is defined in
+# __init__.py — and both lines are in SUPPORTED_HA_AUTH_FEATURES.
+#
+# So we keep the import that works on both and relax only the re-export rule.
+# Attribute existence is still checked: if HA ever drops the symbol, mypy fails.
+[[tool.mypy.overrides]]
+module = "homeassistant.components.http"
+implicit_reexport = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

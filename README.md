@@ -91,7 +91,7 @@ HA updates!), troubleshooting and FAQ — with screenshots:
 
 ## Installation (HACS — custom repository)
 
-> Tessera is installable as a **HACS custom repository** — there are tagged releases (currently **v0.9.1**).
+> Tessera is installable as a **HACS custom repository** — there are tagged releases (currently **v0.9.2**).
 > Inclusion in the **HACS default store** has been submitted (in review); until then, use "Custom repositories":
 
 1. Open HACS → three-dot menu top right → **Custom repositories**.
@@ -100,10 +100,10 @@ HA updates!), troubleshooting and FAQ — with screenshots:
 4. **Restart Home Assistant.**
 5. **Settings → Devices & Services → Add Integration → Tessera**.
 
-**Tested HA line:** Home Assistant **2026.7.x** (validated on **2026.7.1**; see
-*[version guard](#version-guard-private-ha-apis)*). Within that feature line any patch release is
-accepted; on a **different** monthly release the runtime guard blocks the `enforce` write path and
-keeps Tessera in the read-only `monitor` state.
+**Tested HA lines:** Home Assistant **2026.7.x and 2026.8.x** (newest validated: **2026.8.1**; see
+*[version guard](#version-guard-private-ha-apis)*). Within a validated feature line any patch release
+is accepted; on an **unvalidated** monthly release the runtime guard blocks the `enforce` write path
+and keeps Tessera in the read-only `monitor` state.
 
 ## Security model (honest)
 
@@ -147,12 +147,13 @@ Tessera writes partly through **private/undocumented HA auth APIs** for which Ho
 **no** stability guarantee — they can break between releases. Protection:
 
 - **Active protection (runtime guard):** the auth write path checks in code for the validated HA
-  **feature line** (`SUPPORTED_HA_AUTH_FEATURE`, currently **2026.7**; validated on
-  `SUPPORTED_HA_AUTH_VERSION` = **2026.7.1**). HA ships breaking auth-store changes only in the
-  monthly feature line, so any **patch** inside it (2026.7.x) is accepted, while a **different monthly
-  release** leaves the write path **fail-closed** and `enforce` falls back to the read-only `monitor`
-  state — **no** native write. **Every HA monthly update therefore safely pauses `enforce`** until a
-  Tessera version verifies the new line (details:
+  **feature lines** (`SUPPORTED_HA_AUTH_FEATURES`, currently **2026.7** and **2026.8**; newest
+  validated `SUPPORTED_HA_AUTH_VERSION` = **2026.8.1**). HA ships breaking auth-store changes only in
+  the monthly feature line, so any **patch** inside a validated line (2026.7.x / 2026.8.x) is
+  accepted, while an **unvalidated monthly release** leaves the write path **fail-closed** and
+  `enforce` falls back to the read-only `monitor` state — **no** native write. **An unvalidated HA
+  monthly update therefore safely pauses `enforce`** until a Tessera version verifies the new line
+  (details:
   [guide → things to watch out for](docs/GUIDE.md#things-to-watch-out-for)).
 - An additional `hacs.json` pin of the minimum HA version is **deliberately not** set (HACS validation
   rejected the value as a future minimum); the real safeguard is and remains the runtime guard above.
