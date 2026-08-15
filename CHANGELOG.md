@@ -23,6 +23,28 @@ Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   sobald CI auf einer noch nicht validierten HA-Linie läuft. Ein Bruch wird damit in CI sichtbar,
   statt sich erst als stiller Fail-Closed-Rückfall auf `monitor` auf einer fremden Instanz zu zeigen.
 
+### CI
+- **CI läuft jetzt auf Python 3.14** — die Version, die aktuelles HA verlangt (2026.3+ fordert
+  `>=3.14.2`). Auf 3.13 löste pip `pytest-homeassistant-custom-component` still auf einen alten Build
+  herunter, der HA **2026.2.3** zog: die Suite testete sieben Monate an der validierten Linie vorbei,
+  ohne dass irgendetwas rot wurde. Zusätzlich neuer Matrix-Job **`HA auth contract`**, der **jede**
+  Linie aus `SUPPORTED_HA_AUTH_FEATURES` direkt installiert (`pip install homeassistant==<Linie>`) und
+  die Contract-Tests dagegen fährt — der Guard-Anspruch wird damit real geprüft, nicht behauptet.
+  Actions aktualisiert (`checkout` v4/v5 → v7, `setup-python` v6 → v7).
+- **Toolchain-Targets bleiben bewusst auf `py313`** (ruff/black), obwohl der Runner 3.14 ist: mit
+  `target py314` schreibt Black `except (A, B):` in das 3.14-only `except A, B:` (PEP 758) um, was den
+  Import auf älteren HA-Installationen zerlegen würde — und dort ist `off`/`monitor` dokumentiert
+  lauffähig. `mypy` läuft dagegen auf 3.14, weil es das *installierte* HA mitparst und an dessen
+  eigener PEP-758-Syntax sonst abbricht; die 3.13-Kompatibilität von Tesseras Code bewacht ruff.
+
+### Behoben
+- **mypy-strict-Bruch durch HA-2026.8-Umbau.** HA hat `StaticPathConfig` aus
+  `homeassistant/components/http/__init__.py` nach `http/server.py` verschoben und reicht sie nur noch
+  per `# noqa: F401` durch — für strict-mypy ein impliziter Re-Export. Der Import bleibt unverändert
+  (er funktioniert auf **beiden** validierten Linien; auf 2026.7 gibt es `http/server.py` gar nicht),
+  gelockert wird nur die Re-Export-Regel für genau dieses Modul. Die Existenzprüfung des Symbols
+  bleibt aktiv.
+
 ### Verifikation
 - HA **2026.7.1 → 2026.8.1** quellseitig gediffed: `homeassistant/auth/auth_store.py` ist
   **byte-identisch** (md5 `9d1a32ec…`), `auth/permissions/` unverändert, `models.Group` unverändert.

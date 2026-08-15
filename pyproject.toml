@@ -44,6 +44,18 @@ files = ["custom_components/tessera"]
 module = "homeassistant.*"
 ignore_missing_imports = true
 
+# HA 2026.8 moved StaticPathConfig out of http/__init__.py into http/server.py
+# and re-exports it there with a bare `# noqa: F401`, which strict mode rejects
+# as an implicit re-export. Importing from the new location instead would break
+# on 2026.7, where http/server.py does not exist and the class is defined in
+# __init__.py — and both lines are in SUPPORTED_HA_AUTH_FEATURES.
+#
+# So we keep the import that works on both and relax only the re-export rule.
+# Attribute existence is still checked: if HA ever drops the symbol, mypy fails.
+[[tool.mypy.overrides]]
+module = "homeassistant.components.http"
+implicit_reexport = true
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
