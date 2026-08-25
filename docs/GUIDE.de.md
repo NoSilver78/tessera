@@ -7,7 +7,7 @@
 **Deutsch** · [English](GUIDE.md)
 
 [![HACS](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=flat-square)](https://github.com/NoSilver78/tessera)
-[![Version](https://img.shields.io/badge/version-0.9.2-blue.svg?style=flat-square)](https://github.com/NoSilver78/tessera/releases)
+[![Version](https://img.shields.io/badge/version-0.9.3-blue.svg?style=flat-square)](https://github.com/NoSilver78/tessera/releases)
 [![HA](https://img.shields.io/badge/Home%20Assistant-2026.7.x%20%7C%202026.8.x-41BDF5.svg?style=flat-square)](#voraussetzungen)
 [![License](https://img.shields.io/badge/license-MIT-green.svg?style=flat-square)](../LICENSE)
 

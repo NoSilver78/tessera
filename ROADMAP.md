@@ -98,8 +98,6 @@ geführt — und seit E3.5 (Phase 3) im Setup-Pfad verdrahtet:
   (a) `is_admin`-Feld im „Add role"-Flow, (b) `tessera.set_entity_override`-Service + Panel-Board für
   Einzel-Entity-Rechte (heute nur `import`), (c) Nutzer→Rollen-Mitgliedschaft per Options-Flow/Panel
   (heute nur Service/`import`). Das Modell setzt alles durch — nur die Editier-UI fehlt.
-- **`recompile` admin-gaten** — als einziger schreib-naher Service nicht admin-gated (kleiner Radius:
-  nur Re-Apply bestehender Policy, kein neuer Input), zur Konsistenz nachziehen.
 - **Options-Flow für Floor-/Label-Grants** (heute Panel + Service; nur Area-Grants zusätzlich im Flow).
 - **Mitigations-Ideen** für die dokumentierten Leak-Pfade (Template/Logbook/Assist).
 

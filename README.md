@@ -65,7 +65,7 @@ permissions, with a safe monitor-first rollout.**
 
 ## Project status
 
-**Published (v0.9.0) · `enforce` dev-proven and active in a live instance · broad multi-setup testing wanted.**
+**Published (v0.9.3) · `enforce` dev-proven and active in a live instance · broad multi-setup testing wanted.**
 
 | Building block | Status |
 |---|---|
@@ -76,7 +76,7 @@ permissions, with a safe monitor-first rollout.**
 | **Area-Board panel** (Floor\|Area provenance · double marker · entity expand · Area+Floor editable) | ✅ working |
 | **End-to-end against a dev instance + live operation** | ✅ dev E2E run + live `enforce` verified; **broad multi-setup soak wanted** |
 | **HACS enablement** (`hacs.json` · HACS+hassfest CI · brand icon) | ✅ done |
-| **HACS** (public · tagged releases) | ✅ v0.2.0–v0.9.0 · default-store submission in review |
+| **HACS** (public · tagged releases) | ✅ v0.2.0–v0.9.3 · default-store submission in review |
 
 The whole story — vision, phases, what comes next, and **where help is most useful** — is in the
 **[ROADMAP](ROADMAP.md)** and in **[CONTRIBUTING](CONTRIBUTING.md)**.
@@ -91,7 +91,7 @@ HA updates!), troubleshooting and FAQ — with screenshots:
 
 ## Installation (HACS — custom repository)
 
-> Tessera is installable as a **HACS custom repository** — there are tagged releases (currently **v0.9.2**).
+> Tessera is installable as a **HACS custom repository** — there are tagged releases (currently **v0.9.3**).
 > Inclusion in the **HACS default store** has been submitted (in review); until then, use "Custom repositories":
 
 1. Open HACS → three-dot menu top right → **Custom repositories**.

@@ -203,7 +203,15 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 def _register_recompile_service(hass: HomeAssistant) -> None:
-    """Register the recompile service once per HA instance."""
+    """Register the admin-only recompile service once per HA instance.
+
+    ``tessera.recompile`` re-applies the current policy for every loaded entry.
+    In ``enforce`` that drives the native apply path (it writes the auth store),
+    and a blocked plan falls safe to ``monitor`` — i.e. it can take the instance
+    out of enforcement. That is a state-changing, auth-touching path, so it is
+    gated through HA's ``async_register_admin_service`` like every other
+    mutating Tessera service.
+    """
     domain_data = _domain_data(hass)
     if domain_data.get(DATA_SERVICE_REGISTERED) is True:
         return
@@ -220,7 +228,7 @@ def _register_recompile_service(hass: HomeAssistant) -> None:
                 continue
             await _compile_for_mode_safely(hass, key, entry_data)
 
-    hass.services.async_register(DOMAIN, SERVICE_RECOMPILE, _handle_recompile)
+    async_register_admin_service(hass, DOMAIN, SERVICE_RECOMPILE, _handle_recompile)
     domain_data[DATA_SERVICE_REGISTERED] = True
 
 

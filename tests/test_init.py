@@ -655,6 +655,7 @@ async def test_recompile_service_runs_enforce_apply_path(
     hass = AuthHass([FakeUser("admin", ["system-admin"], is_owner=True)])
     entry_data: dict[str, Any] = {"store": store}
 
+    _patch_admin_service_registration(monkeypatch)
     tessera_init._register_recompile_service(hass)
     hass.data[DOMAIN]["entry-1"] = entry_data
 
@@ -684,11 +685,32 @@ async def test_recompile_service_runs_enforce_apply_path(
     _patch_noop_adapters(monkeypatch)
 
     handler = hass.services.handlers[(DOMAIN, SERVICE_RECOMPILE)]
-    await handler(object())
+    await handler(FakeServiceCall({}))
 
     assert events == ["compute", "snapshot", "set_snapshot", "mark", "apply", "clear"]
     assert store.state["apply_in_progress"] is False
     assert entry_data["mode"] == "enforce"
+
+
+@pytest.mark.asyncio
+async def test_recompile_service_is_admin_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Recompile is registered through HA's admin-only service helper.
+
+    It re-applies enforce (writing the native auth store) and can fall safe to
+    monitor, so a non-admin must not be able to reach it.
+    """
+    hass = FakeHass()
+    admin_services = _patch_admin_service_registration(monkeypatch)
+
+    tessera_init._register_recompile_service(hass)
+
+    assert (DOMAIN, SERVICE_RECOMPILE) in admin_services
+    handler = hass.services.handlers[(DOMAIN, SERVICE_RECOMPILE)]
+    with pytest.raises(Unauthorized):
+        await handler(FakeServiceCall({}, is_admin=False))
+    await handler(FakeServiceCall({}, is_admin=True))
 
 
 @pytest.mark.asyncio
