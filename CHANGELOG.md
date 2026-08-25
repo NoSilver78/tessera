@@ -7,6 +7,27 @@ Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [0.9.3] — 2026-08-25
+
+### Behoben
+- **`tessera.recompile` ist jetzt admin-only.** Der Service war als einziger schreib-naher Service
+  mit dem blanken `hass.services.async_register` registriert, während alle anderen mutierenden
+  Services über `async_register_admin_service` laufen. Damit konnte ihn **jeder authentifizierte
+  Nicht-Admin** aufrufen — im `enforce`-Modus schreibt er über `_apply_enforce_mode` den nativen
+  Auth-Store, und ein blockierter Plan fällt über `_fail_safe_to_monitor` auf `mode: monitor`
+  zurück. Ein Nicht-Admin konnte die Instanz also aus der Durchsetzung kippen; für ein
+  Berechtigungs-Produkt genau die falsche Richtung. Gefunden im HACS-Default-Store-Review durch
+  @frenck ([hacs/default#8877](https://github.com/hacs/default/pull/8877)); stand als Backlog-Punkt
+  bereits in der ROADMAP und ist damit erledigt. Neuer Regressionstest
+  `test_recompile_service_is_admin_only`; die Zusage „Alle Services sind admin-only" aus
+  `docs/GUIDE.md` stimmt jetzt wörtlich.
+
+### Dokumentation
+- Service-Beschreibung von `recompile` in `strings.json`/`translations/en.json` als **admin-only**
+  ausgewiesen.
+- Versionsstände im README (EN/DE) und in den Guide-Badges auf den tatsächlich veröffentlichten
+  Stand gezogen — der Projektstatus nannte weiterhin v0.9.0.
+
 ## [0.9.2] — 2026-08-16
 
 ### Hinzugefügt

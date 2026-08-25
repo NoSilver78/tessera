@@ -97,6 +97,35 @@ class FakeEntry:
     entry_id: str
 
 
+@dataclass(frozen=True)
+class FakeServiceCall:
+    """Minimal service call double for the admin-gated recompile service."""
+
+    data: dict[str, Any]
+
+
+def _patch_admin_service_registration(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Register admin-only services straight into the fake registry.
+
+    Admin gating itself is covered in ``test_init``; here the handler only has
+    to stay reachable so the monitor projection can be asserted.
+    """
+
+    def fake_register_admin_service(
+        hass: Any,
+        domain: str,
+        service: str,
+        handler: Any,
+        *,
+        schema: Any = None,
+    ) -> None:
+        hass.services.async_register(domain, service, handler, schema=schema)
+
+    monkeypatch.setattr(
+        tessera_init, "async_register_admin_service", fake_register_admin_service
+    )
+
+
 def _config(mode: str = "monitor") -> dict[str, Any]:
     config = default_config_data()
     config["mode"] = mode
@@ -276,9 +305,10 @@ async def test_recompile_service_refreshes_compiled_preview(
         "from_hass",
         classmethod(lambda cls, hass: resolver),
     )
+    _patch_admin_service_registration(monkeypatch)
 
     assert await tessera_init.async_setup_entry(hass, FakeEntry("entry-1")) is True
-    await hass.services.handlers[(DOMAIN, SERVICE_RECOMPILE)](object())
+    await hass.services.handlers[(DOMAIN, SERVICE_RECOMPILE)](FakeServiceCall({}))
 
     assert store.policy_loads == 2
     assert hass.data[DOMAIN]["entry-1"]["preview"] == {

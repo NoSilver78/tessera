@@ -67,7 +67,7 @@ monitor-first Rollout.**
 
 ## Projektstatus
 
-**Veröffentlicht (v0.9.0) · `enforce` dev-erprobt und in einer Live-Instanz aktiv · breite Multi-Setup-Erprobung erwünscht.**
+**Veröffentlicht (v0.9.3) · `enforce` dev-erprobt und in einer Live-Instanz aktiv · breite Multi-Setup-Erprobung erwünscht.**
 
 | Baustein | Stand |
 |---|---|
@@ -78,7 +78,7 @@ monitor-first Rollout.**
 | **Area-Board-Panel** (Floor\|Area-Herkunft · Doppel-Markierung · Entity-Aufklappen · Area+Floor editierbar) | ✅ funktionsfähig |
 | **End-to-End gegen Dev-Instanz + Live-Betrieb** | ✅ Dev-E2E durchlaufen + Live-`enforce` verifiziert; **breiter Multi-Setup-Soak erwünscht** |
 | **HACS-Aktivierung** (`hacs.json` · HACS+hassfest-CI · Brand-Icon) | ✅ erledigt |
-| **HACS** (public · getaggte Releases) | ✅ v0.2.0–v0.9.0 · Default-Store-Einreichung eingereicht (in Review) |
+| **HACS** (public · getaggte Releases) | ✅ v0.2.0–v0.9.3 · Default-Store-Einreichung eingereicht (in Review) |
 
 Die ganze Geschichte — Vision, Phasen, was als Nächstes kommt und **wo wir Unterstützung gut
 gebrauchen können** — steht in der **[ROADMAP](ROADMAP.md)** und in **[CONTRIBUTING](CONTRIBUTING.md)**.
@@ -93,7 +93,7 @@ Troubleshooting und FAQ — mit Screenshots:
 
 ## Installation (HACS — Custom Repository)
 
-> Tessera ist als **HACS Custom Repository** installierbar — es gibt getaggte Releases (aktuell **v0.9.2**).
+> Tessera ist als **HACS Custom Repository** installierbar — es gibt getaggte Releases (aktuell **v0.9.3**).
 > Die Aufnahme in den **HACS-Default-Store** ist eingereicht (in Review); bis dahin über „Custom repositories":
 
 1. HACS öffnen → Drei-Punkte-Menü oben rechts → **Custom repositories**.
