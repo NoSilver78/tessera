@@ -67,7 +67,7 @@ monitor-first Rollout.**
 
 ## Projektstatus
 
-**Veröffentlicht (v0.9.3) · `enforce` dev-erprobt und in einer Live-Instanz aktiv · breite Multi-Setup-Erprobung erwünscht.**
+**Veröffentlicht (v0.9.4) · im HACS-Default-Store · `enforce` dev-erprobt und in einer Live-Instanz aktiv · breite Multi-Setup-Erprobung erwünscht.**
 
 | Baustein | Stand |
 |---|---|
@@ -78,7 +78,7 @@ monitor-first Rollout.**
 | **Area-Board-Panel** (Floor\|Area-Herkunft · Doppel-Markierung · Entity-Aufklappen · Area+Floor editierbar) | ✅ funktionsfähig |
 | **End-to-End gegen Dev-Instanz + Live-Betrieb** | ✅ Dev-E2E durchlaufen + Live-`enforce` verifiziert; **breiter Multi-Setup-Soak erwünscht** |
 | **HACS-Aktivierung** (`hacs.json` · HACS+hassfest-CI · Brand-Icon) | ✅ erledigt |
-| **HACS** (public · getaggte Releases) | ✅ v0.2.0–v0.9.3 · Default-Store-Einreichung eingereicht (in Review) |
+| **HACS** (public · getaggte Releases) | ✅ v0.2.0–v0.9.4 · **im HACS-Default-Store** seit 18.10.2026 ([hacs/default#8877](https://github.com/hacs/default/pull/8877)) |
 
 Die ganze Geschichte — Vision, Phasen, was als Nächstes kommt und **wo wir Unterstützung gut
 gebrauchen können** — steht in der **[ROADMAP](ROADMAP.md)** und in **[CONTRIBUTING](CONTRIBUTING.md)**.
@@ -91,10 +91,14 @@ Troubleshooting und FAQ — mit Screenshots:
 
 **📖 [Deutsch](docs/GUIDE.de.md) · [English](docs/GUIDE.md)**
 
-## Installation (HACS — Custom Repository)
+## Installation (HACS)
 
-> Tessera ist als **HACS Custom Repository** installierbar — es gibt getaggte Releases (aktuell **v0.9.3**).
-> Die Aufnahme in den **HACS-Default-Store** ist eingereicht (in Review); bis dahin über „Custom repositories":
+> Tessera ist **im HACS-Default-Store** (seit 18.10.2026): **HACS → Integrationen** öffnen, nach
+> **Tessera** suchen, herunterladen, Home Assistant neu starten, dann die Integration hinzufügen.
+> Aktuelles Release: **v0.9.4**.
+>
+> Der Custom-Repository-Weg unten funktioniert weiterhin und bleibt dokumentiert — für ein
+> gepinntes Release oder wenn dein HACS den Store-Eintrag noch nicht kennt:
 
 1. HACS öffnen → Drei-Punkte-Menü oben rechts → **Custom repositories**.
 2. URL: `https://github.com/NoSilver78/tessera` · Kategorie: **Integration** → **ADD**.
@@ -102,7 +106,7 @@ Troubleshooting und FAQ — mit Screenshots:
 4. **Home Assistant neu starten.**
 5. **Einstellungen → Geräte & Dienste → Integration hinzufügen → Tessera**.
 
-**Getestete HA-Linien:** Home Assistant **2026.7.x und 2026.8.x** (neueste validiert: **2026.8.1**;
+**Getestete HA-Linien:** Home Assistant **2026.7.x–2026.10.x** (neueste validiert: **2026.10.4**;
 siehe *[Version-Guard](#version-guard-private-ha-apis)*). Innerhalb einer validierten Feature-Linie
 wird jedes Patch-Release akzeptiert; auf einem **nicht validierten** Monats-Release blockiert der
 Laufzeit-Guard den `enforce`-Schreibpfad und hält Tessera im read-only `monitor`-Zustand.
@@ -150,10 +154,10 @@ Tessera schreibt teils über **private/undokumentierte HA-Auth-APIs**, für die 
 Stabilitätsgarantie gibt — sie können zwischen Releases brechen. Schutz:
 
 - **Aktiver Schutz (Laufzeit-Guard):** Der Auth-Schreibpfad prüft im Code auf die validierten HA-
-  **Feature-Linien** (`SUPPORTED_HA_AUTH_FEATURES`, derzeit **2026.7** und **2026.8**; neueste
-  validiert `SUPPORTED_HA_AUTH_VERSION` = **2026.8.1**). HA liefert Auth-Store-Breaking-Changes nur in
-  der Monats-Feature-Linie aus, daher wird jedes **Patch** in einer validierten Linie (2026.7.x /
-  2026.8.x) akzeptiert, während ein **nicht validiertes Monats-Release** den Schreibpfad
+  **Feature-Linien** (`SUPPORTED_HA_AUTH_FEATURES`, derzeit **2026.7**, **2026.8**, **2026.9** und
+  **2026.10**; neueste validiert `SUPPORTED_HA_AUTH_VERSION` = **2026.10.4**). HA liefert
+  Auth-Store-Breaking-Changes nur in der Monats-Feature-Linie aus, daher wird jedes **Patch** in einer
+  validierten Linie akzeptiert, während ein **nicht validiertes Monats-Release** den Schreibpfad
   **fail-closed** lässt und `enforce` auf den read-only `monitor`-Zustand zurückfällt — **kein**
   nativer Write. **Ein nicht validiertes HA-Monats-Update pausiert `enforce` also sicher**, bis eine
   Tessera-Version die neue Linie verifiziert (Details:

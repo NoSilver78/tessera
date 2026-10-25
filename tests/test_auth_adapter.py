@@ -47,7 +47,7 @@ def test_version_guard_tolerates_any_patch_in_the_feature_line(version: str) -> 
     _assert_supported_auth_version(version)  # must not raise
 
 
-@pytest.mark.parametrize("version", ["2026.9.0", "2026.6.9", "2027.7.0", "1900.1.1"])
+@pytest.mark.parametrize("version", ["2026.11.0", "2026.6.9", "2027.7.0", "1900.1.1"])
 def test_version_guard_blocks_other_feature_lines(version: str) -> None:
     """An unvalidated monthly release is fail-closed regardless of patch."""
     with pytest.raises(UnsupportedAuthVersion):

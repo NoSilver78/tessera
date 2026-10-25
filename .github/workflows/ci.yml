@@ -57,7 +57,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ha: ["2026.7.1", "2026.8.1"]
+        ha: ["2026.7.1", "2026.8.1", "2026.9.4", "2026.10.4"]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7

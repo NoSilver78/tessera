@@ -6,9 +6,9 @@
 
 [Deutsch](GUIDE.de.md) · **English**
 
-[![HACS](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=flat-square)](https://github.com/NoSilver78/tessera)
-[![Version](https://img.shields.io/badge/version-0.9.3-blue.svg?style=flat-square)](https://github.com/NoSilver78/tessera/releases)
-[![HA](https://img.shields.io/badge/Home%20Assistant-2026.7.x%20%7C%202026.8.x-41BDF5.svg?style=flat-square)](#prerequisites)
+[![HACS](https://img.shields.io/badge/HACS-Default%20Store-41BDF5.svg?style=flat-square)](https://github.com/NoSilver78/tessera)
+[![Version](https://img.shields.io/badge/version-0.9.4-blue.svg?style=flat-square)](https://github.com/NoSilver78/tessera/releases)
+[![HA](https://img.shields.io/badge/Home%20Assistant-2026.7.x%20--%202026.10.x-41BDF5.svg?style=flat-square)](#prerequisites)
 [![License](https://img.shields.io/badge/license-MIT-green.svg?style=flat-square)](../LICENSE)
 
 > [!WARNING]
@@ -135,9 +135,9 @@ flowchart LR
 
 | Requirement | Value / note |
 |---|---|
-| Home Assistant (for `enforce`) | **the 2026.7 and 2026.8 lines** (2026.7.x / 2026.8.x, `SUPPORTED_HA_AUTH_FEATURES`; newest validated 2026.8.1) |
+| Home Assistant (for `enforce`) | **the 2026.7–2026.10 lines** (`SUPPORTED_HA_AUTH_FEATURES`; newest validated 2026.10.4) |
 | Home Assistant (for `off`/`monitor`) | any version — `monitor` is read-only and never writes |
-| HACS | installed (to install as a custom repository) |
+| HACS | installed (Tessera is in the HACS default store) |
 | Access | **administrator** (panel, options and services are admin-only) |
 | Test account | a **non-admin** account to verify (admins are never restricted, by bypass) |
 
@@ -145,8 +145,11 @@ flowchart LR
 
 ## Installation
 
-Tessera is installed as a **HACS custom repository**. (Inclusion in the HACS default store has been
-submitted; until then, use the path below.)
+Tessera is **in the HACS default store** (since 2026-10-18), so the short path is: **HACS →
+Integrations**, search for **Tessera**, download, restart HA.
+
+The custom-repository path below stays documented — it works independently of the store entry and
+lets you pin a specific release.
 
 1. Open **HACS** → three-dot menu top right → **Custom repositories**.
 2. Enter the repository URL `https://github.com/NoSilver78/tessera`, choose category **Integration**,
@@ -354,9 +357,10 @@ The most important section. Please read before production use.
 > [!IMPORTANT]
 > Tessera writes through **private/undocumented HA auth APIs**. A runtime guard
 > (`SUPPORTED_HA_AUTH_FEATURES`) permits the write path on the validated HA **feature lines**
-> (currently **2026.7** and **2026.8**, i.e. any **2026.7.x** or **2026.8.x** patch; newest validated
-> **2026.8.1**). HA ships breaking auth-store changes only in the monthly line, so patch updates keep
-> working and only an **unvalidated monthly release** pauses `enforce`.
+> (currently **2026.7**, **2026.8**, **2026.9** and **2026.10**, i.e. any patch inside those lines;
+> newest validated **2026.10.4**). HA ships breaking auth-store changes only in the monthly
+> line, so patch updates keep working and only an **unvalidated monthly release** pauses
+> `enforce`.
 
 **What happens on an HA monthly update** (expected and safe):
 

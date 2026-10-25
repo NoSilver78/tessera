@@ -24,7 +24,7 @@ from .schema import TesseraConfigData
 # (YEAR.MONTH.PATCH) are bugfix-only and do not migrate the auth store. Tessera
 # therefore validates a feature line and tolerates any patch inside it, so a
 # routine HA patch bump does not needlessly drop the enforce path to monitor.
-SUPPORTED_HA_AUTH_VERSION = "2026.8.1"
+SUPPORTED_HA_AUTH_VERSION = "2026.10.4"
 SUPPORTED_HA_AUTH_FEATURE = ".".join(SUPPORTED_HA_AUTH_VERSION.split(".")[:2])
 
 # Every feature line validated against these adapters, not just the newest one.
@@ -39,7 +39,23 @@ SUPPORTED_HA_AUTH_FEATURE = ".".join(SUPPORTED_HA_AUTH_VERSION.split(".")[:2])
 # and only add it when the touched subset is unchanged.
 #   2026.7 → 2026.8: auth_store.py byte-identical, permissions/ unchanged,
 #   models.Group unchanged (verified 2026-08-16).
-SUPPORTED_HA_AUTH_FEATURES = frozenset({"2026.7", SUPPORTED_HA_AUTH_FEATURE})
+#   2026.8 → 2026.9: auth_store.py and models.py byte-identical.
+#   permissions/entities.py changed, but not in a way Tessera can reach: HA's
+#   *area* sub-policy now resolves a device's effective area
+#   (dr.async_get_effective_area_id, for child-device area inheritance). The
+#   compiler emits entity_ids leaves only — never an area/device/domain
+#   sub-policy, enforced by _assert_allow_only_policy — so that lookup is
+#   unreachable from a tessera: group (verified 2026-10-25).
+#   2026.9 → 2026.10: auth_store.py byte-identical; models.Group unchanged
+#   (models.py only gained PKCE fields on AuthFlowContext, which is the login
+#   flow, not the group model). permissions/ swapped voluptuous for probatio
+#   (HA calls install_as_voluptuous() at import time) — a schema *library*
+#   swap at identical policy shape; HA's real PolicyPermissions still grants
+#   exactly Tessera's allow-only policy and nothing else
+#   (tests/test_ha_auth_contract.py, green on both lines; verified 2026-10-25).
+SUPPORTED_HA_AUTH_FEATURES = frozenset(
+    {"2026.7", "2026.8", "2026.9", SUPPORTED_HA_AUTH_FEATURE}
+)
 TESSERA_GROUP_PREFIX = "tessera:"
 GROUP_ID_ADMIN = "system-admin"
 GROUP_ID_READ_ONLY = "system-read-only"
@@ -499,6 +515,16 @@ def _ha_feature_line(ha_version: str) -> str:
     return ".".join(str(ha_version).split(".")[:2])
 
 
+def _ha_line_sort_key(feature_line: str) -> tuple[int, int]:
+    """Order feature lines numerically, so 2026.10 sorts after 2026.9.
+
+    Lexicographic order would put the two-digit month 2026.10 *before* 2026.7
+    and make the guard's error message read like a typo.
+    """
+    year, month = feature_line.split(".")[:2]
+    return int(year), int(month)
+
+
 def _assert_supported_auth_version(ha_version: str) -> None:
     """Raise before writes when the current HA auth feature line is unsupported.
 
@@ -507,7 +533,10 @@ def _assert_supported_auth_version(ha_version: str) -> None:
     while an unvalidated monthly release is fail-closed.
     """
     if _ha_feature_line(ha_version) not in SUPPORTED_HA_AUTH_FEATURES:
-        expected = ", ".join(f"{line}.x" for line in sorted(SUPPORTED_HA_AUTH_FEATURES))
+        expected = ", ".join(
+            f"{line}.x"
+            for line in sorted(SUPPORTED_HA_AUTH_FEATURES, key=_ha_line_sort_key)
+        )
         raise UnsupportedAuthVersion(
             f"unsupported HA auth version {ha_version}; "
             f"expected one of {expected} "

@@ -14,9 +14,9 @@ Schutzschichten.
 ## Schutzschichten
 
 1. **Code-Guard auf die validierten HA-Feature-Linien.** Der Auth-Schreibpfad prüft im Code gegen die
-   Menge validierter HA-**Feature-Linien** `YEAR.MONTH` (derzeit **`2026.7`** und **`2026.8`**,
-   `SUPPORTED_HA_AUTH_FEATURES`; neueste validiert `2026.8.1`). Jedes Patch innerhalb einer validierten
-   Linie (2026.7.x / 2026.8.x) passiert; auf einem **nicht validierten Monats-Release** wird der
+   Menge validierter HA-**Feature-Linien** `YEAR.MONTH` (derzeit **`2026.7`**, **`2026.8`**,
+   **`2026.9`** und **`2026.10`**, `SUPPORTED_HA_AUTH_FEATURES`; neueste validiert `2026.10.4`). Jedes
+   Patch innerhalb einer validierten Linie passiert; auf einem **nicht validierten Monats-Release** wird der
    Enforce-/Schreibpfad **fail-closed blockiert** (`compute_enforce_plan` liefert einen
    `blocked`-Plan) — **kein** nativer Write; wirksam bleibt der read-only `monitor`-Zustand. HA liefert
    Auth-Store-Breaking-Changes nur in der Monats-Linie aus; die Patch-Toleranz ist daher bewusst und
@@ -70,6 +70,27 @@ Für **jedes** neue Home-Assistant-Release:
    - (optional, sobald gesetzt) die `hacs.json`-Mindestversion anheben,
    - eine neue **MAJOR**-Version veröffentlichen (Bruch der Kompatibilität),
    - den Bruch im Changelog + den Release Notes klar benennen.
+
+## Validierte Linien (Diff-Protokoll)
+
+Jede Zeile ist das Ergebnis von Schritt 1+2 des Prozesses oben — kein Versions-Bump, sondern ein
+nachvollziehbarer Diff gegen den zuvor validierten Tag.
+
+| Linie | Diff gegen | Ergebnis | Verifiziert |
+|---|---|---|---|
+| `2026.7` | — | Basis-Linie | 2026-07-06 (v0.9.1) |
+| `2026.8` | 2026.7.1 | `auth_store.py` byte-identisch, `permissions/` unverändert, `models.Group` unverändert | 2026-08-16 (v0.9.2) |
+| `2026.9` | 2026.8.1 | `auth_store.py` + `models.py` byte-identisch. `permissions/entities.py` geändert (Area-Sub-Policy löst jetzt die *effektive* Area eines Geräts auf, `dr.async_get_effective_area_id`, für Child-Device-Vererbung) — **für Tessera nicht erreichbar**: der Compiler emittiert ausschließlich `entity_ids`-Leaves (hart geprüft in `_assert_allow_only_policy`) | 2026-10-25 (v0.9.4) |
+| `2026.10` | 2026.9.4 | `auth_store.py` byte-identisch; `models.Group` unverändert (`models.py` bekam nur PKCE-Felder am `AuthFlowContext` = Login-Flow, nicht das Gruppenmodell). `permissions/` tauschte `voluptuous` gegen `probatio` (HA ruft `install_as_voluptuous()` beim Import) — Schema-**Bibliothek** bei identischer Policy-Shape; HAs echtes `PolicyPermissions` gewährt weiterhin genau Tesseras allow-only-Policy | 2026-10-25 (v0.9.4) |
+
+Belegt durch `tests/test_ha_auth_contract.py` gegen das jeweils installierte HA — der CI-Matrix-Job
+`HA auth contract` fährt jede dieser Linien (`2026.7.1`, `2026.8.1`, `2026.9.4`, `2026.10.4`).
+
+> **Bekannte Lücke (nicht sicherheitsrelevant, fail-closed-Richtung):** HA 2026.9 führt
+> **Child-Devices** ein, die ohne eigene Area die Area des Eltern-Geräts erben. Tesseras Resolver
+> (`resolver._device_area_by_id`) liest nur das rohe `area_id` des Geräts. Entities an einem
+> Child-Device ohne eigene Area fallen damit aus einem Area-/Floor-Grant heraus, obwohl HA sie in
+> der Area anzeigt — der Grant ist **zu eng**, nie zu weit. Eigenes Thema, eigener Fix.
 
 ## Versions-Invarianten
 

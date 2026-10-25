@@ -65,7 +65,7 @@ permissions, with a safe monitor-first rollout.**
 
 ## Project status
 
-**Published (v0.9.3) · `enforce` dev-proven and active in a live instance · broad multi-setup testing wanted.**
+**Published (v0.9.4) · in the HACS default store · `enforce` dev-proven and active in a live instance · broad multi-setup testing wanted.**
 
 | Building block | Status |
 |---|---|
@@ -76,7 +76,7 @@ permissions, with a safe monitor-first rollout.**
 | **Area-Board panel** (Floor\|Area provenance · double marker · entity expand · Area+Floor editable) | ✅ working |
 | **End-to-end against a dev instance + live operation** | ✅ dev E2E run + live `enforce` verified; **broad multi-setup soak wanted** |
 | **HACS enablement** (`hacs.json` · HACS+hassfest CI · brand icon) | ✅ done |
-| **HACS** (public · tagged releases) | ✅ v0.2.0–v0.9.3 · default-store submission in review |
+| **HACS** (public · tagged releases) | ✅ v0.2.0–v0.9.4 · **in the HACS default store** since 2026-10-18 ([hacs/default#8877](https://github.com/hacs/default/pull/8877)) |
 
 The whole story — vision, phases, what comes next, and **where help is most useful** — is in the
 **[ROADMAP](ROADMAP.md)** and in **[CONTRIBUTING](CONTRIBUTING.md)**.
@@ -89,10 +89,14 @@ HA updates!), troubleshooting and FAQ — with screenshots:
 
 **📖 [English](docs/GUIDE.md) · [Deutsch](docs/GUIDE.de.md)**
 
-## Installation (HACS — custom repository)
+## Installation (HACS)
 
-> Tessera is installable as a **HACS custom repository** — there are tagged releases (currently **v0.9.3**).
-> Inclusion in the **HACS default store** has been submitted (in review); until then, use "Custom repositories":
+> Tessera is **in the HACS default store** (since 2026-10-18): open **HACS → Integrations**, search
+> for **Tessera**, download it, restart Home Assistant, then add the integration. Current release:
+> **v0.9.4**.
+>
+> The custom-repository path below still works and stays documented — use it to pin a specific
+> release or if your HACS has not picked up the store entry yet:
 
 1. Open HACS → three-dot menu top right → **Custom repositories**.
 2. URL: `https://github.com/NoSilver78/tessera` · category: **Integration** → **ADD**.
@@ -100,7 +104,7 @@ HA updates!), troubleshooting and FAQ — with screenshots:
 4. **Restart Home Assistant.**
 5. **Settings → Devices & Services → Add Integration → Tessera**.
 
-**Tested HA lines:** Home Assistant **2026.7.x and 2026.8.x** (newest validated: **2026.8.1**; see
+**Tested HA lines:** Home Assistant **2026.7.x–2026.10.x** (newest validated: **2026.10.4**; see
 *[version guard](#version-guard-private-ha-apis)*). Within a validated feature line any patch release
 is accepted; on an **unvalidated** monthly release the runtime guard blocks the `enforce` write path
 and keeps Tessera in the read-only `monitor` state.
@@ -147,9 +151,9 @@ Tessera writes partly through **private/undocumented HA auth APIs** for which Ho
 **no** stability guarantee — they can break between releases. Protection:
 
 - **Active protection (runtime guard):** the auth write path checks in code for the validated HA
-  **feature lines** (`SUPPORTED_HA_AUTH_FEATURES`, currently **2026.7** and **2026.8**; newest
-  validated `SUPPORTED_HA_AUTH_VERSION` = **2026.8.1**). HA ships breaking auth-store changes only in
-  the monthly feature line, so any **patch** inside a validated line (2026.7.x / 2026.8.x) is
+  **feature lines** (`SUPPORTED_HA_AUTH_FEATURES`, currently **2026.7**, **2026.8**, **2026.9** and
+  **2026.10**; newest validated `SUPPORTED_HA_AUTH_VERSION` = **2026.10.4**). HA ships breaking
+  auth-store changes only in the monthly feature line, so any **patch** inside a validated line is
   accepted, while an **unvalidated monthly release** leaves the write path **fail-closed** and
   `enforce` falls back to the read-only `monitor` state — **no** native write. **An unvalidated HA
   monthly update therefore safely pauses `enforce`** until a Tessera version verifies the new line

@@ -7,6 +7,56 @@ Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [0.9.4] — 2026-10-25
+
+### Hinzugefügt
+- **HA 2026.9 und 2026.10 als validierte Auth-Linien.** `SUPPORTED_HA_AUTH_FEATURES` führt jetzt
+  `{2026.7, 2026.8, 2026.9, 2026.10}`, `SUPPORTED_HA_AUTH_VERSION` = **2026.10.4**. Damit läuft der
+  `enforce`-Schreibpfad auf aktuellem Home Assistant wieder — vorher blockierte der Guard auf jeder
+  Instanz ab 2026.9 **jeden** Enforce-Versuch fail-closed und hielt sie im read-only `monitor`:
+  genau der dokumentierte Schutzmechanismus, aber für Neuinstallationen aus dem HACS-Default-Store
+  heißt das, dass das Kernfeature stumm blieb. Aufgefallen im Approve-Review von @frenck
+  ([hacs/default#8877](https://github.com/hacs/default/pull/8877)).
+
+  **Validierung** (Schritt 1+2 aus [docs/MAINTENANCE.md](docs/MAINTENANCE.md), kein blinder Bump —
+  das Diff-Protokoll steht dort jetzt als Tabelle):
+  - **2026.8.1 → 2026.9.4:** `auth/auth_store.py` und `auth/models.py` byte-identisch.
+    `auth/permissions/entities.py` hat sich geändert — HAs **Area**-Sub-Policy löst jetzt die
+    *effektive* Area eines Geräts auf (`dr.async_get_effective_area_id`, neu für Child-Device-
+    Vererbung). Für Tessera **nicht erreichbar**: der Compiler emittiert ausschließlich
+    `entity_ids`-Leaves, und `_assert_allow_only_policy` lehnt jede andere Policy-Shape hart ab.
+  - **2026.9.4 → 2026.10.4:** `auth/auth_store.py` byte-identisch, `models.Group` unverändert
+    (`models.py` bekam nur PKCE-Felder am `AuthFlowContext`, also am Login-Flow). `auth/permissions/`
+    tauschte **`voluptuous` gegen `probatio`** (HA ruft `install_as_voluptuous()` beim Import) — ein
+    Wechsel der Schema-**Bibliothek** bei identischer Policy-Shape; Tesseras eigene
+    `voluptuous`-Nutzung (Service-/WebSocket-Schemata) ist davon nicht betroffen.
+  - Belegt, nicht behauptet: `tests/test_ha_auth_contract.py` läuft gegen das *installierte* HA und
+    ist auf **2026.9.4** und **2026.10.4** grün — inklusive des Checks, dass HAs echtes
+    `PolicyPermissions` genau Tesseras allow-only-Policy gewährt und nichts darüber hinaus.
+
+### Behoben
+- **Fehlermeldung des Version-Guards sortiert die Linien numerisch** (`_ha_line_sort_key`). Mit der
+  zweistelligen Monatszahl 2026.10 hätte die lexikografische Sortierung „2026.10.x, 2026.7.x, …"
+  ausgegeben und wie ein Tippfehler gewirkt. Der Contract-Test nutzt jetzt dieselbe Funktion statt
+  einer eigenen Kopie.
+
+### CI
+- Matrix-Job **`HA auth contract`** deckt jede validierte Linie ab: `2026.7.1`, `2026.8.1`,
+  **`2026.9.4`**, **`2026.10.4`**.
+
+### Dokumentation
+- **HACS-Default-Store-Status korrigiert.** README (EN/DE) und Guides sagten „Einreichung in Review";
+  der PR ist am **18.10.2026** gemerged — Tessera ist seit dem **im HACS-Default-Store** und direkt
+  über HACS → Integrationen installierbar. Der Custom-Repository-Weg bleibt dokumentiert (gepinnte
+  Releases, HACS kennt den Store-Eintrag noch nicht).
+- Getestete HA-Linien, Guide-Badges und Versionsstände auf **v0.9.4** / **2026.7.x–2026.10.x**
+  gezogen.
+- **Bekannte Lücke dokumentiert** ([docs/MAINTENANCE.md](docs/MAINTENANCE.md)): HA 2026.9 führt
+  Child-Devices ein, die ohne eigene Area die Area des Eltern-Geräts erben. Tesseras Resolver liest
+  nur das rohe `area_id` des Geräts; Entities an einem Child-Device ohne eigene Area fallen deshalb
+  aus einem Area-/Floor-Grant heraus, obwohl HA sie in der Area zeigt. Der Grant ist damit **zu eng,
+  nie zu weit** (fail-closed-Richtung, kein Rechte-Leck) — eigenes Thema, eigener Fix.
+
 ## [0.9.3] — 2026-08-25
 
 ### Behoben

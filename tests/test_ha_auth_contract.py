@@ -20,6 +20,7 @@ import pytest
 from custom_components.tessera.auth_adapter import (
     SUPPORTED_HA_AUTH_FEATURES,
     _ha_feature_line,
+    _ha_line_sort_key,
 )
 
 # Import the submodule explicitly: ``import homeassistant`` alone does not bind
@@ -39,12 +40,6 @@ def _installed_feature_line() -> str:
     return _ha_feature_line(HA_VERSION)
 
 
-def _line_sort_key(feature_line: str) -> tuple[int, int]:
-    """Order feature lines numerically, so 2026.10 sorts after 2026.7."""
-    year, month = feature_line.split(".")[:2]
-    return int(year), int(month)
-
-
 def test_installed_ha_line_is_validated() -> None:
     """Fail loudly when running against an HA line nobody has validated yet.
 
@@ -57,8 +52,8 @@ def test_installed_ha_line_is_validated() -> None:
     environment is not a product defect.
     """
     installed = _installed_feature_line()
-    validated = sorted(SUPPORTED_HA_AUTH_FEATURES, key=_line_sort_key)
-    if _line_sort_key(installed) < _line_sort_key(validated[0]):
+    validated = sorted(SUPPORTED_HA_AUTH_FEATURES, key=_ha_line_sort_key)
+    if _ha_line_sort_key(installed) < _ha_line_sort_key(validated[0]):
         pytest.skip(
             f"installed HA {installed} predates every validated line "
             f"({validated}) — stale dev environment"
