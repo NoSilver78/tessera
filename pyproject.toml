@@ -61,6 +61,13 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["."]
 
+# Tessera builds its service/websocket/config-flow schemas through
+# custom_components/tessera/_vol.py, which imports voluptuous at runtime (HA's
+# supported path on every validated line) and leaves the name untyped for the
+# checker — HA annotates these parameters as voluptuous up to 2026.9 and as
+# probatio from 2026.10, so no concrete type fits all four lines. Both modules are
+# listed because either one can be the absent half of that pair in a given
+# environment.
 [[tool.mypy.overrides]]
-module = "voluptuous"
+module = ["voluptuous", "probatio"]
 ignore_missing_imports = true

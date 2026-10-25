@@ -7,7 +7,52 @@ Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Hinzugefügt
+- **`mypy --strict` pro validierter HA-Linie** in der CI-Contract-Matrix. Der `quality`-Job
+  typprüft gegen *eine* HA-Version — die, auf die `pytest-homeassistant-custom-component` gerade
+  auflöst. Genau dort fiel auf, dass Typen linien-abhängig sind (siehe unten), und genau dort war
+  es vorher unsichtbar.
+- **Nightly-Job `HA upcoming line (pre-release)`** — `pip install --pre homeassistant` plus
+  dieselben Contract-Tests und `mypy --strict` gegen die **kommende** HA-Linie, nur per Cron und
+  `workflow_dispatch`, blockiert also keinen Push. Jede bisher validierte Linie (2026.7, 2026.8,
+  2026.9/2026.10) wurde erst **nach** HAs Release gediffed, und bis zum Nachziehen stand `enforce`
+  auf fremden Instanzen still. Ein rotes Ergebnis hier ist das Signal, kein Defekt.
+- **`tests/test_ha_policy_contract.py` — die ganze Kette als Contract-Test.** Grant → Resolver →
+  Compiler → HAs echtes `PolicyPermissions.check_entity`, gegen das *installierte* HA, mit einem
+  Child-Device im Fixture. Bisher prüfte jeder Test ein Glied gegen Doubles, die per Konstruktion
+  zu ihren Protokollen passen — die Frage, ob ein Grant am Ende *genau* diese Rechte in HA ergibt,
+  stellte keiner. Das ist das Netz gegen Semantik-Drift der Klasse, die die Child-Device-Lücke war.
+- **`tests/test_ha_schema_contract.py`** — hält fest, dass `import voluptuous` genau dann probatio
+  liefert, wenn probatio installiert ist, und dass Tessera mit derselben Bibliothek baut, mit der HA
+  validiert.
+- **Diff-Protokoll um die kommende Linie erweitert** ([docs/MAINTENANCE.md](docs/MAINTENANCE.md)):
+  HA `dev` (2026.11.0.dev0, Stand 25.10.2026) hat `auth/auth_store.py`, `auth/models.py` und **alle
+  neun Dateien in `auth/permissions/` byte-identisch** zu 2026.10.4 — am Policy-Schema ändert sich
+  für 2026.11 bislang nichts. Child-Devices und `async_get_effective_area_id` unverändert, die
+  `devices`-Mapping-Deprecation weiter mit `breaks_in_ha_version=2027.9.0`. `dev` ist kein Release,
+  die Linie bleibt daher **unvalidiert** und fail-closed.
+
 ### Behoben
+- **`mypy --strict` gegen aktuelles Home Assistant.** HA migriert voluptuous → **probatio** in zwei
+  Schritten, die nicht zusammenfallen: 2026.9 installiert probatio *als* voluptuous (Laufzeit),
+  2026.10 dreht die **Annotationen** um. Damit typprüft kein einzelner Import auf allen vier
+  validierten Linien — `import voluptuous` scheitert auf 2026.10 (34 Fehler, exakt die, die CI nach
+  dem v0.9.4-Push zeigte), `import probatio` auf 2026.9 (35 Fehler, spiegelbildlich); beides
+  gemessen auf 2026.8.2, 2026.9.4 und 2026.10.4. Neu: `custom_components/tessera/_vol.py` importiert
+  zur Laufzeit voluptuous (HAs unterstützter Weg, löst sich ab 2026.9 auf probatio auf) und lässt
+  den Namen für den Typchecker bewusst untypisiert — genau das, was die bestehende
+  `ignore_missing_imports`-Override vorher implizit tat, bevor HA diese Parameter überhaupt
+  annotierte. Die Laufzeit-Hälfte der Annahme ist jetzt ein Contract-Test. **Keine Verhaltens-,
+  nur eine Typ-Änderung** — die Schemata selbst sind unverändert.
+
+  Die zugrunde liegende Richtungsfrage ist in
+  [ADR 0006](decisions/0006-schema-library-compat-over-migration.md) festgehalten: HA deklariert
+  ab 2026.9 **nur noch probatio** und aliast `voluptuous` beim Start per
+  `probatio.compat.install_as_voluptuous()`; ein echtes `voluptuous` liegt nur noch transitiv bei
+  (`annotatedyaml`, `hass-nabucasa`). Die Migration auf `probatio.*` (Option A aus dem Audit vom
+  12.10.2026, mit HA ≥ 2026.9 als Folge) wurde am 25.10.2026 **revidiert**: die Kompatibilität zu
+  2026.7/2026.8 bleibt, weil `off`/`monitor` für jede HA-Version zugesagt sind. Der ADR benennt
+  das akzeptierte Risiko und die drei Auslöser, bei denen Option A doch gilt.
 - **Child-Device-Area-Vererbung in der Area-/Floor-/Label-Auflösung.** HA **2026.9** führt
   Child-Devices ein: ein Child ohne eigene Area erbt die Area des Eltern-Geräts, und HA selbst löst
   Area-Policies seitdem über `device_registry.async_get_effective_area_id` auf. Tesseras Resolver las

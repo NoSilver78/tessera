@@ -6,10 +6,10 @@ import logging
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any, cast
 
-import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.helpers import selector
 
+from ._vol import vol
 from .const import DOMAIN, MODE_ENFORCE, MODE_MONITOR, MODE_OFF, MODES
 from .monitor import compile_current, lint_current_preview, log_monitor_preview
 from .resolver import AreaEntityResolver

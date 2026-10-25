@@ -23,15 +23,33 @@ Schutzschichten.
    kein blindes Weiterschreiben über Monatsgrenzen. Mehrere Linien gleichzeitig zu führen ist Absicht:
    wer eine HA-Version zurückhängt, verliert `enforce` nicht.
 
-   **Frühwarnung in CI:** `tests/test_ha_auth_contract.py` prüft gegen das *installierte* HA (nicht
-   gegen Test-Doubles) und wird **rot**, sobald CI auf einer Linie läuft, die noch niemand validiert
-   hat — plus Struktur-Checks auf genau den privaten Subset (`AuthStore._groups`/`_data_to_save`,
-   `models.Group`, `PolicyPermissions`), den die Adapter anfassen.
-2. **HACS-Mindestversion (optional, derzeit NICHT gesetzt).** `hacs.json` wird bereits ausgeliefert,
-   enthält aber **keinen** `homeassistant`-Pin: die `hacs/action`-Validierung lehnte den Wert als
-   künftiges Minimum ab. Der **aktive** Schutz ist daher allein der Code-Guard aus #1; ein
-   `hacs.json`-`homeassistant`-Pin (HACS blockt dann Installation/Update auf älteren Instanzen) kann
-   beim Public-Flip als zweite Hürde nachgezogen werden, sobald HACS die Zielversion kennt.
+   **Frühwarnung in CI:** vier Contract-Test-Dateien prüfen gegen das *installierte* HA, nicht
+   gegen Test-Doubles (die per Konstruktion immer zu ihren Protokollen passen):
+
+   | Datei | prüft |
+   |---|---|
+   | `tests/test_ha_auth_contract.py` | den privaten Auth-Subset (`AuthStore._groups`/`_store`/`async_get_groups`/`_data_to_save`, `models.Group`, `PolicyPermissions`) — und wird **rot**, sobald CI auf einer nicht validierten Linie läuft |
+   | `tests/test_ha_registry_contract.py` | die Device-Registry-Formen, die der Resolver liest: Mapping vs. iterierbare `devices`-View, `child_devices`, `ChildDeviceEntry.{id,area_id,parent_device_id}` |
+   | `tests/test_ha_schema_contract.py` | dass `import voluptuous` genau dann probatio liefert, wenn probatio installiert ist (HAs Shim), und dass Tessera dieselbe Bibliothek baut, mit der HA validiert |
+   | `tests/test_ha_policy_contract.py` | die **ganze Kette** Grant → Resolver → Compiler → HAs echtes `PolicyPermissions.check_entity`, inklusive eines Child-Devices — der Netz gegen Semantik-Drift |
+
+   Dazu läuft **`mypy --strict` pro Linie** in derselben Matrix: HA annotiert seine
+   Schema-Parameter bis 2026.9 als voluptuous und ab 2026.10 als probatio, und der `quality`-Job
+   sieht davon nur die eine Version, die `pytest-homeassistant-custom-component` gerade auflöst.
+
+   **Vorlauf statt Nachlauf:** der Job `HA upcoming line (pre-release)` installiert nightly
+   `pip install --pre homeassistant` und fährt dieselben Contract-Tests gegen die **kommende**
+   Linie. Jede bisher validierte Linie wurde erst *nach* HAs Release gediffed — in der Zwischenzeit
+   stand `enforce` bei Nutzern still. Rot in diesem Job heißt: neue Linie da, diffen.
+2. **HACS-Mindestversion — bewusst NICHT gesetzt (Entscheidung, kein offener Punkt).**
+   `hacs.json` trägt keinen `homeassistant`-Pin. Ursprünglich, weil die `hacs/action`-Validierung
+   den Wert als *künftiges* Minimum ablehnte; inzwischen aus einem inhaltlichen Grund: ein Pin
+   würde HACS die Installation auf **älteren** Instanzen verweigern — und `off`/`monitor` sind
+   ausdrücklich als *auf jeder HA-Version* lauffähig dokumentiert (read-only, kein Write-Pfad).
+   Der Pin würde also genau den Nutzern die Installation nehmen, denen Tessera gefahrlos nützt,
+   um sie vor einem Schreibpfad zu schützen, den der Code-Guard aus #1 ohnehin fail-closed
+   blockiert. Erst wenn Tessera eine untere HA-Grenze hätte, die auch `monitor` betrifft, wird der
+   Pin richtig.
 3. **Fail-safe-to-monitor überall.** Jeder Fehler im Enforce-/Recovery-Pfad fällt auf den
    nicht-eingreifenden `monitor`-Modus zurück (kein Deny-all, kein stiller Halbzustand).
 
@@ -71,6 +89,30 @@ Für **jedes** neue Home-Assistant-Release:
    - eine neue **MAJOR**-Version veröffentlichen (Bruch der Kompatibilität),
    - den Bruch im Changelog + den Release Notes klar benennen.
 
+## Schema-Bibliothek (voluptuous → probatio)
+
+Home Assistant migriert in **zwei** Schritten, die nicht zusammenfallen:
+
+| Linie | Laufzeit | Annotationen |
+|---|---|---|
+| 2026.7 / 2026.8 | voluptuous | voluptuous |
+| **2026.9** | probatio (via `install_as_voluptuous()`) | **noch voluptuous** |
+| **2026.10+** | probatio | **probatio** |
+
+Deshalb gibt es *keinen* Import, der auf allen vier validierten Linien typprüft:
+`import voluptuous` fällt auf 2026.10 durch, `import probatio` auf 2026.9 — gemessen, nicht
+vermutet. `custom_components/tessera/_vol.py` importiert daher zur **Laufzeit** voluptuous (HAs
+unterstützter Weg für Custom-Integrationen, löst sich ab 2026.9 auf probatio auf) und lässt den
+Namen für den Typchecker bewusst `Any`. Die Laufzeit-Hälfte dieser Annahme hält
+`tests/test_ha_schema_contract.py` fest.
+
+**Achtung, das ist ein bewusst akzeptiertes Risiko:** HA deklariert ab 2026.9 **nur noch probatio**
+und aliast `voluptuous` beim Start per `probatio.compat.install_as_voluptuous()`; ein echtes
+`voluptuous` liegt nur noch transitiv bei (`annotatedyaml`, `hass-nabucasa`). Warum wir trotzdem
+`voluptuous` importieren — und die **drei Auslöser**, bei denen auf `probatio.*` migriert wird
+(dann MAJOR, mit HA-Minimum) — steht in
+[ADR 0006](../decisions/0006-schema-library-compat-over-migration.md).
+
 ## Validierte Linien (Diff-Protokoll)
 
 Jede Zeile ist das Ergebnis von Schritt 1+2 des Prozesses oben — kein Versions-Bump, sondern ein
@@ -82,6 +124,7 @@ nachvollziehbarer Diff gegen den zuvor validierten Tag.
 | `2026.8` | 2026.7.1 | `auth_store.py` byte-identisch, `permissions/` unverändert, `models.Group` unverändert | 2026-08-16 (v0.9.2) |
 | `2026.9` | 2026.8.1 | `auth_store.py` + `models.py` byte-identisch. `permissions/entities.py` geändert (Area-Sub-Policy löst jetzt die *effektive* Area eines Geräts auf, `dr.async_get_effective_area_id`, für Child-Device-Vererbung) — **für Tessera nicht erreichbar**: der Compiler emittiert ausschließlich `entity_ids`-Leaves (hart geprüft in `_assert_allow_only_policy`) | 2026-10-25 (v0.9.4) |
 | `2026.10` | 2026.9.4 | `auth_store.py` byte-identisch; `models.Group` unverändert (`models.py` bekam nur PKCE-Felder am `AuthFlowContext` = Login-Flow, nicht das Gruppenmodell). `permissions/` tauschte `voluptuous` gegen `probatio` (HA ruft `install_as_voluptuous()` beim Import) — Schema-**Bibliothek** bei identischer Policy-Shape; HAs echtes `PolicyPermissions` gewährt weiterhin genau Tesseras allow-only-Policy | 2026-10-25 (v0.9.4) |
+| `2026.11` *(Vorschau, `dev`)* | 2026.10.4 | `auth_store.py`, `models.py` **und alle 9 Dateien in `permissions/` byte-identisch** — am Policy-Schema ändert sich für 2026.11 bislang **nichts** (`POLICY_SCHEMA = probatio.Schema({probatio.Optional(CAT_ENTITIES): ENTITY_POLICY_SCHEMA})`, gleiche Keys, gleiche Leaf-Shape). Im Device-Registry bleiben `ChildDeviceEntry.parent_device_id`, `child_devices` und `async_get_effective_area_id` unverändert; die `devices`-Mapping-Deprecation steht weiter auf `breaks_in_ha_version=2027.9.0`. **Noch nicht validiert** — `dev` ist kein Release, der Guard bleibt fail-closed, bis die Linie als Beta/Release existiert | geprüft 2026-10-25 (`dev` @ 2026.11.0.dev0) |
 
 Belegt durch `tests/test_ha_auth_contract.py` gegen das jeweils installierte HA — der CI-Matrix-Job
 `HA auth contract` fährt jede dieser Linien (`2026.7.1`, `2026.8.1`, `2026.9.4`, `2026.10.4`).

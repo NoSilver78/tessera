@@ -12,7 +12,6 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-import voluptuous as vol
 from homeassistant.components.frontend import async_remove_panel
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.components.panel_custom import async_register_panel
@@ -25,6 +24,7 @@ from homeassistant.util import dt as dt_util
 
 from . import websocket as tessera_websocket
 from ._user_helpers import _is_unmanaged_user
+from ._vol import vol
 from .auth_adapter import (
     AuthPolicyStoreAdapter,
     HassAuthLike,

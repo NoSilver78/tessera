@@ -4,6 +4,11 @@ on:
   push:
     branches: [main, "core/**", "welle-**"]
   pull_request:
+  # The upcoming-line job below is the early warning for the next HA release;
+  # it only runs on these two triggers, so pushes stay unaffected by HA's beta.
+  schedule:
+    - cron: "30 4 * * *"
+  workflow_dispatch:
 
 jobs:
   # Python 3.14 is what current Home Assistant needs (2026.3+ requires >=3.14.2).
@@ -47,9 +52,10 @@ jobs:
   # trails Home Assistant by several months (it pulled HA 2026.2.3 while the
   # validated lines were 2026.7/2026.8). That job therefore cannot prove the
   # version guard's claim. This one installs each validated HA line directly —
-  # the contract tests need no HA test harness, only the real auth internals and
-  # the real device-registry shapes — so every line in SUPPORTED_HA_AUTH_FEATURES
-  # is actually exercised.
+  # the contract tests need no HA test harness, only the real auth internals, the
+  # real device-registry shapes, the real schema library and HA's own
+  # PolicyPermissions — so every line in SUPPORTED_HA_AUTH_FEATURES is actually
+  # exercised, types included.
   #
   # Add the new line here in the same PR that adds it to the guard.
   contract:
@@ -65,8 +71,48 @@ jobs:
         with:
           python-version: "3.14"
       - name: Install Home Assistant ${{ matrix.ha }}
-        run: pip install "homeassistant==${{ matrix.ha }}" pytest pytest-asyncio
+        run: pip install "homeassistant==${{ matrix.ha }}" pytest pytest-asyncio mypy
       - name: Contract tests against the installed HA
         run: |
           pytest tests/test_ha_auth_contract.py \
-                 tests/test_ha_registry_contract.py -v
+                 tests/test_ha_registry_contract.py \
+                 tests/test_ha_schema_contract.py \
+                 tests/test_ha_policy_contract.py -v
+      # Types are per-line too, and the `quality` job cannot see that: it type-checks
+      # against whatever single HA pytest-homeassistant-custom-component resolves to.
+      # HA annotates its schema parameters as voluptuous up to 2026.9 and as probatio
+      # from 2026.10 — a divergence that was invisible until mypy ran per line.
+      - name: mypy against the installed HA (strict)
+        run: mypy custom_components/tessera
+
+  # Early warning for the NEXT Home Assistant line. Every validated line so far was
+  # diffed *after* HA had shipped it, which means `enforce` stood still on users'
+  # instances until a Tessera release caught up (2026.7, 2026.8, and 2026.9/2026.10
+  # all went that way). `pip install --pre` takes the newest pre-release, so during a
+  # beta window this job runs against the coming line weeks before its release.
+  #
+  # A red run here is the signal, not a defect: it means HA shipped a line nobody has
+  # validated yet (test_installed_ha_line_is_validated fails by design) or that the
+  # private subset moved. Either way: diff it, per docs/MAINTENANCE.md. The job runs
+  # nightly and on demand only, so it never blocks a push or a PR.
+  upcoming:
+    name: HA upcoming line (pre-release)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - name: Install the newest Home Assistant pre-release
+        run: pip install --pre --upgrade homeassistant pytest pytest-asyncio mypy
+      - name: HA version under test
+        run: python -c "from homeassistant.const import __version__ as v; print('homeassistant', v)"
+      - name: Contract tests against the upcoming HA
+        run: |
+          pytest tests/test_ha_auth_contract.py \
+                 tests/test_ha_registry_contract.py \
+                 tests/test_ha_schema_contract.py \
+                 tests/test_ha_policy_contract.py -v
+      - name: mypy against the upcoming HA (strict)
+        run: mypy custom_components/tessera

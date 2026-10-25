@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, TypedDict, cast
 
-import voluptuous as vol
 from homeassistant.components.websocket_api import async_register_command
 from homeassistant.components.websocket_api import const as websocket_const
 from homeassistant.components.websocket_api import decorators as websocket_decorators
@@ -13,6 +12,7 @@ from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import floor_registry as fr
 from homeassistant.helpers import label_registry as lr
 
+from ._vol import vol
 from .config_flow import (
     add_area_grant,
     encode_grant,

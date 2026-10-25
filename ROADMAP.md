@@ -1,7 +1,7 @@
 # Roadmap
 
 Dieses Dokument beschreibt **wohin Tessera will**, **wo es gerade steht** und **was noch zu tun
-ist**. Stand: **2026-07-02** (v0.9.0 — Floor- + Label-Grants + Konfig-Seiten-Modusschalter geshippt).
+ist**. Stand: **2026-10-25** (v0.9.4 — im HACS-Default-Store; HA-Linien 2026.7–2026.10 validiert).
 Es ist bewusst ehrlich — auch über offene Flanken (siehe ganz unten).
 
 ## Vision
@@ -73,8 +73,11 @@ geführt — und seit E3.5 (Phase 3) im Setup-Pfad verdrahtet:
 - **Dogfood:** auf einer echten, eigenen Instanz betreiben — überlebt es ein HA-Update ohne
   Vorfall?
 
-### ⏳ Phase 4 — Release
-- **HACS-Custom-Repo** (kleiner, kuratierter Kreis) → Feedback → **HACS-Default-Store**.
+### ✅ Phase 4 — Release *(Default-Store erreicht)*
+- **HACS-Custom-Repo** (kleiner, kuratierter Kreis) → Feedback → **HACS-Default-Store**: am
+  **18.10.2026** gemerged ([hacs/default#8877](https://github.com/hacs/default/pull/8877)), seit
+  v0.9.4 also direkt über HACS installierbar. Damit ist die Verteilung erledigt — die *Reife*
+  (Soak, Dogfood) ist es nicht, siehe Phase 3 und „Offene Flanken".
 - **Nicht** Home-Assistant-Core: die nötige Mutation des Auth-Stores über nicht-öffentliche APIs
   würde Core nie akzeptieren — HACS ist der bewusste, einzig sinnvolle Weg.
 - Release-Engineering-Details: **[RELEASE_READINESS.md](RELEASE_READINESS.md)**.
@@ -84,11 +87,18 @@ geführt — und seit E3.5 (Phase 3) im Setup-Pfad verdrahtet:
 - [x] E3.5-Verdrahtung grün (CI + adversariales Gate) → gemergt.
 - [x] HACS-Artefakte aktiviert (`hacs.json`, Validierungs-CI hassfest+HACS, `brand/`-Icon) — der
       HACS-Datei-Check ist `continue-on-error`, bis das Repo öffentlich ist.
-- [ ] Dev-E2E gegen die Dev-Instanz fahren und protokollieren.
-- [ ] Soak-Phase + erste Dogfood-Instanz.
-- [ ] Erstes getaggtes Release + Public-Flip (dann `continue-on-error` am HACS-Job entfernen).
+- [x] Dev-E2E gegen die Dev-Instanz gefahren und protokolliert
+      (`spike/reports/tessera-dev-e2e-report-2026-07-01.md`).
+- [x] Erstes getaggtes Release + Public-Flip; `continue-on-error` am HACS-Job entfernt.
+- [x] README/Doku-Feinschliff fürs öffentliche Repo (bilinguale Guides, Screenshots).
+- [x] **Versions-Tracking vom Nachlauf in den Vorlauf gedreht** (nächstes Release): Contract-Tests + `mypy
+      --strict` pro validierter Linie in der CI-Matrix, plus nightly gegen die HA-**Pre-Release**,
+      und der ganze Weg Grant → Compiler → HAs `PolicyPermissions` als Contract-Test.
+- [ ] **Soak-Phase + erste Dogfood-Instanz** — der größte offene Punkt: `enforce` ist gebaut,
+      gegated, verdrahtet und dev-erprobt, aber nicht über Zeit in der Praxis bewiesen.
 - [ ] `SECURITY.md`-Kanal + Private Vulnerability Reporting scharfschalten.
-- [ ] README/Doku-Feinschliff fürs öffentliche Repo.
+- [ ] Erste echte Community-Signale abwarten/einholen (Stand 25.10.2026: 0 Stars, 0 Forks,
+      0 fremde Issues) — ohne fremde Setups fehlt die Breite, die der Soak braucht.
 
 ## Backlog / später
 
@@ -107,9 +117,15 @@ Diese Punkte sind bewusst **nicht** gelöst und teils Stellen, an denen wir **Hi
 können** (→ [CONTRIBUTING.md](CONTRIBUTING.md)):
 
 1. **Private-API-Abhängigkeit** — der Auth-Store-Schreibpfad nutzt teils nicht-öffentliche HA-APIs.
-   Größtes Dauer-Risiko: ein HA-Release kann sie brechen. Gegenmittel (Laufzeit-Guard auf die exakt
-   getestete HA-Version mit Fallback auf `monitor`) ist eingebaut, aber das Tracking pro HA-Version
-   bleibt laufende Arbeit.
+   Größtes Dauer-Risiko: ein HA-Release kann sie brechen. Gegenmittel: Laufzeit-Guard auf die
+   validierten Feature-Linien mit Fallback auf `monitor`, ein nachvollziehbares **Diff-Protokoll**
+   pro Linie ([docs/MAINTENANCE.md](docs/MAINTENANCE.md)), Contract-Tests + `mypy --strict` pro
+   Linie in CI und ein **nightly Lauf gegen die HA-Pre-Release**. Damit ist das Tracking vom
+   Nachlauf in den Vorlauf gedreht — Dauer-Arbeit bleibt es trotzdem, und 2026.9 hat gezeigt, dass
+   auch *angrenzende* APIs (Device-Registry, Schema-Bibliothek) mitbrechen können, nicht nur der
+   Auth-Store. Beim Schema-Import ruht Tessera bewusst auf HAs `voluptuous`-Shim statt auf
+   `probatio` — akzeptiertes Risiko mit benannten Auslösern, siehe
+   [ADR 0006](decisions/0006-schema-library-compat-over-migration.md).
 2. **Leak-Pfade** — `render_template`, Logbook/History und Assist können die Permission-Schicht
    teilweise umgehen (siehe README). Tessera dokumentiert das ehrlich, schließt es aber nicht.
 3. **Enforce noch nicht in der Praxis bewiesen** — die Maschinerie ist gebaut, gegated und verdrahtet
