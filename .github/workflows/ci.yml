@@ -47,8 +47,9 @@ jobs:
   # trails Home Assistant by several months (it pulled HA 2026.2.3 while the
   # validated lines were 2026.7/2026.8). That job therefore cannot prove the
   # version guard's claim. This one installs each validated HA line directly —
-  # the contract tests need no HA test harness, only the real auth internals —
-  # so every line in SUPPORTED_HA_AUTH_FEATURES is actually exercised.
+  # the contract tests need no HA test harness, only the real auth internals and
+  # the real device-registry shapes — so every line in SUPPORTED_HA_AUTH_FEATURES
+  # is actually exercised.
   #
   # Add the new line here in the same PR that adds it to the guard.
   contract:
@@ -66,4 +67,6 @@ jobs:
       - name: Install Home Assistant ${{ matrix.ha }}
         run: pip install "homeassistant==${{ matrix.ha }}" pytest pytest-asyncio
       - name: Contract tests against the installed HA
-        run: pytest tests/test_ha_auth_contract.py -v
+        run: |
+          pytest tests/test_ha_auth_contract.py \
+                 tests/test_ha_registry_contract.py -v

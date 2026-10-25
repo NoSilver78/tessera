@@ -10,11 +10,18 @@ from custom_components.tessera.resolver import AreaEntityResolver
 
 @dataclass(frozen=True)
 class Registry:
-    """Small registry object exposing Home Assistant-like storage maps."""
+    """Small registry object exposing Home Assistant-like storage maps.
+
+    ``devices`` mirrors the mapping that HA 2026.7/2026.8 exposes; pass any
+    non-mapping iterable of entries to mirror the iterable-only view of HA
+    2026.9+. ``child_devices`` stays ``None`` unless a test opts in, which is
+    how the registries of HA 2026.7/2026.8 look.
+    """
 
     entities: dict[str, Any] | None = None
-    devices: dict[str, Any] | None = None
+    devices: Any = None
     areas: list[Any] | None = None
+    child_devices: Any = None
 
     def __post_init__(self) -> None:
         """Allow one fake class to stand in for entity and device registries."""
@@ -37,6 +44,7 @@ class Entry:
     id: str | None = None
     floor_id: str | None = None
     labels: Any = None
+    parent_device_id: str | None = None
 
 
 def test_resolves_device_area_and_direct_entity_area() -> None:
@@ -361,3 +369,227 @@ def test_label_falsy_device_key_does_not_leak_deviceless_entities() -> None:
     )
 
     assert resolver.entity_ids_for_label("cozy") == ("light.tagged",)
+
+
+def test_child_device_without_own_area_inherits_parent_area() -> None:
+    """A child device with no area of its own is resolved into its parent's area.
+
+    HA 2026.9 introduced child devices and resolves exactly this way itself
+    (``device_registry.async_get_effective_area_id``), so an area grant that
+    skipped them would be narrower than the area shown in Home Assistant.
+    """
+    resolver = AreaEntityResolver(
+        Registry(
+            entities={
+                "light.sofa": Entry(device_id="device-living"),
+                "sensor.child_probe": Entry(device_id="child-living"),
+            }
+        ),
+        Registry(
+            devices={"device-living": Entry(area_id="living_room")},
+            child_devices={"child-living": Entry(parent_device_id="device-living")},
+        ),
+        Registry(areas=[]),
+    )
+
+    assert resolver.entity_ids_for_area("living_room") == (
+        "light.sofa",
+        "sensor.child_probe",
+    )
+
+
+def test_child_device_with_own_area_keeps_it() -> None:
+    """An area set on the child itself wins over the parent's area."""
+    resolver = AreaEntityResolver(
+        Registry(entities={"sensor.child_probe": Entry(device_id="child-kitchen")}),
+        Registry(
+            devices={"device-living": Entry(area_id="living_room")},
+            child_devices={
+                "child-kitchen": Entry(
+                    area_id="kitchen", parent_device_id="device-living"
+                )
+            },
+        ),
+        Registry(areas=[]),
+    )
+
+    assert resolver.entity_ids_for_area("kitchen") == ("sensor.child_probe",)
+    assert resolver.entity_ids_for_area("living_room") == ()
+
+
+def test_child_device_inherits_nothing_when_parent_has_no_area() -> None:
+    """A parent without an area leaves the child area-less, not in some default."""
+    resolver = AreaEntityResolver(
+        Registry(entities={"sensor.child_probe": Entry(device_id="child-living")}),
+        Registry(
+            devices={"device-living": Entry()},
+            child_devices={"child-living": Entry(parent_device_id="device-living")},
+        ),
+        Registry(areas=[]),
+    )
+
+    assert resolver.entity_ids_for_areas(["living_room"]).entity_ids == ()
+
+
+def test_child_device_with_dangling_parent_is_fail_closed() -> None:
+    """A missing or falsy parent reference resolves to no area at all.
+
+    Unreachable from live HA (a child always has a parent), guarded so a
+    dangling reference cannot pick up an unrelated area.
+    """
+    resolver = AreaEntityResolver(
+        Registry(
+            entities={
+                "light.sofa": Entry(device_id="device-living"),
+                "sensor.orphan_child": Entry(device_id="child-gone"),
+                "sensor.falsy_child": Entry(device_id="child-falsy"),
+            }
+        ),
+        Registry(
+            devices={"device-living": Entry(area_id="living_room")},
+            child_devices={
+                "child-gone": Entry(parent_device_id="device-removed"),
+                "child-falsy": Entry(parent_device_id=None),
+            },
+        ),
+        Registry(areas=[]),
+    )
+
+    assert resolver.entity_ids_for_area("living_room") == ("light.sofa",)
+
+
+def test_falsy_device_key_does_not_leak_its_area_to_deviceless_entities() -> None:
+    """A device stored under a falsy key must not hand its area to device-less entities.
+
+    Unreachable from live HA (device ids are uuid hex); this is the area-path
+    counterpart of ``test_label_falsy_device_key_does_not_leak_deviceless_entities``.
+    """
+    resolver = AreaEntityResolver(
+        Registry(
+            entities={
+                "sensor.deviceless": Entry(),
+                "sensor.empty_device": Entry(device_id=""),
+            }
+        ),
+        Registry(devices={None: Entry(area_id="living_room")}),
+        Registry(areas=[]),
+    )
+
+    assert resolver.entity_ids_for_area("living_room") == ()
+
+
+def test_child_devices_may_arrive_as_a_plain_collection() -> None:
+    """HA exposes ``child_devices`` as a collection of entries, not as a mapping."""
+    resolver = AreaEntityResolver(
+        Registry(entities={"sensor.child_probe": Entry(device_id="child-living")}),
+        Registry(
+            devices={"device-living": Entry(area_id="living_room")},
+            child_devices=(Entry(id="child-living", parent_device_id="device-living"),),
+        ),
+        Registry(areas=[]),
+    )
+
+    assert resolver.entity_ids_for_area("living_room") == ("sensor.child_probe",)
+
+
+def test_devices_as_iterable_view_resolves_by_entry_id() -> None:
+    """An iterable-only ``devices`` view is read by iterating, not as a mapping.
+
+    From HA 2026.9 every mapping access to ``DeviceRegistry.devices`` is
+    reported as deprecated and stops working in 2027.9; iterating yields the
+    entries, whose ``id`` then carries the device id.
+    """
+    resolver = AreaEntityResolver(
+        Registry(entities={"light.sofa": Entry(device_id="device-living")}),
+        Registry(devices=(Entry(id="device-living", area_id="living_room"),)),
+        Registry(areas=[]),
+    )
+
+    assert resolver.entity_ids_for_area("living_room") == ("light.sofa",)
+
+
+def test_registry_without_child_devices_resolves_as_before() -> None:
+    """On HA 2026.7/2026.8 there is no ``child_devices`` attribute to read."""
+
+    @dataclass(frozen=True)
+    class LegacyDeviceRegistry:
+        """Device registry without the HA 2026.9 child-device attribute."""
+
+        devices: dict[str, Any]
+
+    resolver = AreaEntityResolver(
+        Registry(entities={"light.sofa": Entry(device_id="device-living")}),
+        cast(
+            Any,
+            LegacyDeviceRegistry(
+                devices={"device-living": Entry(area_id="living_room")}
+            ),
+        ),
+        Registry(areas=[]),
+    )
+
+    assert not hasattr(resolver._device_registry, "child_devices")
+    assert resolver.entity_ids_for_area("living_room") == ("light.sofa",)
+
+
+def test_floor_covers_entities_of_an_inheriting_child_device() -> None:
+    """The floor path builds on the same effective area, so children come along."""
+    resolver = AreaEntityResolver(
+        Registry(entities={"sensor.child_probe": Entry(device_id="child-living")}),
+        Registry(
+            devices={"device-living": Entry(area_id="living_room")},
+            child_devices={"child-living": Entry(parent_device_id="device-living")},
+        ),
+        Registry(areas=[Entry(id="living_room", floor_id="ground")]),
+    )
+
+    assert resolver.entity_ids_for_floor("ground") == ("sensor.child_probe",)
+
+
+def test_label_on_child_device_matches_its_entities() -> None:
+    """A label set on the child device itself covers that child's entities."""
+    resolver = AreaEntityResolver(
+        Registry(entities={"sensor.child_probe": Entry(device_id="child-living")}),
+        Registry(
+            devices={"device-living": Entry()},
+            child_devices={
+                "child-living": Entry(parent_device_id="device-living", labels={"cozy"})
+            },
+        ),
+        Registry(areas=[]),
+    )
+
+    assert resolver.entity_ids_for_label("cozy") == ("sensor.child_probe",)
+
+
+def test_child_device_does_not_inherit_a_parent_label() -> None:
+    """Labels are never inherited from the parent — only the area falls back."""
+    resolver = AreaEntityResolver(
+        Registry(
+            entities={
+                "light.sofa": Entry(device_id="device-living"),
+                "sensor.child_probe": Entry(device_id="child-living"),
+            }
+        ),
+        Registry(
+            devices={"device-living": Entry(labels={"cozy"})},
+            child_devices={"child-living": Entry(parent_device_id="device-living")},
+        ),
+        Registry(areas=[]),
+    )
+
+    assert resolver.entity_ids_for_label("cozy") == ("light.sofa",)
+
+
+def test_label_via_inherited_area_matches_child_device_entities() -> None:
+    """An area label reaches a child device through the inherited area."""
+    resolver = AreaEntityResolver(
+        Registry(entities={"sensor.child_probe": Entry(device_id="child-living")}),
+        Registry(
+            devices={"device-living": Entry(area_id="living_room")},
+            child_devices={"child-living": Entry(parent_device_id="device-living")},
+        ),
+        Registry(areas=[Entry(id="living_room", labels={"cozy"})]),
+    )
+
+    assert resolver.entity_ids_for_label("cozy") == ("sensor.child_probe",)

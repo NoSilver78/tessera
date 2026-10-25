@@ -17,7 +17,15 @@ class EntityRegistryLike(Protocol):
 
 
 class DeviceRegistryLike(Protocol):
-    """Subset of Home Assistant's device registry used by Tessera."""
+    """Subset of Home Assistant's device registry used by Tessera.
+
+    ``devices`` is declared as a mapping because that is what it is on the older
+    validated HA lines and in the test doubles; from HA 2026.9 the real
+    attribute is an iterable view whose mapping methods are deprecated, which
+    ``AreaEntityResolver._iter_device_entries`` handles. ``child_devices``
+    (HA 2026.9+) is deliberately *not* part of this protocol: it is absent on
+    2026.7/2026.8, so it is probed with ``getattr`` instead of accessed.
+    """
 
     devices: Mapping[str, Any]
 
@@ -96,7 +104,10 @@ class AreaEntityResolver:
         Scope is the union of the three label sources Home Assistant itself
         expands a label target into (``helpers/service.py``): entities carrying the
         label directly, entities whose device carries it, and entities whose
-        effective area carries it. Like Tessera's area/floor resolution — and unlike
+        effective area carries it. "Device" covers child devices (HA 2026.9+)
+        carrying the label themselves — HA never inherits a label from the
+        parent, so only the *area* of a child device falls back to its parent.
+        Like Tessera's area/floor resolution — and unlike
         HA's *service-target* filtering — it deliberately does NOT drop
         config/diagnostic (``entity_category``) or hidden entities: a scope grant
         covers everything registry-assigned to that scope (mirrors
@@ -112,7 +123,7 @@ class AreaEntityResolver:
             return ()
         labeled_devices = {
             device_id
-            for device_id, device in self._device_registry.devices.items()
+            for device_id, device in self._all_device_entries()
             if device_id and label_id in _entry_labels(device)
         }
         labeled_areas = {
@@ -163,10 +174,66 @@ class AreaEntityResolver:
         return AreaEntityResolution(entity_ids=all_entity_ids, by_area=by_area)
 
     def _device_area_by_id(self) -> dict[Any, str | None]:
-        return {
+        """Map device id to its *effective* area id.
+
+        A child device (HA 2026.9+) without an own area inherits its parent's
+        area — the same rule as ``device_registry.async_get_effective_area_id``,
+        which Home Assistant itself applies when it expands an area policy.
+        Resolving the raw ``area_id`` only would drop those entities out of an
+        area, floor or label grant although HA shows them in that area: a grant
+        narrower than the matrix promises. An area set on the child itself
+        always wins; labels are never inherited (HA rule), so only the area
+        falls back.
+        """
+        areas: dict[Any, str | None] = {
             device_id: _entry_str_value(device, "area_id")
-            for device_id, device in self._device_registry.devices.items()
+            for device_id, device in self._iter_device_entries()
         }
+        for device_id, child in self._iter_child_device_entries():
+            area_id = _entry_str_value(child, "area_id")
+            if area_id is None:
+                parent_id = _entry_value(child, "parent_device_id")
+                # A parent is always a main device, so one hop is the whole
+                # chain. A falsy or dangling parent reference resolves to no
+                # area instead of colliding with device-less entries.
+                area_id = areas.get(parent_id) if parent_id else None
+            areas[device_id] = area_id
+        return areas
+
+    def _iter_device_entries(self) -> list[tuple[Any, Any]]:
+        """Return ``(device_id, entry)`` pairs for Home Assistant's main devices.
+
+        HA 2026.9 deprecated *mapping* access to ``DeviceRegistry.devices``:
+        every ``items()``/``get()``/``[]`` call is reported via ``report_usage``
+        (a log line for custom integrations, removed in 2027.9), while plain
+        iteration keeps yielding the entries and stays supported. The older
+        validated lines (2026.7/2026.8) and the test doubles hand over a real
+        mapping, where the key is the only place the device id lives — so a
+        mapping is read as one and everything else is iterated. That makes the
+        access path follow the registry's own shape, with no HA version check.
+        """
+        devices: Any = self._device_registry.devices
+        if isinstance(devices, Mapping):
+            return list(devices.items())
+        return [(_entry_value(entry, "id"), entry) for entry in devices]
+
+    def _iter_child_device_entries(self) -> list[tuple[Any, Any]]:
+        """Return ``(device_id, entry)`` pairs for child devices, where HA has them.
+
+        ``DeviceRegistry.child_devices`` exists from HA 2026.9 and is a plain
+        collection of entries there; on 2026.7/2026.8 the attribute is absent
+        and there is nothing to add.
+        """
+        children: Any = getattr(self._device_registry, "child_devices", None)
+        if children is None:
+            return []
+        if isinstance(children, Mapping):
+            return list(children.items())
+        return [(_entry_value(entry, "id"), entry) for entry in children]
+
+    def _all_device_entries(self) -> list[tuple[Any, Any]]:
+        """Return main *and* child devices as ``(device_id, entry)`` pairs."""
+        return self._iter_device_entries() + self._iter_child_device_entries()
 
     def _area_floor_by_id(self) -> dict[str, str]:
         """Map area id to floor id, omitting floorless areas.
@@ -193,12 +260,21 @@ class AreaEntityResolver:
 def _effective_area_id(
     entry: Any, device_areas: Mapping[Any, str | None]
 ) -> str | None:
-    """Return direct entity area, falling back to device area only when absent."""
+    """Return direct entity area, falling back to device area only when absent.
+
+    Fail closed on a falsy device id: a device entry stored under ``None`` or an
+    empty string must never collide with device-less entities and hand them its
+    area. Unreachable from live HA (device ids are uuid hex), guarded for parity
+    with the label path's device-key guard and the floor path's None-key
+    defenses.
+    """
     direct_area = _entry_str_value(entry, "area_id")
     if direct_area is not None:
         return direct_area
 
     device_id = _entry_value(entry, "device_id")
+    if not device_id:
+        return None
     return device_areas.get(device_id)
 
 

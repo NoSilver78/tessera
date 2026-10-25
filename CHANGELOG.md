@@ -7,6 +7,33 @@ Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Behoben
+- **Child-Device-Area-Vererbung in der Area-/Floor-/Label-Auflösung.** HA **2026.9** führt
+  Child-Devices ein: ein Child ohne eigene Area erbt die Area des Eltern-Geräts, und HA selbst löst
+  Area-Policies seitdem über `device_registry.async_get_effective_area_id` auf. Tesseras Resolver las
+  nur das rohe `area_id` des Geräts — Entities an einem solchen Child fielen damit aus Area-, Floor-
+  und Label-Grants heraus, obwohl HA und die HA-UI sie in der Area zeigen. Richtung war
+  **fail-closed** (der Grant war zu eng, nie zu weit, kein Rechte-Leck), aber Matrix und Vorschau
+  versprachen etwas anderes als am Ende galt. `resolver._device_area_by_id()` löst jetzt die
+  **effektive** Area auf; eine am Child gesetzte Area gewinnt, und im Label-Pfad zählen
+  Child-Devices mit, die das Label **selbst** tragen — HA erbt Labels nie vom Eltern-Gerät.
+- **Kein deprecated Mapping-Zugriff auf `DeviceRegistry.devices` mehr.** Ab HA 2026.9 meldet jeder
+  `items()`/`get()`/`[]`-Zugriff auf `devices` über `report_usage` (für Custom-Integrationen ein Log,
+  Entfall in **2027.9**); unterstützt ist nur noch das Iterieren der Einträge. Der Resolver liest ein
+  echtes Mapping weiter als Mapping (HA 2026.7/2026.8 und die Test-Doubles, wo der Schlüssel die
+  einzige Quelle der Device-ID ist) und iteriert alles andere — ohne HA-Versionsabfrage.
+- **Fail-closed-Guard im Area-Pfad nachgezogen.** Ein Device-Eintrag unter einem falsy Schlüssel
+  (`None`/`""`) konnte seine Area an *device-lose* Entities weitergeben: `_effective_area_id` suchte
+  mit `device_id=None` im Mapping und fand den `None`-Key. Aus live HA nicht erreichbar (Device-IDs
+  sind UUID-Hex), aber der Label-Pfad hatte diesen Guard längst und der Floor-Pfad seine
+  `None`-Key-Verteidigung — der Area-Pfad nicht. Neuer Test
+  `test_falsy_device_key_does_not_leak_its_area_to_deviceless_entities` als Gegenstück zum
+  bestehenden Label-Test.
+- 12 neue Resolver-Tests: Child mit/ohne eigene Area, Eltern-Gerät ohne Area, dangling/falsy
+  Parent-Referenz, `child_devices` als Collection *und* als Mapping, iterierbare `devices`-View (HA
+  2026.9+), Registry **ohne** `child_devices` (Regression für 2026.7/2026.8), Floor- und
+  Label-Pfad über die geerbte Area, Label am Child selbst, kein Label-Erben vom Eltern-Gerät.
+
 ## [0.9.4] — 2026-10-25
 
 ### Hinzugefügt

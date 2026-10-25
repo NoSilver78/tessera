@@ -86,11 +86,18 @@ nachvollziehbarer Diff gegen den zuvor validierten Tag.
 Belegt durch `tests/test_ha_auth_contract.py` gegen das jeweils installierte HA — der CI-Matrix-Job
 `HA auth contract` fährt jede dieser Linien (`2026.7.1`, `2026.8.1`, `2026.9.4`, `2026.10.4`).
 
-> **Bekannte Lücke (nicht sicherheitsrelevant, fail-closed-Richtung):** HA 2026.9 führt
-> **Child-Devices** ein, die ohne eigene Area die Area des Eltern-Geräts erben. Tesseras Resolver
-> (`resolver._device_area_by_id`) liest nur das rohe `area_id` des Geräts. Entities an einem
-> Child-Device ohne eigene Area fallen damit aus einem Area-/Floor-Grant heraus, obwohl HA sie in
-> der Area anzeigt — der Grant ist **zu eng**, nie zu weit. Eigenes Thema, eigener Fix.
+> **Child-Devices (HA 2026.9+):** Ein Child-Device ohne eigene Area erbt die Area des
+> Eltern-Geräts. `resolver._device_area_by_id()` löst diese **effektive** Area auf — dieselbe Regel
+> wie HAs `device_registry.async_get_effective_area_id` — und Child-Devices zählen auch im
+> Label-Pfad, wenn sie das Label **selbst** tragen (HA erbt Labels nie vom Eltern-Gerät). Eine am
+> Child gesetzte Area gewinnt immer. Geschlossen, Release offen (CHANGELOG `[Unreleased]`).
+
+> **`DeviceRegistry.devices` als Mapping ist ab HA 2026.9 deprecated** (`report_usage`, entfällt in
+> **2027.9**); unterstützt ist nur noch das Iterieren der Einträge. `resolver._iter_device_entries()`
+> liest ein echtes Mapping (HA 2026.7/2026.8, Test-Doubles) weiter als Mapping und iteriert alles
+> andere — die Linie bestimmt also den Zugriffsweg, ohne HA-Version abzufragen. **Vor HA 2027.9**
+> muss der Mapping-Pfad raus; bis dahin ist er die Kompatibilität zu den älteren validierten
+> Linien.
 
 ## Versions-Invarianten
 
