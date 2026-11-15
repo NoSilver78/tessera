@@ -314,6 +314,29 @@ class UserBindingAdapter:
         if callable(invalidate_cache):
             invalidate_cache()
 
+    async def async_strip_tessera_groups(self, user: Any) -> None:
+        """Remove only ``tessera:*`` ids from any user, owner included.
+
+        Restore never rebinds the owner or system-generated users, but HA lets
+        an admin put a group on the owner by hand. Such a binding would keep the
+        group alive and block every restore. Dropping an allow-list group can
+        only narrow a user's grants, never widen them, so this is safe for
+        users Tessera otherwise leaves alone.
+        """
+        self._assert_supported_version()
+        current = _user_group_ids(user)
+        kept = [
+            group_id
+            for group_id in current
+            if not group_id.startswith(TESSERA_GROUP_PREFIX)
+        ]
+        if kept == current:
+            return
+        await self._hass.auth.async_update_user(user, group_ids=kept)
+        invalidate_cache = getattr(user, "invalidate_cache", None)
+        if callable(invalidate_cache):
+            invalidate_cache()
+
     def snapshot_user_groups(self, users: Iterable[Any]) -> AuthRecoverySnapshot:
         """Capture namespace-guarded group bindings for managed Tessera users."""
         return self.snapshot_managed_user_groups(users, include_without_tessera=False)

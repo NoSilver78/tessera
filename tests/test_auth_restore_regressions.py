@@ -191,3 +191,26 @@ async def test_restore_never_puts_tessera_groups_back(hass: HomeAssistant) -> No
     assert result["status"] == "restored"
     assert _group_ids(user) == ["system-users"]
     await _auth_store_reloads(hass)
+
+
+async def test_restore_strips_a_tessera_group_put_on_the_owner(
+    hass: HomeAssistant,
+) -> None:
+    """HA lets an admin put any group on the owner; restore must still finish.
+
+    The owner is never rebound, so the group stayed referenced, the new
+    remove guard refused it, and every restore failed for good.
+    """
+    policy_store, binding = await _adapters(hass)
+    owner = await hass.auth.async_create_user("real-owner", group_ids=["system-admin"])
+    owner.is_owner = True
+    await hass.auth.async_update_user(owner, group_ids=["system-admin", "tessera:r1"])
+
+    result = await async_restore_to_pre_install(
+        AuthRecoverySnapshot(users=()), policy_store, binding, await _users(hass)
+    )
+
+    assert result["status"] == "restored"
+    assert _group_ids(owner) == ["system-admin"]
+    assert await policy_store.async_list_tessera_group_ids() == []
+    await _auth_store_reloads(hass)

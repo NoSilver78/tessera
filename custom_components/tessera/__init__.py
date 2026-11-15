@@ -23,9 +23,10 @@ from homeassistant.loader import async_get_integration
 from homeassistant.util import dt as dt_util
 
 from . import websocket as tessera_websocket
-from ._user_helpers import _is_unmanaged_user
+from ._user_helpers import _is_unmanaged_user, _user_group_ids
 from ._vol import vol
 from .auth_adapter import (
+    TESSERA_GROUP_PREFIX,
     AuthPolicyStoreAdapter,
     HassAuthLike,
     RecoveryController,
@@ -886,7 +887,10 @@ async def _compile_for_mode(
 
     if config["mode"] != MODE_ENFORCE and (
         previous_mode == MODE_ENFORCE
-        or (config["mode"] == MODE_OFF and await _native_enforce_may_be_live(store))
+        or (
+            config["mode"] == MODE_OFF
+            and await _native_enforce_may_be_live(hass, store)
+        )
     ):
         restored = await _restore_pre_install_safely(
             hass,
@@ -1008,6 +1012,9 @@ async def _apply_enforce_mode(
     auth_hass = cast(HassAuthLike, hass)
     binding_adapter = UserBindingAdapter(auth_hass)
     recovery = RecoveryController(auth_hass, binding_adapter)
+    # A snapshot left over from a finished cycle (<= 0.9.4 never dropped it)
+    # must not be reused: it predates every membership change since.
+    await _native_enforce_may_be_live(hass, store)
     state = await store.async_load_state()
     if state["pre_install_snapshot"] is None:
         snapshot = await recovery.async_snapshot(
@@ -1015,7 +1022,27 @@ async def _apply_enforce_mode(
         )
         await store.async_set_pre_install_snapshot(snapshot)
     else:
-        snapshot = snapshot_from_state_data(state["pre_install_snapshot"])
+        # Users created since the snapshot are captured before their first
+        # binding, so restore gives them back exactly what HA gave them — not
+        # an is_admin promotion Tessera granted on top.
+        known = {
+            user.user_id
+            for user in snapshot_from_state_data(state["pre_install_snapshot"]).users
+        }
+        new_users = [
+            user
+            for user_id, user in users_by_id.items()
+            if user_id not in known and not _is_unmanaged_user(user)
+        ]
+        if new_users:
+            additions = await recovery.async_snapshot(
+                new_users, include_without_tessera=True
+            )
+            state = await store.async_extend_pre_install_snapshot(additions)
+        snapshot_data = state["pre_install_snapshot"]
+        if snapshot_data is None:  # checked above; extend never clears it
+            raise RuntimeError("pre_install_snapshot vanished during enforce")
+        snapshot = snapshot_from_state_data(snapshot_data)
     await store.async_mark_apply_in_progress(snapshot)
 
     result = await apply_enforce_plan(
@@ -1056,7 +1083,7 @@ async def _restore_on_enforce_exit_safely(
 ) -> None:
     """Restore pre-install auth state when unloading a live enforce entry."""
     if entry_data.get("mode") != MODE_ENFORCE and not await _native_enforce_may_be_live(
-        cast(TesseraStore, entry_data["store"])
+        hass, cast(TesseraStore, entry_data["store"])
     ):
         return
     restored = await _restore_pre_install_safely(
@@ -1088,10 +1115,16 @@ async def _restore_pre_install_safely(
         snapshot_data = recovery_state["pre_install_snapshot"]
         if snapshot_data is None:
             return True
+        snapshot = snapshot_from_state_data(snapshot_data)
+        if not recovery_state["apply_in_progress"]:
+            # Restore is not atomic. Journal it like an apply, so a crash
+            # half-way is rolled forward by startup recovery instead of leaving
+            # some users restored and the tessera:* groups still in place.
+            await store.async_mark_apply_in_progress(snapshot)
         users_by_id = await _users_by_id(hass)
         auth_hass = cast(HassAuthLike, hass)
         result = await async_restore_to_pre_install(
-            snapshot_from_state_data(snapshot_data),
+            snapshot,
             AuthPolicyStoreAdapter(auth_hass),
             UserBindingAdapter(auth_hass),
             users_by_id,
@@ -1100,7 +1133,6 @@ async def _restore_pre_install_safely(
         if result["status"] == "restored":
             if clear_apply_in_progress:
                 await store.async_clear_apply_in_progress()
-            if not (await store.async_load_state())["apply_in_progress"]:
                 await store.async_clear_pre_install_snapshot()
             _clear_repair_issue(hass, entry_id, REPAIR_RESTORE_FAIL_SAFE)
             return True
@@ -1215,19 +1247,39 @@ def _clear_repair_issue(hass: HomeAssistant, entry_id: str, issue_id: str) -> No
         )
 
 
-async def _native_enforce_may_be_live(store: TesseraStore) -> bool:
-    """Return whether native auth may still carry an un-restored enforce.
+async def _native_enforce_may_be_live(hass: HomeAssistant, store: TesseraStore) -> bool:
+    """Return whether native auth still carries an un-restored enforce.
 
-    The pre-install snapshot exists from the first enforce apply until a
-    successful restore clears it, so it is the persisted marker for "Tessera
-    groups may be bound in HA". The in-memory mode is not: a fail-safe sets it
-    to monitor while the last enforce stays applied natively.
+    The in-memory mode is no marker: a fail-safe sets it to monitor while the
+    last enforce stays applied natively. The persisted snapshot alone is not one
+    either — releases up to 0.9.4 never dropped it, so installs that ran
+    enforce once still carry one long after every ``tessera:*`` binding is gone,
+    and restoring it would re-apply stale memberships (re-granting
+    ``system-admin`` to a since-demoted user). Enforce counts as live when a
+    snapshot exists *and* either the journal is open or a user is still bound
+    to a ``tessera:*`` group. A snapshot without either is stale and dropped.
     """
     try:
         state = await store.async_load_state()
-    except Exception:
-        return False
-    return state["pre_install_snapshot"] is not None
+        if state["pre_install_snapshot"] is None:
+            return False
+        if state["apply_in_progress"]:
+            return True
+        for user in await hass.auth.async_get_users():
+            if any(
+                group_id.startswith(TESSERA_GROUP_PREFIX)
+                for group_id in _user_group_ids(user)
+            ):
+                return True
+        await store.async_clear_pre_install_snapshot()
+    except Exception as err:
+        # Undecidable: neither restore (a stale snapshot may escalate) nor
+        # drop the snapshot (it may still be the only way back).
+        LOGGER.error(
+            "Tessera could not determine whether enforce is still applied (%s)",
+            err.__class__.__name__,
+        )
+    return False
 
 
 async def _users_by_id(hass: HomeAssistant) -> dict[str, Any]:

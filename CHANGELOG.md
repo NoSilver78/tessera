@@ -72,6 +72,19 @@ Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   - **Mittel: Options-Flow auf einem entladenen Eintrag** legte einen Daten-Bucket an, den die
     Websocket-API für einen geladenen Eintrag hielt — sie konnte dann `enforce` nativ anwenden, ohne
     dass ein Unload-Hook es je zurücknimmt.
+  - **Nachgeschärft nach unabhängiger Gegenprüfung des Fix-Diffs:**
+    - Der Snapshot allein ist **kein** Marker für „`enforce` aktiv“: Installationen bis 0.9.4 tragen
+      einen nie verworfenen Snapshot, und dessen Restore nach dem Update hätte genau die alte
+      Rechte-Ausweitung automatisch ausgelöst. `enforce` gilt jetzt nur als aktiv, wenn ein Snapshot
+      existiert **und** das Journal offen ist oder ein Nutzer noch an eine `tessera:*`-Gruppe gebunden
+      ist. Ein Snapshot ohne beides ist veraltet und wird **ohne** Restore verworfen (auch bevor
+      `enforce` ihn wiederverwenden würde).
+    - Nach dem Snapshot angelegte Nutzer werden vor ihrer ersten Bindung in den Snapshot
+      aufgenommen. Eine `is_admin`-Beförderung durch Tessera fällt beim Restore dann auch für sie weg.
+    - Eine von Hand auf den Owner gesetzte `tessera:*`-Gruppe wird beim Restore nur entzogen; das
+      verengt Rechte, erweitert sie nie. Vorher blockierte sie jeden Restore.
+    - Der Restore läuft unter offenem Journal. Ein Absturz mittendrin wird beim Start fortgesetzt,
+      statt einen halb zurückgesetzten Zustand ohne Hinweis zu hinterlassen.
   - **Niedrig:** Repairs-Hinweise `enforce_fail_safe`/`restore_fail_safe` werden nach erfolgreichem
     Apply/Restore wieder entfernt; `frontend` und `panel_custom` stehen jetzt in den
     `dependencies` des Manifests.

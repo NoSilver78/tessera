@@ -53,6 +53,10 @@ class _UserBindingRestoreLike(Protocol):
         """Restore one user to an exact pre-install group set."""
         ...
 
+    async def async_strip_tessera_groups(self, user: Any) -> None:
+        """Remove only ``tessera:*`` ids from a user Tessera does not manage."""
+        ...
+
 
 async def async_restore_to_pre_install(
     snapshot: AuthRecoverySnapshot,
@@ -80,6 +84,14 @@ async def async_restore_to_pre_install(
                 users_by_id[user_id], sorted(group_ids)
             )
             result["restored_user_ids"].append(user_id)
+
+        for user_id in sorted(users_by_id):
+            user = users_by_id[user_id]
+            if _is_unmanaged_user(user) and any(
+                group_id.startswith(TESSERA_GROUP_PREFIX)
+                for group_id in _user_group_ids(user)
+            ):
+                await binding_adapter.async_strip_tessera_groups(user)
 
         # Every user that referenced a tessera:* group has been rebound above,
         # so removing the groups cannot leave a dangling group id behind (HA's

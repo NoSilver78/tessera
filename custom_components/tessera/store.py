@@ -168,6 +168,27 @@ class TesseraStore:
             await self.async_save_state(state)
             return state
 
+    async def async_extend_pre_install_snapshot(
+        self, additions: AuthRecoverySnapshot
+    ) -> TesseraStateData:
+        """Add users the snapshot does not know yet; never touch existing ones.
+
+        Captured entries stay immutable — this only covers users created after
+        the snapshot was taken, before Tessera binds them for the first time.
+        """
+        async with self._state_lock:
+            state = await self.async_load_state()
+            current = state["pre_install_snapshot"]
+            if current is None:
+                raise TesseraStateError("no pre_install_snapshot to extend")
+            known = {user["user_id"] for user in current["users"]}
+            merged = snapshot_to_state_data(additions)
+            current["users"].extend(
+                user for user in merged["users"] if user["user_id"] not in known
+            )
+            await self.async_save_state(state)
+            return state
+
     async def async_clear_pre_install_snapshot(self) -> TesseraStateData:
         """Drop the snapshot once it has been restored.
 
