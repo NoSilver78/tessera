@@ -104,7 +104,7 @@ HA updates!), troubleshooting and FAQ — with screenshots:
 4. **Restart Home Assistant.**
 5. **Settings → Devices & Services → Add Integration → Tessera**.
 
-**Tested HA lines:** Home Assistant **2026.7.x–2026.10.x** (newest validated: **2026.10.4**; see
+**Tested HA lines:** Home Assistant **2026.7.x–2026.11.x** (newest validated: **2026.11.1**; see
 *[version guard](#version-guard-private-ha-apis)*). Within a validated feature line any patch release
 is accepted; on an **unvalidated** monthly release the runtime guard blocks the `enforce` write path
 and keeps Tessera in the read-only `monitor` state.
@@ -151,8 +151,8 @@ Tessera writes partly through **private/undocumented HA auth APIs** for which Ho
 **no** stability guarantee — they can break between releases. Protection:
 
 - **Active protection (runtime guard):** the auth write path checks in code for the validated HA
-  **feature lines** (`SUPPORTED_HA_AUTH_FEATURES`, currently **2026.7**, **2026.8**, **2026.9** and
-  **2026.10**; newest validated `SUPPORTED_HA_AUTH_VERSION` = **2026.10.4**). HA ships breaking
+  **feature lines** (`SUPPORTED_HA_AUTH_FEATURES`, currently **2026.7**, **2026.8**, **2026.9**,
+  **2026.10** and **2026.11**; newest validated `SUPPORTED_HA_AUTH_VERSION` = **2026.11.1**). HA ships breaking
   auth-store changes only in the monthly feature line, so any **patch** inside a validated line is
   accepted, while an **unvalidated monthly release** leaves the write path **fail-closed** and
   `enforce` falls back to the read-only `monitor` state — **no** native write. **An unvalidated HA

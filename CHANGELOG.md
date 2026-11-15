@@ -7,6 +7,8 @@ Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [0.9.5] — 2026-11-15
+
 ### Hinzugefügt
 - **`mypy --strict` pro validierter HA-Linie** in der CI-Contract-Matrix. Der `quality`-Job
   typprüft gegen *eine* HA-Version — die, auf die `pytest-homeassistant-custom-component` gerade
@@ -33,6 +35,69 @@ Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   die Linie bleibt daher **unvalidiert** und fail-closed.
 
 ### Behoben
+- **Sicherheit/Verfügbarkeit — tiefer Code-Review vom 15.11.2026**, alle Befunde mit Regressionstests
+  gegen HAs **echten** `AuthStore` (`tests/test_auth_restore_regressions.py`; die übrige Suite fährt
+  `FakeHass`-Doubles, an denen keiner dieser Fehler sichtbar werden konnte — gegengeprüft: alle sechs
+  neuen Tests sind auf dem alten Code rot):
+  - **Kritisch: kein Login mehr nach `enforce`→`off`.** Restore band nur Nutzer aus dem Snapshot neu
+    und löschte danach alle `tessera:*`-Gruppen. Ein nach dem ersten `enforce` angelegter Nutzer
+    behielt die ID einer gelöschten Gruppe; HAs Auth-Store löst `group_ids` beim Laden mit
+    `groups[id]` auf und scheiterte beim nächsten Start mit `KeyError` — **niemand** konnte sich
+    anmelden, auch nicht der Owner. Restore setzt jetzt jeden verwalteten Nutzer mit `tessera:*`-Gruppe
+    zurück (ohne Snapshot-Eintrag: `tessera:*` raus, sonst nichts; bleibt nichts übrig, `system-users`
+    = HAs Standard für neue Nutzer), und `async_remove_group` verweigert das Löschen einer Gruppe, die
+    noch ein Nutzer trägt.
+  - **Hoch: Rollen-Entzug unter `enforce` hob alle Einschränkungen auf.** Die Bindungs-Prüfung
+    verlangte, dass jede aktuelle `tessera:*`-Gruppe erhalten bleibt — jeder Entzug scheiterte, und
+    der Rollback auf den Vor-Installations-Stand gab allen Nutzern `system-users` (alles erlaubt)
+    zurück. Aktuelle Gruppen müssen jetzt nur *bestätigt*, nicht behalten werden.
+  - **Hoch: veralteter Vor-Installations-Snapshot.** Er wurde nie verworfen; ein zweiter
+    `enforce`→`off`-Zyklus spielte den Stand vom *ersten* zurück — z. B. `system-admin` für einen
+    zwischenzeitlich herabgestuften Nutzer. Der Snapshot wird jetzt nach erfolgreichem Restore
+    verworfen (nicht bei offenem Apply-Journal), der nächste `enforce` nimmt einen frischen.
+  - **Hoch: Restore nach `is_admin`-Rolle dauerhaft blockiert.** Eine Admin-Beförderung über eine
+    Tessera-Rolle machte jeden späteren Restore zu `failed/lockout`; `enforce` ließ sich nicht mehr
+    verlassen. Der Schutz „mindestens ein Owner/Admin bleibt“ gilt weiter über den ganzen Restore.
+  - **Hoch: gelöschter Nutzer blockierte jeden Restore** (`KeyError`) — wird übersprungen.
+  - **Hoch: `off` nach einem Fail-safe stellte nicht wieder her.** Fiel `enforce` auf `monitor`
+    zurück, blieben die nativen Gruppen gebunden, und `off` prüfte nur den In-Memory-Modus. Jetzt
+    gilt der persistierte Snapshot als Marker: `off` und Entladen stellen wieder her, solange er
+    existiert. (`monitor` behält bewusst den zuletzt angewandten, strengeren Stand — siehe
+    docs/MAINTENANCE.md.)
+  - **Hoch: `tessera.recompile` lief ohne `mutation_lock`** und konnte nach einem parallelen `off`
+    erneut `enforce` anwenden.
+  - **Hoch: `remove_role` ließ Label-Grants stehen** — jeder spätere Compile scheiterte an der
+    unbekannten Rolle (`enforce` fiel auf `monitor`), und eine neu angelegte Rolle gleicher ID erbte
+    den alten Grant.
+  - **Mittel: Options-Flow auf einem entladenen Eintrag** legte einen Daten-Bucket an, den die
+    Websocket-API für einen geladenen Eintrag hielt — sie konnte dann `enforce` nativ anwenden, ohne
+    dass ein Unload-Hook es je zurücknimmt.
+  - **Nachgeschärft nach unabhängiger Gegenprüfung des Fix-Diffs:**
+    - Der Snapshot allein ist **kein** Marker für „`enforce` aktiv“: Installationen bis 0.9.4 tragen
+      einen nie verworfenen Snapshot, und dessen Restore nach dem Update hätte genau die alte
+      Rechte-Ausweitung automatisch ausgelöst. `enforce` gilt jetzt nur als aktiv, wenn ein Snapshot
+      existiert **und** das Journal offen ist oder ein Nutzer noch an eine `tessera:*`-Gruppe gebunden
+      ist. Ein Snapshot ohne beides ist veraltet und wird **ohne** Restore verworfen (auch bevor
+      `enforce` ihn wiederverwenden würde).
+    - Nach dem Snapshot angelegte Nutzer werden vor ihrer ersten Bindung in den Snapshot
+      aufgenommen. Eine `is_admin`-Beförderung durch Tessera fällt beim Restore dann auch für sie weg.
+    - Eine von Hand auf den Owner gesetzte `tessera:*`-Gruppe wird beim Restore nur entzogen; das
+      verengt Rechte, erweitert sie nie. Vorher blockierte sie jeden Restore.
+    - Der Restore läuft unter offenem Journal. Ein Absturz mittendrin wird beim Start fortgesetzt,
+      statt einen halb zurückgesetzten Zustand ohne Hinweis zu hinterlassen.
+  - **Niedrig:** Repairs-Hinweise `enforce_fail_safe`/`restore_fail_safe` werden nach erfolgreichem
+    Apply/Restore wieder entfernt; `frontend` und `panel_custom` stehen jetzt in den
+    `dependencies` des Manifests.
+- **HA 2026.11 als validierte Auth-Linie** ([#71](https://github.com/NoSilver78/tessera/issues/71)).
+  Auf HA 2026.11.x blockierte der Versions-Guard jeden `enforce`-Versuch fail-closed
+  (`unsupported HA auth version 2026.11.0`) — Schutz wie vorgesehen, aber das Kernfeature stand
+  still. `SUPPORTED_HA_AUTH_FEATURES` ist jetzt `{2026.7, 2026.8, 2026.9, 2026.10, 2026.11}`,
+  neueste validiert **2026.11.1**. Am Release verifiziert, nicht blind angehoben: `auth/auth_store.py`,
+  `auth/models.py` und alle 9 Dateien in `auth/permissions/` sind byte-identisch zu 2026.10.4;
+  `auth/__init__.py` änderte sich (Login-Flow, Provider-Init), die drei von Tessera aufgerufenen
+  `AuthManager`-Methoden (`async_get_users`, `async_get_user`, `async_update_user`) nicht.
+  Contract-Tests 17/17 und `mypy --strict` grün gegen 2026.11.1; CI-Matrix um `2026.11.1` erweitert.
+  Ältere Linien bleiben unterstützt.
 - **`mypy --strict` gegen aktuelles Home Assistant.** HA migriert voluptuous → **probatio** in zwei
   Schritten, die nicht zusammenfallen: 2026.9 installiert probatio *als* voluptuous (Laufzeit),
   2026.10 dreht die **Annotationen** um. Damit typprüft kein einzelner Import auf allen vier

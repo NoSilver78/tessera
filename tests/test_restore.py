@@ -73,6 +73,7 @@ class SpyBindingAdapter:
         self.events = events
         self.fail_user_id = fail_user_id
         self.restore_calls: list[tuple[str, list[str]]] = []
+        self.strip_calls: list[str] = []
 
     async def async_restore_exact_groups(
         self, user: FakeUser, group_ids: list[str] | tuple[str, ...]
@@ -84,6 +85,12 @@ class SpyBindingAdapter:
         restored_group_ids = sorted(str(group_id) for group_id in group_ids)
         user.group_ids = restored_group_ids
         self.restore_calls.append((user.id, restored_group_ids))
+
+    async def async_strip_tessera_groups(self, user: FakeUser) -> None:
+        """Record removing only tessera:* ids from an unmanaged user."""
+        self.events.append(f"strip:{user.id}")
+        user.group_ids = [g for g in user.group_ids if not g.startswith("tessera:")]
+        self.strip_calls.append(user.id)
 
 
 def _snapshot(*users: tuple[str, tuple[str, ...]]) -> AuthRecoverySnapshot:
@@ -196,6 +203,10 @@ async def test_restore_skips_owner_and_system_generated_users() -> None:
     assert result["status"] == "restored"
     assert result["restored_user_ids"] == []
     assert binding.restore_calls == []
+    # Never rebound — but a tessera group put on them by hand is stripped, or
+    # it would keep the group alive and block every restore.
+    assert binding.strip_calls == ["generated", "owner"]
+    assert users["owner"].group_ids == []
     assert result["group_ids_removed"] == ["tessera:viewer"]
 
 

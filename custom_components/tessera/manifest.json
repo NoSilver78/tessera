@@ -3,12 +3,12 @@
   "name": "Tessera",
   "codeowners": ["@NoSilver78"],
   "config_flow": true,
-  "dependencies": ["http"],
+  "dependencies": ["frontend", "http", "panel_custom"],
   "documentation": "https://github.com/NoSilver78/tessera",
   "integration_type": "service",
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/NoSilver78/tessera/issues",
   "requirements": [],
   "single_config_entry": true,
-  "version": "0.9.4"
+  "version": "0.9.5"
 }

@@ -120,6 +120,7 @@ def remove_role(
     for grants in (
         next_policy["floor_grants"],
         next_policy["area_grants"],
+        next_policy["label_grants"],
         next_policy["entity_overrides"],
     ):
         empty_targets: list[str] = []
@@ -582,8 +583,12 @@ async def _compile_preview(
     policy: TesseraPolicyData,
 ) -> None:
     """Refresh the read-only monitor preview after an options change."""
-    domain_data = hass.data.setdefault(DOMAIN, {})
-    entry_data = domain_data.setdefault(entry_id, {"store": store})
+    # Only a loaded entry has a bucket. Creating one here made an unloaded
+    # entry look loaded to the websocket API, which could then drive the
+    # native enforce path with no unload hook left to restore it.
+    entry_data = hass.data.get(DOMAIN, {}).get(entry_id)
+    if not isinstance(entry_data, dict):
+        return
     entry_data["store"] = store
     if config["mode"] == MODE_OFF:
         entry_data.pop("compiled", None)

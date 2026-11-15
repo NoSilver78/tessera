@@ -24,7 +24,7 @@ from .schema import TesseraConfigData
 # (YEAR.MONTH.PATCH) are bugfix-only and do not migrate the auth store. Tessera
 # therefore validates a feature line and tolerates any patch inside it, so a
 # routine HA patch bump does not needlessly drop the enforce path to monitor.
-SUPPORTED_HA_AUTH_VERSION = "2026.10.4"
+SUPPORTED_HA_AUTH_VERSION = "2026.11.1"
 SUPPORTED_HA_AUTH_FEATURE = ".".join(SUPPORTED_HA_AUTH_VERSION.split(".")[:2])
 
 # Every feature line validated against these adapters, not just the newest one.
@@ -53,8 +53,14 @@ SUPPORTED_HA_AUTH_FEATURE = ".".join(SUPPORTED_HA_AUTH_VERSION.split(".")[:2])
 #   swap at identical policy shape; HA's real PolicyPermissions still grants
 #   exactly Tessera's allow-only policy and nothing else
 #   (tests/test_ha_auth_contract.py, green on both lines; verified 2026-10-25).
+#   2026.10 → 2026.11: auth_store.py, models.py and all of permissions/
+#   byte-identical (2026.10.4 → 2026.11.1). auth/__init__.py changed (login
+#   flow, provider initialisation, duplicate-credentials guard), but the three
+#   AuthManager methods Tessera calls — async_get_users, async_get_user,
+#   async_update_user — are unchanged; contract tests and mypy --strict green
+#   against 2026.11.1 (verified 2026-11-15, issue #71).
 SUPPORTED_HA_AUTH_FEATURES = frozenset(
-    {"2026.7", "2026.8", "2026.9", SUPPORTED_HA_AUTH_FEATURE}
+    {"2026.7", "2026.8", "2026.9", "2026.10", SUPPORTED_HA_AUTH_FEATURE}
 )
 TESSERA_GROUP_PREFIX = "tessera:"
 GROUP_ID_ADMIN = "system-admin"
@@ -235,6 +241,14 @@ class AuthPolicyStoreAdapter:
         group = store._groups.get(group_id)
         if group is not None and group.system_generated:
             raise UnsafeAuthTarget(f"{group_id} is system-generated")
+        if group is not None:
+            # HA's auth store resolves every user's ``group_ids`` on load with a
+            # bare ``groups[group_id]``; a dangling id makes the whole store fail
+            # to load and nobody can log in. Never remove a group a user still
+            # holds — callers rebind first.
+            for user in await self._hass.auth.async_get_users():
+                if group_id in _user_group_ids(user):
+                    raise UnsafeAuthTarget(f"{group_id} is still bound to a user")
         store._groups.pop(group_id, None)
         await _async_persist_auth_store(store)
 
@@ -261,18 +275,18 @@ class UserBindingAdapter:
         """Bind a managed user to the full intended native group superset.
 
         REPLACE semantics: ``full_group_ids`` wholly replaces the user's native
-        ``group_ids``. The no-drop guarantee is *caller-asserted*: this method
-        only verifies that every id in ``expected_tessera_group_ids`` is present
-        in ``full_group_ids``. It cannot detect a Tessera group the caller
-        forgot to list, so the E3 caller MUST compute ``expected`` from the
-        user's full current Tessera membership (docs/spec-e3-enforce.md §8).
+        ``group_ids``. The caller must acknowledge every Tessera group the user
+        currently holds in ``expected_tessera_group_ids`` (computed from the
+        user's live membership, docs/spec-e3-enforce.md §8); an unacknowledged
+        current Tessera group fails closed, so a binding computed against a
+        stale view cannot silently overwrite it. Acknowledged groups may be
+        dropped — that is how a role revocation reaches HA.
 
         Args:
             user: HA user or test double to update.
             full_group_ids: Complete replacement set for ``user.group_ids``.
-            expected_tessera_group_ids: Tessera role groups that must be present
-                in ``full_group_ids``. Guards against an under-computed set, not
-                against over-dropping groups outside this set.
+            expected_tessera_group_ids: The user's current Tessera groups, as
+                seen by the caller when it computed ``full_group_ids``.
         """
         self._assert_supported_version()
         sorted_group_ids = _validate_full_group_superset(
@@ -296,6 +310,29 @@ class UserBindingAdapter:
         self._assert_supported_version()
         sorted_group_ids = _validate_exact_restore_binding(user, group_ids)
         await self._hass.auth.async_update_user(user, group_ids=sorted_group_ids)
+        invalidate_cache = getattr(user, "invalidate_cache", None)
+        if callable(invalidate_cache):
+            invalidate_cache()
+
+    async def async_strip_tessera_groups(self, user: Any) -> None:
+        """Remove only ``tessera:*`` ids from any user, owner included.
+
+        Restore never rebinds the owner or system-generated users, but HA lets
+        an admin put a group on the owner by hand. Such a binding would keep the
+        group alive and block every restore. Dropping an allow-list group can
+        only narrow a user's grants, never widen them, so this is safe for
+        users Tessera otherwise leaves alone.
+        """
+        self._assert_supported_version()
+        current = _user_group_ids(user)
+        kept = [
+            group_id
+            for group_id in current
+            if not group_id.startswith(TESSERA_GROUP_PREFIX)
+        ]
+        if kept == current:
+            return
+        await self._hass.auth.async_update_user(user, group_ids=kept)
         invalidate_cache = getattr(user, "invalidate_cache", None)
         if callable(invalidate_cache):
             invalidate_cache()
@@ -464,11 +501,12 @@ def _validate_full_group_superset(
             "expected_tessera_group_ids missing current Tessera groups: "
             f"{sorted(unasserted_current)}"
         )
-    missing = expected_group_ids - group_ids
-    if missing:
-        raise IncompleteSuperset(
-            f"full_group_ids missing expected Tessera groups: {sorted(missing)}"
-        )
+    # ``expected_tessera_group_ids`` is the caller's acknowledgement of every
+    # Tessera group the user holds *now* (checked above, so a concurrent change
+    # cannot be overwritten blind). It is deliberately NOT required to survive
+    # in ``group_ids``: a revoked role must be droppable. An earlier "no-drop"
+    # check here failed every revocation under enforce, and the failed apply
+    # then rolled everybody back to the unrestricted pre-install state.
     if GROUP_ID_ADMIN in current_group_ids and GROUP_ID_ADMIN not in group_ids:
         raise LockoutRisk("refusing to remove system-admin from an admin user")
     # Admin assignment (the `change` tier) is governed by the PLAN
@@ -503,11 +541,13 @@ def _validate_exact_restore_binding(user: Any, group_ids: Collection[str]) -> li
     here only the managed-user guard and the admin-demotion lockout guard apply.
     """
     _assert_managed_user(user)
-    target_group_ids = set(group_ids)
-    current_group_ids = set(_user_group_ids(user))
-    if GROUP_ID_ADMIN in current_group_ids and GROUP_ID_ADMIN not in target_group_ids:
-        raise LockoutRisk("refusing to remove system-admin from an admin user")
-    return sorted(target_group_ids)
+    # No per-user admin-demotion refusal here: restore puts back the captured
+    # pre-install state, and a user promoted through an ``is_admin`` role under
+    # enforce must lose that promotion again. Refusing it made every later
+    # restore fail for good. The lockout protection that matters — at least one
+    # active owner/admin survives — is checked over the whole restore plan by
+    # the caller (``_assert_owner_or_admin_survives_in``).
+    return sorted(set(group_ids))
 
 
 def _ha_feature_line(ha_version: str) -> str:

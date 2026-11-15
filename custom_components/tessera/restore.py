@@ -9,8 +9,10 @@ from __future__ import annotations
 from collections.abc import Collection, Mapping
 from typing import Any, Literal, Protocol, TypedDict
 
-from ._user_helpers import _is_unmanaged_user
+from ._user_helpers import _is_unmanaged_user, _user_group_ids
 from .auth_adapter import (
+    GROUP_ID_USER,
+    TESSERA_GROUP_PREFIX,
     AuthRecoverySnapshot,
     LockoutRisk,
     _assert_owner_or_admin_survives_in,
@@ -51,6 +53,10 @@ class _UserBindingRestoreLike(Protocol):
         """Restore one user to an exact pre-install group set."""
         ...
 
+    async def async_strip_tessera_groups(self, user: Any) -> None:
+        """Remove only ``tessera:*`` ids from a user Tessera does not manage."""
+        ...
+
 
 async def async_restore_to_pre_install(
     snapshot: AuthRecoverySnapshot,
@@ -69,20 +75,29 @@ async def async_restore_to_pre_install(
     """
     result = _restore_result("restored")
     try:
-        _assert_restore_owner_or_admin_survives(snapshot, users_by_id)
+        targets = _restore_targets(snapshot, users_by_id)
+        _assert_restore_owner_or_admin_survives(targets, users_by_id)
         tessera_group_ids = await policy_store.async_list_tessera_group_ids()
-        for user_snapshot in snapshot.users:
-            user = users_by_id[user_snapshot.user_id]
-            if _is_unmanaged_user(user):
-                continue
-            _assert_restore_owner_or_admin_survives(snapshot, users_by_id)
+        for user_id, group_ids in targets.items():
+            _assert_restore_owner_or_admin_survives(targets, users_by_id)
             await binding_adapter.async_restore_exact_groups(
-                user, user_snapshot.group_ids
+                users_by_id[user_id], sorted(group_ids)
             )
-            result["restored_user_ids"].append(user_snapshot.user_id)
+            result["restored_user_ids"].append(user_id)
 
+        for user_id in sorted(users_by_id):
+            user = users_by_id[user_id]
+            if _is_unmanaged_user(user) and any(
+                group_id.startswith(TESSERA_GROUP_PREFIX)
+                for group_id in _user_group_ids(user)
+            ):
+                await binding_adapter.async_strip_tessera_groups(user)
+
+        # Every user that referenced a tessera:* group has been rebound above,
+        # so removing the groups cannot leave a dangling group id behind (HA's
+        # auth store fails to load on one — no login for anybody).
         for group_id in tessera_group_ids:
-            _assert_restore_owner_or_admin_survives(snapshot, users_by_id)
+            _assert_restore_owner_or_admin_survives(targets, users_by_id)
             await policy_store.async_remove_group(group_id)
             result["group_ids_removed"].append(group_id)
     except LockoutRisk as error:
@@ -106,15 +121,56 @@ def _restore_result(status: RestoreStatus) -> RestoreResult:
     }
 
 
-def _assert_restore_owner_or_admin_survives(
+def _restore_targets(
     snapshot: AuthRecoverySnapshot, users_by_id: Mapping[str, Any]
-) -> None:
-    target_group_ids_by_user = {
-        user_snapshot.user_id: set(user_snapshot.group_ids)
-        for user_snapshot in snapshot.users
+) -> dict[str, set[str]]:
+    """Return the exact group set every managed user is restored to.
+
+    * Users in the snapshot get their captured groups back. A user deleted in
+      HA since the snapshot is skipped — there is nothing left to restore, and
+      indexing it used to abort every restore attempt for good.
+    * Managed users *not* in the snapshot (created after the first enforce)
+      but holding ``tessera:*`` groups lose those groups and keep everything
+      else; with nothing left they get ``system-users``, HA's default for a
+      new user. Skipping them would leave dangling group ids once the
+      ``tessera:*`` groups are removed.
+    * ``tessera:*`` ids never survive a restore, even if a snapshot carries
+      them (taken while leftover groups existed).
+    """
+    targets: dict[str, set[str]] = {}
+    for user_snapshot in snapshot.users:
+        user = users_by_id.get(user_snapshot.user_id)
+        if user is None or _is_unmanaged_user(user):
+            continue
+        targets[user_snapshot.user_id] = _without_tessera_groups(
+            user_snapshot.group_ids
+        )
+    for user_id in sorted(users_by_id):
+        user = users_by_id[user_id]
+        if user_id in targets or _is_unmanaged_user(user):
+            continue
+        current = _user_group_ids(user)
+        if any(group_id.startswith(TESSERA_GROUP_PREFIX) for group_id in current):
+            targets[user_id] = _without_tessera_groups(current)
+    return targets
+
+
+def _without_tessera_groups(group_ids: Collection[str]) -> set[str]:
+    kept = {
+        group_id
+        for group_id in group_ids
+        if not group_id.startswith(TESSERA_GROUP_PREFIX)
     }
+    if not kept and len(kept) != len(set(group_ids)):
+        return {GROUP_ID_USER}
+    return kept
+
+
+def _assert_restore_owner_or_admin_survives(
+    targets: Mapping[str, set[str]], users_by_id: Mapping[str, Any]
+) -> None:
     _assert_owner_or_admin_survives_in(
-        target_group_ids_by_user,
+        targets,
         users_by_id,
         message="restore would remove the last owner/admin recovery path",
     )

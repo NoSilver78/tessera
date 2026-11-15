@@ -232,6 +232,26 @@ class E35Store:
         self.state["apply_in_progress"] = False
         return deepcopy(self.state)
 
+    async def async_extend_pre_install_snapshot(
+        self, additions: AuthRecoverySnapshot
+    ) -> dict[str, Any]:
+        """Record adding users the snapshot does not know yet."""
+        self.events.append("extend_snapshot")
+        known = {
+            user["user_id"] for user in self.state["pre_install_snapshot"]["users"]
+        }
+        for user in snapshot_to_state_data(additions)["users"]:
+            if user["user_id"] not in known:
+                self.state["pre_install_snapshot"]["users"].append(user)
+        return deepcopy(self.state)
+
+    async def async_clear_pre_install_snapshot(self) -> dict[str, Any]:
+        """Record snapshot drop after a successful restore."""
+        self.events.append("clear_snapshot")
+        assert self.state["apply_in_progress"] is False
+        self.state["pre_install_snapshot"] = None
+        return deepcopy(self.state)
+
 
 class AckStore(E35Store):
     """Store double for D9 ack service tests."""
@@ -1535,6 +1555,7 @@ async def test_enforce_apply_failure_rolls_back_and_clears_journal(
         "apply",
         "restore",
         "clear",
+        "clear_snapshot",
         "monitor_preview",
     ]
     assert store.config["mode"] == "monitor"
@@ -1638,7 +1659,7 @@ async def test_startup_open_journal_restores_and_clears_before_compile(
 
     assert await tessera_init.async_setup_entry(hass, FakeEntry("entry-1")) is True
 
-    assert events == ["restore", "clear", "monitor_preview"]
+    assert events == ["restore", "clear", "clear_snapshot", "monitor_preview"]
     assert store.state["apply_in_progress"] is False
 
 
@@ -1717,9 +1738,101 @@ async def test_mode_switch_from_enforce_to_off_restores_pre_install_snapshot(
 
     await tessera_init._compile_for_mode(hass, "entry-1", entry_data)
 
-    assert events == ["restore", "clear"]
+    assert events == ["mark", "restore", "clear", "clear_snapshot"]
     assert entry_data["mode"] == "off"
     assert "preview" not in entry_data
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("config_mode", "restores"), [("off", True), ("monitor", False)]
+)
+async def test_switch_after_fail_safe_restores_only_on_off(
+    monkeypatch: pytest.MonkeyPatch, config_mode: str, restores: bool
+) -> None:
+    """A fail-safe leaves enforce applied natively behind an in-memory monitor.
+
+    The snapshot is the persisted marker for that: ``off`` must restore even
+    though the previous in-memory mode is monitor (otherwise the groups stay
+    bound forever), while staying in monitor keeps the documented behaviour of
+    leaving the last, stricter apply in place.
+    """
+    events: list[str] = []
+    state = {
+        "pre_install_snapshot": snapshot_to_state_data(_snapshot()),
+        "apply_in_progress": False,
+    }
+    store = E35Store(config_mode, state=state, events=events)
+    hass = AuthHass(
+        [
+            FakeUser("admin", ["system-admin"], is_owner=True),
+            FakeUser("user-1", ["tessera:viewer"]),
+        ]
+    )
+    entry_data: dict[str, Any] = {"store": store, "mode": "monitor"}
+
+    async def fake_restore(*_args: Any) -> dict[str, Any]:
+        events.append("restore")
+        return {
+            "status": "restored",
+            "refused_reason": None,
+            "restored_user_ids": ["admin"],
+            "group_ids_removed": ["tessera:viewer"],
+            "detail": [],
+        }
+
+    async def fake_preview(*_args: Any) -> None:
+        events.append("monitor_preview")
+
+    monkeypatch.setattr(tessera_init, "async_restore_to_pre_install", fake_restore)
+    monkeypatch.setattr(tessera_init, "_compile_monitor_preview", fake_preview)
+    _patch_noop_adapters(monkeypatch)
+
+    await tessera_init._compile_for_mode(hass, "entry-1", entry_data)
+
+    if restores:
+        assert events == ["mark", "restore", "clear", "clear_snapshot"]
+        assert store.state["pre_install_snapshot"] is None
+    else:
+        assert events == ["monitor_preview"]
+        assert store.state["pre_install_snapshot"] is not None
+
+
+@pytest.mark.asyncio
+async def test_off_drops_a_stale_snapshot_without_restoring(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A snapshot nobody is bound against any more is never restored.
+
+    Releases up to 0.9.4 never dropped the snapshot. Restoring such a leftover
+    after an upgrade would re-apply stale memberships — e.g. system-admin for a
+    user an admin demoted since. It is dropped instead.
+    """
+    events: list[str] = []
+    state = {
+        "pre_install_snapshot": snapshot_to_state_data(_snapshot()),
+        "apply_in_progress": False,
+    }
+    store = E35Store("off", state=state, events=events)
+    hass = AuthHass(
+        [
+            FakeUser("admin", ["system-admin"], is_owner=True),
+            FakeUser("eve", ["system-users"]),  # demoted since; no tessera group
+        ]
+    )
+    entry_data: dict[str, Any] = {"store": store, "mode": None}
+
+    async def fail_restore(*_args: Any) -> dict[str, Any]:
+        raise AssertionError("a stale snapshot must not be restored")
+
+    monkeypatch.setattr(tessera_init, "async_restore_to_pre_install", fail_restore)
+    _patch_noop_adapters(monkeypatch)
+
+    await tessera_init._compile_for_mode(hass, "entry-1", entry_data)
+
+    assert events == ["clear_snapshot"]
+    assert store.state["pre_install_snapshot"] is None
+    assert entry_data["mode"] == "off"
 
 
 @pytest.mark.asyncio
@@ -1752,7 +1865,7 @@ async def test_unload_live_enforce_entry_restores_pre_install(
 
     assert await tessera_init.async_unload_entry(hass, FakeEntry("entry-1")) is True
 
-    assert events == ["restore", "clear"]
+    assert events == ["mark", "restore", "clear", "clear_snapshot"]
     assert "entry-1" not in hass.data[DOMAIN]
 
 
@@ -1855,7 +1968,9 @@ async def test_second_enforce_run_reuses_pre_install_snapshot(
         "apply_in_progress": False,
     }
     store = E35Store("enforce", state=state, events=events)
-    hass = AuthHass([FakeUser("admin", ["system-admin"], is_owner=True)])
+    # "admin" is in the snapshot and still bound to a tessera group, so the
+    # snapshot is live (not a stale leftover) and must be reused untouched.
+    hass = AuthHass([FakeUser("admin", ["system-admin", "tessera:viewer"])])
     entry_data: dict[str, Any] = {"store": store}
 
     async def fake_compute(_hass: Any, _store: Any) -> dict[str, Any]:
@@ -1886,6 +2001,70 @@ async def test_second_enforce_run_reuses_pre_install_snapshot(
 
     assert events == ["compute", "mark", "apply", "clear"]
     assert store.state["pre_install_snapshot"] == state["pre_install_snapshot"]
+
+
+@pytest.mark.asyncio
+async def test_enforce_captures_users_created_since_the_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A user created during enforce is captured before Tessera first binds it.
+
+    Restore then gives back exactly what HA gave that user, not an is_admin
+    promotion Tessera granted on top. Known users are never re-captured.
+    """
+    events: list[str] = []
+    state = {
+        "pre_install_snapshot": snapshot_to_state_data(_snapshot()),
+        "apply_in_progress": False,
+    }
+    store = E35Store("enforce", state=state, events=events)
+    hass = AuthHass(
+        [
+            FakeUser("admin", ["system-admin", "tessera:viewer"]),
+            FakeUser("late", ["system-users"]),
+        ]
+    )
+    entry_data: dict[str, Any] = {"store": store}
+
+    async def fake_compute(_hass: Any, _store: Any) -> dict[str, Any]:
+        events.append("compute")
+        return _clean_plan()
+
+    captured: list[list[str]] = []
+
+    class RecordingRecovery:
+        """Recovery double that snapshots only what it is handed."""
+
+        def __init__(self, _hass: Any, _binding: Any) -> None:
+            pass
+
+        async def async_snapshot(
+            self, users: list[FakeUser], **_kwargs: Any
+        ) -> AuthRecoverySnapshot:
+            captured.append([user.id for user in users])
+            return AuthRecoverySnapshot(
+                users=tuple(
+                    UserGroupSnapshot(user.id, tuple(user.group_ids)) for user in users
+                )
+            )
+
+    async def fake_apply(*_args: Any) -> dict[str, Any]:
+        events.append("apply")
+        return _apply_result("applied")
+
+    monkeypatch.setattr(tessera_init, "compute_enforce_plan", fake_compute)
+    monkeypatch.setattr(tessera_init, "RecoveryController", RecordingRecovery)
+    monkeypatch.setattr(tessera_init, "apply_enforce_plan", fake_apply)
+    _patch_noop_adapters(monkeypatch)
+
+    await tessera_init._compile_for_mode(hass, "entry-1", entry_data)
+
+    assert captured == [["late"]]
+    assert events == ["compute", "extend_snapshot", "mark", "apply", "clear"]
+    assert store.state["pre_install_snapshot"]["users"] == [
+        {"user_id": "admin", "group_ids": ["system-admin"]},
+        {"user_id": "late", "group_ids": ["system-users"]},
+    ]
 
 
 @pytest.mark.asyncio

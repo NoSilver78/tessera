@@ -106,7 +106,7 @@ Troubleshooting und FAQ — mit Screenshots:
 4. **Home Assistant neu starten.**
 5. **Einstellungen → Geräte & Dienste → Integration hinzufügen → Tessera**.
 
-**Getestete HA-Linien:** Home Assistant **2026.7.x–2026.10.x** (neueste validiert: **2026.10.4**;
+**Getestete HA-Linien:** Home Assistant **2026.7.x–2026.11.x** (neueste validiert: **2026.11.1**;
 siehe *[Version-Guard](#version-guard-private-ha-apis)*). Innerhalb einer validierten Feature-Linie
 wird jedes Patch-Release akzeptiert; auf einem **nicht validierten** Monats-Release blockiert der
 Laufzeit-Guard den `enforce`-Schreibpfad und hält Tessera im read-only `monitor`-Zustand.
@@ -154,8 +154,8 @@ Tessera schreibt teils über **private/undokumentierte HA-Auth-APIs**, für die 
 Stabilitätsgarantie gibt — sie können zwischen Releases brechen. Schutz:
 
 - **Aktiver Schutz (Laufzeit-Guard):** Der Auth-Schreibpfad prüft im Code auf die validierten HA-
-  **Feature-Linien** (`SUPPORTED_HA_AUTH_FEATURES`, derzeit **2026.7**, **2026.8**, **2026.9** und
-  **2026.10**; neueste validiert `SUPPORTED_HA_AUTH_VERSION` = **2026.10.4**). HA liefert
+  **Feature-Linien** (`SUPPORTED_HA_AUTH_FEATURES`, derzeit **2026.7**, **2026.8**, **2026.9**,
+  **2026.10** und **2026.11**; neueste validiert `SUPPORTED_HA_AUTH_VERSION` = **2026.11.1**). HA liefert
   Auth-Store-Breaking-Changes nur in der Monats-Feature-Linie aus, daher wird jedes **Patch** in einer
   validierten Linie akzeptiert, während ein **nicht validiertes Monats-Release** den Schreibpfad
   **fail-closed** lässt und `enforce` auf den read-only `monitor`-Zustand zurückfällt — **kein**

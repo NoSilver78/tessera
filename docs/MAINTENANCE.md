@@ -15,7 +15,7 @@ Schutzschichten.
 
 1. **Code-Guard auf die validierten HA-Feature-Linien.** Der Auth-Schreibpfad prüft im Code gegen die
    Menge validierter HA-**Feature-Linien** `YEAR.MONTH` (derzeit **`2026.7`**, **`2026.8`**,
-   **`2026.9`** und **`2026.10`**, `SUPPORTED_HA_AUTH_FEATURES`; neueste validiert `2026.10.4`). Jedes
+   **`2026.9`**, **`2026.10`** und **`2026.11`**, `SUPPORTED_HA_AUTH_FEATURES`; neueste validiert `2026.11.1`). Jedes
    Patch innerhalb einer validierten Linie passiert; auf einem **nicht validierten Monats-Release** wird der
    Enforce-/Schreibpfad **fail-closed blockiert** (`compute_enforce_plan` liefert einen
    `blocked`-Plan) — **kein** nativer Write; wirksam bleibt der read-only `monitor`-Zustand. HA liefert
@@ -58,10 +58,15 @@ Schutzschichten.
    > D9-Vorprüfung geblockt (z. B. weil eine neue auth-berührende Component auftaucht), fällt der
    > Runtime auf `monitor` und legt ein Repairs-Issue an — **lässt aber die zuletzt angewandten
    > (restriktiveren) `tessera:`-Gruppen stehen**, bis ein Admin die Ursache auflöst (Ack bzw. Fix)
-   > und einen sauberen `enforce`→`off`-Zyklus fährt. Das ist **kein** Halbzustand (der native
-   > Zustand ist der letzte konsistente, *strengere* Apply — kein teilweiser Write) und **kein**
+   > und `enforce` erneut oder `off` setzt. Das ist **kein** Halbzustand (der native Zustand ist der
+   > letzte konsistente, *strengere* Apply — kein teilweiser Write) und **kein**
    > Sicherheits-Downgrade. Nur eine bewusste UX-Konsequenz: angezeigter `monitor`-Modus und noch
-   > vorhandene native Gruppen können auseinanderlaufen, bis der Admin `enforce` erneut setzt.
+   > vorhandene native Gruppen können auseinanderlaufen.
+   >
+   > **Seit v0.9.5** stellen `off` und das Entladen des Eintrags auch nach einem solchen Fail-safe
+   > wieder her: Marker ist der persistierte Vor-Installations-Snapshot (er existiert vom ersten
+   > `enforce`-Apply bis zum erfolgreichen Restore), nicht der In-Memory-Modus. Vorher prüfte `off`
+   > nur den Modus — nach einem Fail-safe blieben die Gruppen dann dauerhaft gebunden.
 
 ## Prozess pro HA-Release
 
@@ -124,10 +129,10 @@ nachvollziehbarer Diff gegen den zuvor validierten Tag.
 | `2026.8` | 2026.7.1 | `auth_store.py` byte-identisch, `permissions/` unverändert, `models.Group` unverändert | 2026-08-16 (v0.9.2) |
 | `2026.9` | 2026.8.1 | `auth_store.py` + `models.py` byte-identisch. `permissions/entities.py` geändert (Area-Sub-Policy löst jetzt die *effektive* Area eines Geräts auf, `dr.async_get_effective_area_id`, für Child-Device-Vererbung) — **für Tessera nicht erreichbar**: der Compiler emittiert ausschließlich `entity_ids`-Leaves (hart geprüft in `_assert_allow_only_policy`) | 2026-10-25 (v0.9.4) |
 | `2026.10` | 2026.9.4 | `auth_store.py` byte-identisch; `models.Group` unverändert (`models.py` bekam nur PKCE-Felder am `AuthFlowContext` = Login-Flow, nicht das Gruppenmodell). `permissions/` tauschte `voluptuous` gegen `probatio` (HA ruft `install_as_voluptuous()` beim Import) — Schema-**Bibliothek** bei identischer Policy-Shape; HAs echtes `PolicyPermissions` gewährt weiterhin genau Tesseras allow-only-Policy | 2026-10-25 (v0.9.4) |
-| `2026.11` *(Vorschau, `dev`)* | 2026.10.4 | `auth_store.py`, `models.py` **und alle 9 Dateien in `permissions/` byte-identisch** — am Policy-Schema ändert sich für 2026.11 bislang **nichts** (`POLICY_SCHEMA = probatio.Schema({probatio.Optional(CAT_ENTITIES): ENTITY_POLICY_SCHEMA})`, gleiche Keys, gleiche Leaf-Shape). Im Device-Registry bleiben `ChildDeviceEntry.parent_device_id`, `child_devices` und `async_get_effective_area_id` unverändert; die `devices`-Mapping-Deprecation steht weiter auf `breaks_in_ha_version=2027.9.0`. **Noch nicht validiert** — `dev` ist kein Release, der Guard bleibt fail-closed, bis die Linie als Beta/Release existiert | geprüft 2026-10-25 (`dev` @ 2026.11.0.dev0) |
+| `2026.11` | 2026.10.4 | Gegen das Release **2026.11.1** wiederholt: `auth_store.py`, `models.py` und alle 9 Dateien in `permissions/` **byte-identisch**. `auth/__init__.py` geändert (Login-Flow, paralleles Provider-Init, `DuplicateCredentialsError`) — die drei von Tessera aufgerufenen `AuthManager`-Methoden `async_get_users`/`async_get_user`/`async_update_user` sind **unverändert**. Device-Registry stark umgebaut (`DeviceInfo` als Dataclass), die vom Resolver gelesenen Formen bleiben (Registry-Contract grün). Contract-Tests 17/17 + `mypy --strict` grün gegen 2026.11.1. Auslöser: Issue #71 | 2026-11-15 (v0.9.5) |
 
 Belegt durch `tests/test_ha_auth_contract.py` gegen das jeweils installierte HA — der CI-Matrix-Job
-`HA auth contract` fährt jede dieser Linien (`2026.7.1`, `2026.8.1`, `2026.9.4`, `2026.10.4`).
+`HA auth contract` fährt jede dieser Linien (`2026.7.1`, `2026.8.1`, `2026.9.4`, `2026.10.4`, `2026.11.1`).
 
 > **Child-Devices (HA 2026.9+):** Ein Child-Device ohne eigene Area erbt die Area des
 > Eltern-Geräts. `resolver._device_area_by_id()` löst diese **effektive** Area auf — dieselbe Regel

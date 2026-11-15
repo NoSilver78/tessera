@@ -203,8 +203,13 @@ def test_add_role_and_remove_role_updates_config_and_grants() -> None:
         control=False,
     )
 
+    policy["label_grants"] = {"kids": {"viewer": {"read": True, "control": False}}}
+
     next_config, next_policy = remove_role(config, policy, "viewer")
 
+    # A leftover label grant made every later compile fail on an unknown role
+    # (enforce fell safe to monitor) and came back if the role id was re-added.
+    assert next_policy["label_grants"] == {}
     assert config["roles"]["viewer"] == {
         "name": "Viewer",
         "description": "Read-only role",
@@ -492,6 +497,7 @@ async def test_compile_preview_updates_hass_data_without_native_write(
         control=True,
     )
     hass = FakeHass()
+    hass.data[DOMAIN] = {"entry-1": {"store": FakeStore()}}  # a loaded entry
 
     monkeypatch.setattr(
         "custom_components.tessera.config_flow.AreaEntityResolver.from_hass",
@@ -514,6 +520,30 @@ async def test_compile_preview_updates_hass_data_without_native_write(
     assert hass.data[DOMAIN]["entry-1"]["preview"]["control_total"] == 1
     assert hass.data[DOMAIN]["entry-1"]["preview"]["lint"]["conflicts_total"] == 0
     assert hass.data[DOMAIN]["entry-1"]["lint"]["conflicts_total"] == 0
+
+
+@pytest.mark.asyncio
+async def test_compile_preview_never_creates_a_bucket_for_an_unloaded_entry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An options save on an unloaded entry must not make it look loaded.
+
+    The websocket API treats any bucket with a store as the loaded entry; a
+    bucket created here let it drive the native enforce path for an entry with
+    no unload hook left to restore.
+    """
+    config = add_role(set_mode(default_config_data(), "enforce"), "viewer")
+    hass = FakeHass()
+    monkeypatch.setattr(
+        "custom_components.tessera.config_flow.AreaEntityResolver.from_hass",
+        classmethod(lambda cls, hass: FakeResolver()),
+    )
+
+    await _compile_preview(
+        hass, "entry-1", FakeStore(), config=config, policy=default_policy_data()
+    )
+
+    assert "entry-1" not in hass.data.get(DOMAIN, {})
 
 
 @pytest.mark.asyncio
