@@ -525,7 +525,8 @@ Prüfe der Reihe nach:
 1. Ist der Nutzer **Admin/Owner**? Dann greift der **Bypass** — er wird nie eingeschränkt.
 2. Ist der Modus wirklich `enforce`? (`tessera.preflight` → `mode`).
 3. Hat der Nutzer eine **Mitgliedschaft**? (ohne Rolle: Default = allow-nothing).
-4. Nach Modelländerungen ggf. `tessera.recompile` ausführen.
+4. Registry- und Nutzer-Änderungen kompilieren selbst neu (entprellt, etwa 2 s). Nach
+   Modelländerungen außerhalb von Panel/Options-Flow `tessera.recompile` ausführen.
 
 ### Änderungen wirken nicht
 

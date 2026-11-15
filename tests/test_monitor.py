@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import custom_components.tessera as tessera_init
@@ -76,11 +76,25 @@ class FakeServices:
         self.handlers[(domain, service)] = handler
 
 
+class FakeBus:
+    """Event bus double recording listeners (auto-recompile wiring)."""
+
+    def __init__(self) -> None:
+        """Initialize the listener list."""
+        self.listeners: list[tuple[str, Any]] = []
+
+    def async_listen(self, event_type: str, listener: Any) -> Any:
+        """Record a listener and return its remover."""
+        self.listeners.append((event_type, listener))
+        return lambda: self.listeners.remove((event_type, listener))
+
+
 class FakeHass:
     """Minimal Home Assistant double with auth access trapped."""
 
     def __init__(self) -> None:
         """Initialize HA-like state."""
+        self.bus = FakeBus()
         self.data: dict[str, Any] = {}
         self.services = FakeServices()
 
@@ -95,6 +109,11 @@ class FakeEntry:
     """Minimal config entry double."""
 
     entry_id: str
+    unload_callbacks: list[Any] = field(default_factory=list, compare=False)
+
+    def async_on_unload(self, func: Any) -> None:
+        """Record an unload callback, like ConfigEntry.async_on_unload."""
+        self.unload_callbacks.append(func)
 
 
 @dataclass(frozen=True)

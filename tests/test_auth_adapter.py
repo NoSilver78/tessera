@@ -126,11 +126,25 @@ class FakeAuth:
         return self.users
 
 
+class FakeBus:
+    """Event bus double recording listeners (auto-recompile wiring)."""
+
+    def __init__(self) -> None:
+        """Initialize the listener list."""
+        self.listeners: list[tuple[str, Any]] = []
+
+    def async_listen(self, event_type: str, listener: Any) -> Any:
+        """Record a listener and return its remover."""
+        self.listeners.append((event_type, listener))
+        return lambda: self.listeners.remove((event_type, listener))
+
+
 class FakeHass:
     """Home Assistant test double carrying fake auth and domain data."""
 
     def __init__(self) -> None:
         """Initialize fake HA state."""
+        self.bus = FakeBus()
         self.auth = FakeAuth()
         self.data: dict[str, Any] = {}
         self.services = FakeServices()
@@ -144,6 +158,7 @@ class AuthTrapHass:
         self.data: dict[str, Any] = {}
         self.services = FakeServices()
         self.auth_access_count = 0
+        self.bus = FakeBus()
 
     @property
     def auth(self) -> object:
@@ -233,6 +248,11 @@ class FakeEntry:
     """Minimal config entry test double."""
 
     entry_id: str
+    unload_callbacks: list[Any] = field(default_factory=list, compare=False)
+
+    def async_on_unload(self, func: Any) -> None:
+        """Record an unload callback, like ConfigEntry.async_on_unload."""
+        self.unload_callbacks.append(func)
 
 
 class ModeStore:
