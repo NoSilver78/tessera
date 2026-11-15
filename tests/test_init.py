@@ -232,6 +232,13 @@ class E35Store:
         self.state["apply_in_progress"] = False
         return deepcopy(self.state)
 
+    async def async_clear_pre_install_snapshot(self) -> dict[str, Any]:
+        """Record snapshot drop after a successful restore."""
+        self.events.append("clear_snapshot")
+        assert self.state["apply_in_progress"] is False
+        self.state["pre_install_snapshot"] = None
+        return deepcopy(self.state)
+
 
 class AckStore(E35Store):
     """Store double for D9 ack service tests."""
@@ -1535,6 +1542,7 @@ async def test_enforce_apply_failure_rolls_back_and_clears_journal(
         "apply",
         "restore",
         "clear",
+        "clear_snapshot",
         "monitor_preview",
     ]
     assert store.config["mode"] == "monitor"
@@ -1638,7 +1646,7 @@ async def test_startup_open_journal_restores_and_clears_before_compile(
 
     assert await tessera_init.async_setup_entry(hass, FakeEntry("entry-1")) is True
 
-    assert events == ["restore", "clear", "monitor_preview"]
+    assert events == ["restore", "clear", "clear_snapshot", "monitor_preview"]
     assert store.state["apply_in_progress"] is False
 
 
@@ -1717,9 +1725,59 @@ async def test_mode_switch_from_enforce_to_off_restores_pre_install_snapshot(
 
     await tessera_init._compile_for_mode(hass, "entry-1", entry_data)
 
-    assert events == ["restore", "clear"]
+    assert events == ["restore", "clear", "clear_snapshot"]
     assert entry_data["mode"] == "off"
     assert "preview" not in entry_data
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("config_mode", "restores"), [("off", True), ("monitor", False)]
+)
+async def test_switch_after_fail_safe_restores_only_on_off(
+    monkeypatch: pytest.MonkeyPatch, config_mode: str, restores: bool
+) -> None:
+    """A fail-safe leaves enforce applied natively behind an in-memory monitor.
+
+    The snapshot is the persisted marker for that: ``off`` must restore even
+    though the previous in-memory mode is monitor (otherwise the groups stay
+    bound forever), while staying in monitor keeps the documented behaviour of
+    leaving the last, stricter apply in place.
+    """
+    events: list[str] = []
+    state = {
+        "pre_install_snapshot": snapshot_to_state_data(_snapshot()),
+        "apply_in_progress": False,
+    }
+    store = E35Store(config_mode, state=state, events=events)
+    hass = AuthHass([FakeUser("admin", ["system-admin"], is_owner=True)])
+    entry_data: dict[str, Any] = {"store": store, "mode": "monitor"}
+
+    async def fake_restore(*_args: Any) -> dict[str, Any]:
+        events.append("restore")
+        return {
+            "status": "restored",
+            "refused_reason": None,
+            "restored_user_ids": ["admin"],
+            "group_ids_removed": ["tessera:viewer"],
+            "detail": [],
+        }
+
+    async def fake_preview(*_args: Any) -> None:
+        events.append("monitor_preview")
+
+    monkeypatch.setattr(tessera_init, "async_restore_to_pre_install", fake_restore)
+    monkeypatch.setattr(tessera_init, "_compile_monitor_preview", fake_preview)
+    _patch_noop_adapters(monkeypatch)
+
+    await tessera_init._compile_for_mode(hass, "entry-1", entry_data)
+
+    if restores:
+        assert events == ["restore", "clear", "clear_snapshot"]
+        assert store.state["pre_install_snapshot"] is None
+    else:
+        assert events == ["monitor_preview"]
+        assert store.state["pre_install_snapshot"] is not None
 
 
 @pytest.mark.asyncio
@@ -1752,7 +1810,7 @@ async def test_unload_live_enforce_entry_restores_pre_install(
 
     assert await tessera_init.async_unload_entry(hass, FakeEntry("entry-1")) is True
 
-    assert events == ["restore", "clear"]
+    assert events == ["restore", "clear", "clear_snapshot"]
     assert "entry-1" not in hass.data[DOMAIN]
 
 

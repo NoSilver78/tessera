@@ -162,6 +162,32 @@ async def test_store_persists_immutable_pre_install_snapshot_once() -> None:
 
 
 @pytest.mark.asyncio
+async def test_store_drops_the_snapshot_after_restore_but_not_mid_apply() -> None:
+    """A snapshot belongs to one enforce cycle; crash recovery still needs it.
+
+    Kept across cycles it re-applied stale memberships on the next restore,
+    e.g. system-admin for a user demoted in between.
+    """
+    store = TesseraStore(hass=object(), store_factory=MemoryStore)
+    snapshot = AuthRecoverySnapshot(
+        users=(UserGroupSnapshot("user-1", ("system-admin",)),)
+    )
+    await store.async_mark_apply_in_progress(snapshot)
+
+    with pytest.raises(TesseraStateError, match="apply_in_progress"):
+        await store.async_clear_pre_install_snapshot()
+
+    await store.async_clear_apply_in_progress()
+    state = await store.async_clear_pre_install_snapshot()
+
+    assert state == {"pre_install_snapshot": None, "apply_in_progress": False}
+    fresh = AuthRecoverySnapshot(
+        users=(UserGroupSnapshot("user-1", ("system-users",)),)
+    )
+    await store.async_set_pre_install_snapshot(fresh)  # the next cycle takes a new one
+
+
+@pytest.mark.asyncio
 async def test_store_apply_journal_sets_and_clears_without_overwriting_snapshot() -> (
     None
 ):

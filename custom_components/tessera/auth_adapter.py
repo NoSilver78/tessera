@@ -241,6 +241,14 @@ class AuthPolicyStoreAdapter:
         group = store._groups.get(group_id)
         if group is not None and group.system_generated:
             raise UnsafeAuthTarget(f"{group_id} is system-generated")
+        if group is not None:
+            # HA's auth store resolves every user's ``group_ids`` on load with a
+            # bare ``groups[group_id]``; a dangling id makes the whole store fail
+            # to load and nobody can log in. Never remove a group a user still
+            # holds — callers rebind first.
+            for user in await self._hass.auth.async_get_users():
+                if group_id in _user_group_ids(user):
+                    raise UnsafeAuthTarget(f"{group_id} is still bound to a user")
         store._groups.pop(group_id, None)
         await _async_persist_auth_store(store)
 
@@ -267,18 +275,18 @@ class UserBindingAdapter:
         """Bind a managed user to the full intended native group superset.
 
         REPLACE semantics: ``full_group_ids`` wholly replaces the user's native
-        ``group_ids``. The no-drop guarantee is *caller-asserted*: this method
-        only verifies that every id in ``expected_tessera_group_ids`` is present
-        in ``full_group_ids``. It cannot detect a Tessera group the caller
-        forgot to list, so the E3 caller MUST compute ``expected`` from the
-        user's full current Tessera membership (docs/spec-e3-enforce.md §8).
+        ``group_ids``. The caller must acknowledge every Tessera group the user
+        currently holds in ``expected_tessera_group_ids`` (computed from the
+        user's live membership, docs/spec-e3-enforce.md §8); an unacknowledged
+        current Tessera group fails closed, so a binding computed against a
+        stale view cannot silently overwrite it. Acknowledged groups may be
+        dropped — that is how a role revocation reaches HA.
 
         Args:
             user: HA user or test double to update.
             full_group_ids: Complete replacement set for ``user.group_ids``.
-            expected_tessera_group_ids: Tessera role groups that must be present
-                in ``full_group_ids``. Guards against an under-computed set, not
-                against over-dropping groups outside this set.
+            expected_tessera_group_ids: The user's current Tessera groups, as
+                seen by the caller when it computed ``full_group_ids``.
         """
         self._assert_supported_version()
         sorted_group_ids = _validate_full_group_superset(
@@ -470,11 +478,12 @@ def _validate_full_group_superset(
             "expected_tessera_group_ids missing current Tessera groups: "
             f"{sorted(unasserted_current)}"
         )
-    missing = expected_group_ids - group_ids
-    if missing:
-        raise IncompleteSuperset(
-            f"full_group_ids missing expected Tessera groups: {sorted(missing)}"
-        )
+    # ``expected_tessera_group_ids`` is the caller's acknowledgement of every
+    # Tessera group the user holds *now* (checked above, so a concurrent change
+    # cannot be overwritten blind). It is deliberately NOT required to survive
+    # in ``group_ids``: a revoked role must be droppable. An earlier "no-drop"
+    # check here failed every revocation under enforce, and the failed apply
+    # then rolled everybody back to the unrestricted pre-install state.
     if GROUP_ID_ADMIN in current_group_ids and GROUP_ID_ADMIN not in group_ids:
         raise LockoutRisk("refusing to remove system-admin from an admin user")
     # Admin assignment (the `change` tier) is governed by the PLAN
@@ -509,11 +518,13 @@ def _validate_exact_restore_binding(user: Any, group_ids: Collection[str]) -> li
     here only the managed-user guard and the admin-demotion lockout guard apply.
     """
     _assert_managed_user(user)
-    target_group_ids = set(group_ids)
-    current_group_ids = set(_user_group_ids(user))
-    if GROUP_ID_ADMIN in current_group_ids and GROUP_ID_ADMIN not in target_group_ids:
-        raise LockoutRisk("refusing to remove system-admin from an admin user")
-    return sorted(target_group_ids)
+    # No per-user admin-demotion refusal here: restore puts back the captured
+    # pre-install state, and a user promoted through an ``is_admin`` role under
+    # enforce must lose that promotion again. Refusing it made every later
+    # restore fail for good. The lockout protection that matters — at least one
+    # active owner/admin survives — is checked over the whole restore plan by
+    # the caller (``_assert_owner_or_admin_survives_in``).
+    return sorted(set(group_ids))
 
 
 def _ha_feature_line(ha_version: str) -> str:

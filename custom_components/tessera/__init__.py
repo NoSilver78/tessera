@@ -223,10 +223,15 @@ def _register_recompile_service(hass: HomeAssistant) -> None:
         re-applies the native auth bindings (writes the auth store), like setup.
         """
         del call  # parameterless service; the call carries no Tessera input
-        for key, entry_data in list(_domain_data(hass).items()):
-            if key == DATA_SERVICE_REGISTERED or not isinstance(entry_data, dict):
-                continue
-            await _compile_for_mode_safely(hass, key, entry_data)
+        # Same lock as every other mode-changing path: without it a recompile
+        # that read ``enforce`` could finish applying *after* a concurrent
+        # ``set_mode off`` had restored, leaving native auth enforced behind a
+        # config that says off.
+        async with mutation_lock(hass):
+            for key, entry_data in list(_domain_data(hass).items()):
+                if key == DATA_SERVICE_REGISTERED or not isinstance(entry_data, dict):
+                    continue
+                await _compile_for_mode_safely(hass, key, entry_data)
 
     async_register_admin_service(hass, DOMAIN, SERVICE_RECOMPILE, _handle_recompile)
     domain_data[DATA_SERVICE_REGISTERED] = True
@@ -879,7 +884,10 @@ async def _compile_for_mode(
     config = await store.async_load_config()
     previous_mode = entry_data.get("mode")
 
-    if previous_mode == MODE_ENFORCE and config["mode"] != MODE_ENFORCE:
+    if config["mode"] != MODE_ENFORCE and (
+        previous_mode == MODE_ENFORCE
+        or (config["mode"] == MODE_OFF and await _native_enforce_may_be_live(store))
+    ):
         restored = await _restore_pre_install_safely(
             hass,
             entry_id,
@@ -1017,6 +1025,8 @@ async def _apply_enforce_mode(
     if result["status"] == "applied":
         await store.async_clear_apply_in_progress()
         entry_data["mode"] = MODE_ENFORCE
+        _clear_repair_issue(hass, entry_id, REPAIR_ENFORCE_FAIL_SAFE)
+        _clear_repair_issue(hass, entry_id, REPAIR_RESTORE_FAIL_SAFE)
         return
 
     # Apply failed partway: native auth may be half-written. Roll back to the
@@ -1045,7 +1055,9 @@ async def _restore_on_enforce_exit_safely(
     hass: HomeAssistant, entry_id: str, entry_data: dict[str, Any]
 ) -> None:
     """Restore pre-install auth state when unloading a live enforce entry."""
-    if entry_data.get("mode") != MODE_ENFORCE:
+    if entry_data.get("mode") != MODE_ENFORCE and not await _native_enforce_may_be_live(
+        cast(TesseraStore, entry_data["store"])
+    ):
         return
     restored = await _restore_pre_install_safely(
         hass,
@@ -1088,6 +1100,9 @@ async def _restore_pre_install_safely(
         if result["status"] == "restored":
             if clear_apply_in_progress:
                 await store.async_clear_apply_in_progress()
+            if not (await store.async_load_state())["apply_in_progress"]:
+                await store.async_clear_pre_install_snapshot()
+            _clear_repair_issue(hass, entry_id, REPAIR_RESTORE_FAIL_SAFE)
             return True
         await _record_repair_issue(
             hass,
@@ -1184,6 +1199,35 @@ async def _record_repair_issue(
             entry_id,
             err.__class__.__name__,
         )
+
+
+def _clear_repair_issue(hass: HomeAssistant, entry_id: str, issue_id: str) -> None:
+    """Delete a Repairs issue once the condition it reported is resolved."""
+    try:
+        from homeassistant.helpers import issue_registry as ir
+
+        ir.async_delete_issue(hass, DOMAIN, f"{entry_id}_{issue_id}")
+    except Exception as err:
+        LOGGER.debug(
+            "Tessera could not clear Repairs issue for entry %s (%s)",
+            entry_id,
+            err.__class__.__name__,
+        )
+
+
+async def _native_enforce_may_be_live(store: TesseraStore) -> bool:
+    """Return whether native auth may still carry an un-restored enforce.
+
+    The pre-install snapshot exists from the first enforce apply until a
+    successful restore clears it, so it is the persisted marker for "Tessera
+    groups may be bound in HA". The in-memory mode is not: a fail-safe sets it
+    to monitor while the last enforce stays applied natively.
+    """
+    try:
+        state = await store.async_load_state()
+    except Exception:
+        return False
+    return state["pre_install_snapshot"] is not None
 
 
 async def _users_by_id(hass: HomeAssistant) -> dict[str, Any]:

@@ -168,6 +168,25 @@ class TesseraStore:
             await self.async_save_state(state)
             return state
 
+    async def async_clear_pre_install_snapshot(self) -> TesseraStateData:
+        """Drop the snapshot once it has been restored.
+
+        A snapshot is only valid for the enforce cycle it was taken for. Kept
+        across cycles it re-applies stale memberships on the next restore —
+        e.g. ``system-admin`` for a user an admin demoted in between. The next
+        enforce takes a fresh one. Refused while the apply journal is open,
+        because crash recovery still needs it then.
+        """
+        async with self._state_lock:
+            state = await self.async_load_state()
+            if state["apply_in_progress"]:
+                raise TesseraStateError(
+                    "pre_install_snapshot is needed while apply_in_progress"
+                )
+            state["pre_install_snapshot"] = None
+            await self.async_save_state(state)
+            return state
+
     async def async_clear_apply_in_progress(self) -> TesseraStateData:
         """Clear the two-phase apply journal after a successful apply."""
         async with self._state_lock:

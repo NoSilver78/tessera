@@ -35,6 +35,46 @@ Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   die Linie bleibt daher **unvalidiert** und fail-closed.
 
 ### Behoben
+- **Sicherheit/Verfügbarkeit — tiefer Code-Review vom 15.11.2026**, alle Befunde mit Regressionstests
+  gegen HAs **echten** `AuthStore` (`tests/test_auth_restore_regressions.py`; die übrige Suite fährt
+  `FakeHass`-Doubles, an denen keiner dieser Fehler sichtbar werden konnte — gegengeprüft: alle sechs
+  neuen Tests sind auf dem alten Code rot):
+  - **Kritisch: kein Login mehr nach `enforce`→`off`.** Restore band nur Nutzer aus dem Snapshot neu
+    und löschte danach alle `tessera:*`-Gruppen. Ein nach dem ersten `enforce` angelegter Nutzer
+    behielt die ID einer gelöschten Gruppe; HAs Auth-Store löst `group_ids` beim Laden mit
+    `groups[id]` auf und scheiterte beim nächsten Start mit `KeyError` — **niemand** konnte sich
+    anmelden, auch nicht der Owner. Restore setzt jetzt jeden verwalteten Nutzer mit `tessera:*`-Gruppe
+    zurück (ohne Snapshot-Eintrag: `tessera:*` raus, sonst nichts; bleibt nichts übrig, `system-users`
+    = HAs Standard für neue Nutzer), und `async_remove_group` verweigert das Löschen einer Gruppe, die
+    noch ein Nutzer trägt.
+  - **Hoch: Rollen-Entzug unter `enforce` hob alle Einschränkungen auf.** Die Bindungs-Prüfung
+    verlangte, dass jede aktuelle `tessera:*`-Gruppe erhalten bleibt — jeder Entzug scheiterte, und
+    der Rollback auf den Vor-Installations-Stand gab allen Nutzern `system-users` (alles erlaubt)
+    zurück. Aktuelle Gruppen müssen jetzt nur *bestätigt*, nicht behalten werden.
+  - **Hoch: veralteter Vor-Installations-Snapshot.** Er wurde nie verworfen; ein zweiter
+    `enforce`→`off`-Zyklus spielte den Stand vom *ersten* zurück — z. B. `system-admin` für einen
+    zwischenzeitlich herabgestuften Nutzer. Der Snapshot wird jetzt nach erfolgreichem Restore
+    verworfen (nicht bei offenem Apply-Journal), der nächste `enforce` nimmt einen frischen.
+  - **Hoch: Restore nach `is_admin`-Rolle dauerhaft blockiert.** Eine Admin-Beförderung über eine
+    Tessera-Rolle machte jeden späteren Restore zu `failed/lockout`; `enforce` ließ sich nicht mehr
+    verlassen. Der Schutz „mindestens ein Owner/Admin bleibt“ gilt weiter über den ganzen Restore.
+  - **Hoch: gelöschter Nutzer blockierte jeden Restore** (`KeyError`) — wird übersprungen.
+  - **Hoch: `off` nach einem Fail-safe stellte nicht wieder her.** Fiel `enforce` auf `monitor`
+    zurück, blieben die nativen Gruppen gebunden, und `off` prüfte nur den In-Memory-Modus. Jetzt
+    gilt der persistierte Snapshot als Marker: `off` und Entladen stellen wieder her, solange er
+    existiert. (`monitor` behält bewusst den zuletzt angewandten, strengeren Stand — siehe
+    docs/MAINTENANCE.md.)
+  - **Hoch: `tessera.recompile` lief ohne `mutation_lock`** und konnte nach einem parallelen `off`
+    erneut `enforce` anwenden.
+  - **Hoch: `remove_role` ließ Label-Grants stehen** — jeder spätere Compile scheiterte an der
+    unbekannten Rolle (`enforce` fiel auf `monitor`), und eine neu angelegte Rolle gleicher ID erbte
+    den alten Grant.
+  - **Mittel: Options-Flow auf einem entladenen Eintrag** legte einen Daten-Bucket an, den die
+    Websocket-API für einen geladenen Eintrag hielt — sie konnte dann `enforce` nativ anwenden, ohne
+    dass ein Unload-Hook es je zurücknimmt.
+  - **Niedrig:** Repairs-Hinweise `enforce_fail_safe`/`restore_fail_safe` werden nach erfolgreichem
+    Apply/Restore wieder entfernt; `frontend` und `panel_custom` stehen jetzt in den
+    `dependencies` des Manifests.
 - **HA 2026.11 als validierte Auth-Linie** ([#71](https://github.com/NoSilver78/tessera/issues/71)).
   Auf HA 2026.11.x blockierte der Versions-Guard jeden `enforce`-Versuch fail-closed
   (`unsupported HA auth version 2026.11.0`) — Schutz wie vorgesehen, aber das Kernfeature stand

@@ -58,10 +58,15 @@ Schutzschichten.
    > D9-Vorprüfung geblockt (z. B. weil eine neue auth-berührende Component auftaucht), fällt der
    > Runtime auf `monitor` und legt ein Repairs-Issue an — **lässt aber die zuletzt angewandten
    > (restriktiveren) `tessera:`-Gruppen stehen**, bis ein Admin die Ursache auflöst (Ack bzw. Fix)
-   > und einen sauberen `enforce`→`off`-Zyklus fährt. Das ist **kein** Halbzustand (der native
-   > Zustand ist der letzte konsistente, *strengere* Apply — kein teilweiser Write) und **kein**
+   > und `enforce` erneut oder `off` setzt. Das ist **kein** Halbzustand (der native Zustand ist der
+   > letzte konsistente, *strengere* Apply — kein teilweiser Write) und **kein**
    > Sicherheits-Downgrade. Nur eine bewusste UX-Konsequenz: angezeigter `monitor`-Modus und noch
-   > vorhandene native Gruppen können auseinanderlaufen, bis der Admin `enforce` erneut setzt.
+   > vorhandene native Gruppen können auseinanderlaufen.
+   >
+   > **Seit v0.9.5** stellen `off` und das Entladen des Eintrags auch nach einem solchen Fail-safe
+   > wieder her: Marker ist der persistierte Vor-Installations-Snapshot (er existiert vom ersten
+   > `enforce`-Apply bis zum erfolgreichen Restore), nicht der In-Memory-Modus. Vorher prüfte `off`
+   > nur den Modus — nach einem Fail-safe blieben die Gruppen dann dauerhaft gebunden.
 
 ## Prozess pro HA-Release
 
