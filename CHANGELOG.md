@@ -7,6 +7,8 @@ Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [0.9.5] — 2026-11-15
+
 ### Hinzugefügt
 - **`mypy --strict` pro validierter HA-Linie** in der CI-Contract-Matrix. Der `quality`-Job
   typprüft gegen *eine* HA-Version — die, auf die `pytest-homeassistant-custom-component` gerade
@@ -33,6 +35,16 @@ Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   die Linie bleibt daher **unvalidiert** und fail-closed.
 
 ### Behoben
+- **HA 2026.11 als validierte Auth-Linie** ([#71](https://github.com/NoSilver78/tessera/issues/71)).
+  Auf HA 2026.11.x blockierte der Versions-Guard jeden `enforce`-Versuch fail-closed
+  (`unsupported HA auth version 2026.11.0`) — Schutz wie vorgesehen, aber das Kernfeature stand
+  still. `SUPPORTED_HA_AUTH_FEATURES` ist jetzt `{2026.7, 2026.8, 2026.9, 2026.10, 2026.11}`,
+  neueste validiert **2026.11.1**. Am Release verifiziert, nicht blind angehoben: `auth/auth_store.py`,
+  `auth/models.py` und alle 9 Dateien in `auth/permissions/` sind byte-identisch zu 2026.10.4;
+  `auth/__init__.py` änderte sich (Login-Flow, Provider-Init), die drei von Tessera aufgerufenen
+  `AuthManager`-Methoden (`async_get_users`, `async_get_user`, `async_update_user`) nicht.
+  Contract-Tests 17/17 und `mypy --strict` grün gegen 2026.11.1; CI-Matrix um `2026.11.1` erweitert.
+  Ältere Linien bleiben unterstützt.
 - **`mypy --strict` gegen aktuelles Home Assistant.** HA migriert voluptuous → **probatio** in zwei
   Schritten, die nicht zusammenfallen: 2026.9 installiert probatio *als* voluptuous (Laufzeit),
   2026.10 dreht die **Annotationen** um. Damit typprüft kein einzelner Import auf allen vier

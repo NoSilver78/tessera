@@ -64,7 +64,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ha: ["2026.7.1", "2026.8.1", "2026.9.4", "2026.10.4"]
+        ha: ["2026.7.1", "2026.8.1", "2026.9.4", "2026.10.4", "2026.11.1"]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -87,7 +87,7 @@ jobs:
 
   # Early warning for the NEXT Home Assistant line. Every validated line so far was
   # diffed *after* HA had shipped it, which means `enforce` stood still on users'
-  # instances until a Tessera release caught up (2026.7, 2026.8, and 2026.9/2026.10
+  # instances until a Tessera release caught up (2026.7, 2026.8, 2026.9/2026.10 and 2026.11
   # all went that way). `pip install --pre` takes the newest pre-release, so during a
   # beta window this job runs against the coming line weeks before its release.
   #

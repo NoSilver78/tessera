@@ -24,7 +24,7 @@ from .schema import TesseraConfigData
 # (YEAR.MONTH.PATCH) are bugfix-only and do not migrate the auth store. Tessera
 # therefore validates a feature line and tolerates any patch inside it, so a
 # routine HA patch bump does not needlessly drop the enforce path to monitor.
-SUPPORTED_HA_AUTH_VERSION = "2026.10.4"
+SUPPORTED_HA_AUTH_VERSION = "2026.11.1"
 SUPPORTED_HA_AUTH_FEATURE = ".".join(SUPPORTED_HA_AUTH_VERSION.split(".")[:2])
 
 # Every feature line validated against these adapters, not just the newest one.
@@ -53,8 +53,14 @@ SUPPORTED_HA_AUTH_FEATURE = ".".join(SUPPORTED_HA_AUTH_VERSION.split(".")[:2])
 #   swap at identical policy shape; HA's real PolicyPermissions still grants
 #   exactly Tessera's allow-only policy and nothing else
 #   (tests/test_ha_auth_contract.py, green on both lines; verified 2026-10-25).
+#   2026.10 → 2026.11: auth_store.py, models.py and all of permissions/
+#   byte-identical (2026.10.4 → 2026.11.1). auth/__init__.py changed (login
+#   flow, provider initialisation, duplicate-credentials guard), but the three
+#   AuthManager methods Tessera calls — async_get_users, async_get_user,
+#   async_update_user — are unchanged; contract tests and mypy --strict green
+#   against 2026.11.1 (verified 2026-11-15, issue #71).
 SUPPORTED_HA_AUTH_FEATURES = frozenset(
-    {"2026.7", "2026.8", "2026.9", SUPPORTED_HA_AUTH_FEATURE}
+    {"2026.7", "2026.8", "2026.9", "2026.10", SUPPORTED_HA_AUTH_FEATURE}
 )
 TESSERA_GROUP_PREFIX = "tessera:"
 GROUP_ID_ADMIN = "system-admin"
