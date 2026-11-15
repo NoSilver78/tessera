@@ -228,9 +228,16 @@ class AuthPolicyStoreAdapter:
         else:
             if group.system_generated:
                 raise UnsafeAuthTarget(f"{group_id} is system-generated")
+            if group.name == name and group.policy == policy_copy:
+                return  # nothing to write; keeps a recompile of an unchanged plan quiet
             group.name = name
             group.policy = policy_copy
         await _async_persist_auth_store(store)
+        # HA caches each user's permissions from the policies of their groups;
+        # an in-place policy change reaches a holder only once that cache drops.
+        for user in await self._hass.auth.async_get_users():
+            if group_id in _user_group_ids(user):
+                _invalidate_permission_cache(user)
 
     async def async_remove_group(self, group_id: str) -> None:
         """Remove a Tessera native group if present."""
@@ -292,6 +299,15 @@ class UserBindingAdapter:
         sorted_group_ids = _validate_full_group_superset(
             user, full_group_ids, expected_tessera_group_ids
         )
+        if sorted_group_ids == _user_group_ids(user):
+            # No write, so no ``user_updated`` event: the recompile that Tessera's
+            # own previous write triggered ends here instead of looping. The
+            # permission cache is still dropped — HA caches ``User.permissions``
+            # from the group policies, and a policy that changed in place (an
+            # entity left a granted area) must not keep granting until restart.
+            # Dropping the cache fires no event.
+            _invalidate_permission_cache(user)
+            return
         await self._hass.auth.async_update_user(user, group_ids=sorted_group_ids)
         invalidate_cache = getattr(user, "invalidate_cache", None)
         if callable(invalidate_cache):
@@ -467,6 +483,13 @@ def _make_group(group_id: str, name: str, policy: dict[str, Any]) -> AuthGroupLi
         AuthGroupLike,
         models.Group(id=group_id, name=name, policy=policy, system_generated=False),
     )
+
+
+def _invalidate_permission_cache(user: Any) -> None:
+    """Drop HA's cached ``User.permissions`` (test doubles may not have one)."""
+    invalidate_cache = getattr(user, "invalidate_cache", None)
+    if callable(invalidate_cache):
+        invalidate_cache()
 
 
 async def _async_persist_auth_store(store: AuthStoreLike) -> None:

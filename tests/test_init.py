@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import custom_components.tessera as tessera_init
@@ -70,11 +70,25 @@ class FakeServices:
         self.handlers.pop((domain, service), None)
 
 
+class FakeBus:
+    """Event bus double recording listeners (auto-recompile wiring)."""
+
+    def __init__(self) -> None:
+        """Initialize the listener list."""
+        self.listeners: list[tuple[str, Any]] = []
+
+    def async_listen(self, event_type: str, listener: Any) -> Any:
+        """Record a listener and return its remover."""
+        self.listeners.append((event_type, listener))
+        return lambda: self.listeners.remove((event_type, listener))
+
+
 class FakeHass:
     """Minimal Home Assistant double with auth access trapped."""
 
     def __init__(self) -> None:
         """Initialize HA-like state."""
+        self.bus = FakeBus()
         self.data: dict[str, Any] = {}
         self.services = FakeServices()
 
@@ -364,6 +378,11 @@ class FakeEntry:
     """Minimal config entry double."""
 
     entry_id: str
+    unload_callbacks: list[Any] = field(default_factory=list, compare=False)
+
+    def async_on_unload(self, func: Any) -> None:
+        """Record an unload callback, like ConfigEntry.async_on_unload."""
+        self.unload_callbacks.append(func)
 
 
 @dataclass(frozen=True)
@@ -423,6 +442,36 @@ async def test_setup_entry_falls_back_to_monitor_on_compile_error(
     assert "Tessera mode handling failed for entry entry-1" in caplog.text
     assert "TesseraSchemaError" in caplog.text
     assert "light.private" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_setup_entry_wires_auto_recompile_as_a_coroutine_job(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Setup hands the Debouncer something HA will actually await.
+
+    HA classifies a Debouncer job by its callable. A lambda returning a
+    coroutine is run as an executor job and the coroutine is never awaited —
+    auto-recompile silently never ran. The listeners also hang off the entry's
+    unload hooks.
+    """
+    from homeassistant.core import HassJob, HassJobType
+
+    hass = FakeHass()
+    entry = FakeEntry("entry-1")
+    captured: dict[str, Any] = {}
+
+    def fake_setup(_hass: Any, on_unload: Any, recompile: Any) -> None:
+        captured["on_unload"] = on_unload
+        captured["recompile"] = recompile
+
+    monkeypatch.setattr(tessera_init, "TesseraStore", lambda _hass: OffStore())
+    monkeypatch.setattr(tessera_init, "async_setup_auto_recompile", fake_setup)
+
+    assert await tessera_init.async_setup_entry(hass, entry) is True
+
+    assert captured["on_unload"] == entry.async_on_unload
+    assert HassJob(captured["recompile"]).job_type is HassJobType.Coroutinefunction
 
 
 @pytest.mark.asyncio
