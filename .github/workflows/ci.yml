@@ -99,6 +99,13 @@ jobs:
     name: HA upcoming line (pre-release)
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    # issues: write is only for the two reporting steps at the end. A red run used to be
+    # visible only on the Actions tab; when 2026.11 landed it stayed red for days until a
+    # user reported it (#71). Now a failing contract test or mypy run opens a tracking
+    # issue labelled ha-upcoming, and the next green run closes it again.
+    permissions:
+      contents: read
+      issues: write
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -107,12 +114,74 @@ jobs:
       - name: Install the newest Home Assistant pre-release
         run: pip install --pre --upgrade homeassistant pytest pytest-asyncio mypy
       - name: HA version under test
-        run: python -c "from homeassistant.const import __version__ as v; print('homeassistant', v)"
+        id: version
+        run: |
+          v=$(python -c "from homeassistant.const import __version__ as v; print(v)")
+          echo "homeassistant $v"
+          echo "ha=$v" >> "$GITHUB_OUTPUT"
       - name: Contract tests against the upcoming HA
+        id: contract
         run: |
           pytest tests/test_ha_auth_contract.py \
                  tests/test_ha_registry_contract.py \
                  tests/test_ha_schema_contract.py \
                  tests/test_ha_policy_contract.py -v
+      # Runs even when the contract tests failed, so the issue names every red check.
       - name: mypy against the upcoming HA (strict)
+        id: mypy
+        if: ${{ !cancelled() && steps.version.outcome == 'success' }}
         run: mypy custom_components/tessera
+
+      # Only a failing check opens an issue. If installing the pre-release itself fails
+      # (PyPI outage, broken beta wheel), both checks are skipped and nothing is filed:
+      # that is infrastructure noise, not a signal about Tessera.
+      - name: Open or update the ha-upcoming tracking issue
+        if: ${{ failure() && (steps.contract.outcome == 'failure' || steps.mypy.outcome == 'failure') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          HA_VERSION: ${{ steps.version.outputs.ha }}
+          CONTRACT: ${{ steps.contract.outcome }}
+          MYPY: ${{ steps.mypy.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create ha-upcoming --color FBCA04 \
+            --description "Nightly check against the next Home Assistant line is red" 2>/dev/null || true
+          title="HA ${HA_VERSION}: upcoming line not validated yet"
+          body=$(cat <<EOF
+          The nightly job **HA upcoming line (pre-release)** fails against Home Assistant **${HA_VERSION}**.
+
+          | Check | Result |
+          |---|---|
+          | Contract tests | ${CONTRACT} |
+          | mypy --strict | ${MYPY} |
+
+          Run: ${RUN_URL}
+
+          **What this means:** either Home Assistant published a line Tessera has not validated yet (the version-guard test fails on purpose), or the private auth subset Tessera relies on has moved. Until the line is validated, Tessera blocks \`enforce\` on it (fail-closed) and keeps running in read-only \`monitor\` mode. Nothing changes on HA versions that are already validated.
+
+          **Next step:** diff the line as described in [docs/MAINTENANCE.md](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/main/docs/MAINTENANCE.md), then extend the guard in a release.
+
+          _Opened automatically by CI. It closes itself once the nightly run is green again._
+          EOF
+          )
+          existing=$(gh issue list --label ha-upcoming --state open --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" --title "$title"
+            gh issue comment "$existing" --body "Still red against **${HA_VERSION}** (contract tests: ${CONTRACT}, mypy: ${MYPY}). Run: ${RUN_URL}"
+          else
+            gh issue create --title "$title" --label ha-upcoming --body "$body"
+          fi
+
+      - name: Close the ha-upcoming tracking issue
+        if: ${{ success() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          HA_VERSION: ${{ steps.version.outputs.ha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          for n in $(gh issue list --label ha-upcoming --state open --json number --jq '.[].number'); do
+            gh issue close "$n" --reason completed \
+              --comment "Green again against **${HA_VERSION}**. Run: ${RUN_URL}"
+          done
