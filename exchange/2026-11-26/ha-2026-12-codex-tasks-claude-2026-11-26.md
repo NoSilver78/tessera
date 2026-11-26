@@ -23,7 +23,7 @@ Entscheidend: `_data_to_save()` hat **drei Zeilen Prolog** bekommen (bricht den 
 Serialisierung darunter ist unverändert; `_groups`, `self._store` und `async_get_groups` kommen im
 Diff **nicht vor**. Die berührte Teilmenge ist damit kompatibel.
 
-## Offene Richtungsentscheidung — Michael, nicht Codex
+## Richtungsentscheidung — getroffen von Michael am 2026-11-26: **Variante A**
 
 `SUPPORTED_HA_AUTH_VERSION` nennt bisher immer eine **Release**-Version (2026.7.1, 2026.8.1,
 2026.9.4, 2026.10.4, 2026.11.1), nie eine Beta. Die mit PR #74 eingeführte Regel sagt dagegen:
@@ -34,8 +34,18 @@ validieren und releasen **vor** HAs Liefertermin. Beides zugleich geht nicht:
 | **A — auf das Release-Tag pinnen** (Empfehlung) | PR jetzt vollständig vorbereiten, Matrix fährt `2026.12.0b0`; am Release-Tag Diff gegen `2026.12.0` wiederholen, Pin auf `2026.12.0` setzen, gleichen Tag releasen | Nutzer, die am 2.12. sofort aktualisieren, stehen wenige Stunden ohne `enforce` |
 | **B — auf die Beta pinnen** | `SUPPORTED_HA_AUTH_VERSION = "2026.12.0b0"`, Release vor dem 2.12. | Der „neueste validierte" Stand ist dann kein Release; weicht von der bisherigen Konvention ab |
 
-Codex setzt **A** um, solange Michael nichts anderes sagt. Aufgabe 1 ist so geschnitten, dass der
-Wechsel auf B nur zwei Zeilen wäre.
+**Entschieden: A.** Der Pin nennt weiterhin eine Release-Version; die Beta wird in der
+CI-Matrix *gefahren*, aber nicht gepinnt. Damit bleibt das Diff-Protokoll eine Kette von
+Release-Tags, und die Regel aus PR #74 („validieren und releasen vor HAs Liefertermin") ist
+dadurch erfüllt, dass der PR am Liefertermin **fertig** ist und am selben Tag released wird —
+nicht dadurch, dass eine Beta zur validierten Version erklärt wird.
+
+Was das praktisch heißt: der Nightly wird schon mit diesem PR grün, weil
+`test_installed_ha_line_is_validated` die installierte Linie gegen die **Menge** prüft und nicht
+gegen den Pin. Nutzer, die am 2.12. in den ersten Stunden aktualisieren, sind kurz ohne `enforce` —
+das ist der bewusst in Kauf genommene Preis.
+
+B ist damit verworfen, bleibt aber oben dokumentiert, damit die Abwägung nachvollziehbar ist.
 
 ---
 
@@ -58,8 +68,9 @@ Regeln / was nicht ändern:
 - Keine Logik anfassen. Nur Konstanten, Matrix, Tests, Doku.
 - Den Diff aus der Lage-Tabelle oben NICHT neu herleiten; als Beleg in den Kommentar übernehmen.
 - Kein hacs.json-homeassistant-Pin (ADR 0006, bewusste Entscheidung).
-- Variante A: SUPPORTED_HA_AUTH_VERSION bleibt in diesem PR auf "2026.11.1". Erst wenn
-  2026.12.0 erschienen ist, wird daraus "2026.12.0" (siehe Tests, letzter Punkt).
+- Entschieden (Michael, 2026-11-26): SUPPORTED_HA_AUTH_VERSION bleibt in diesem PR auf
+  "2026.11.1" und nennt nie eine Beta. Erst wenn 2026.12.0 erschienen ist, wird daraus
+  "2026.12.0" (siehe Tests, letzter Punkt). Nicht vorziehen, nicht auf die Beta pinnen.
 
 Erwartete Umsetzung:
 - SUPPORTED_HA_AUTH_FEATURES wird {"2026.7","2026.8","2026.9","2026.10","2026.11","2026.12"}.
@@ -77,6 +88,11 @@ Erwartete Umsetzung:
   Linie wirklich fährt; beim Release-Tag auf "2026.12.0" ziehen).
 - docs/MAINTENANCE.md: neue Zeile im Diff-Protokoll für 2026.12 (Spalten wie gehabt: Linie,
   Diff gegen, Ergebnis, Verifiziert) und der Guard-Absatz nennt 2026.12 mit.
+- docs/MAINTENANCE.md zusätzlich: die Konvention festschreiben, damit sie nicht in einem
+  exchange-Dokument hängt. Ein Satz im Abschnitt "Prozess pro HA-Release": der Pin
+  SUPPORTED_HA_AUTH_VERSION nennt immer eine **Release**-Version; eine Beta wird in der
+  Contract-Matrix gefahren, aber nicht gepinnt. Die Regel "vor HAs Liefertermin releasen" wird
+  dadurch erfüllt, dass der PR am Liefertermin fertig ist (Entscheidung Michael, 2026-11-26).
 - CHANGELOG.md: Abschnitt [0.9.6] mit Datum, Stil der Vorgänger, inklusive der Validierungs-
   belege und des Hinweises, dass der Nightly damit wieder grün wird.
 - manifest.json auf 0.9.6.
