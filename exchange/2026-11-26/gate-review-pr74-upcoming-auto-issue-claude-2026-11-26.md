@@ -169,3 +169,35 @@ als **nicht prüfbar** ausgewiesenen Punkte erledigt:
 zusammen und ist dort als Definition of Done verankert („Nightly-Job gegen die Vorabversion grün").
 Ebenfalls offen und unverändert niedrig: die beiden Punkte aus den Codex-Aufgaben 1 und 2 dieses
 Reviews (Top-Level-`permissions` in `ci.yml`, neutralerer Issue-Titel).
+
+## Nachtrag 2 — Auflage vollständig erfüllt, Zyklus einmal durchgefahren
+
+Nach dem Merge von #80 (HA-2026.12-Linie validiert, `cb4fb49`) per Dispatch geprüft:
+[Run 45796627266](https://github.com/NoSilver78/tessera/actions/runs/45796627266).
+
+| Schritt | Ergebnis |
+|---|---|
+| `Install the newest Home Assistant pre-release` | success |
+| `HA version under test` | **2026.12.0b1** |
+| `Contract tests against the upcoming HA` | **success** (heute morgen 04:34 war genau das rot) |
+| `mypy against the upcoming HA (strict)` | success |
+| `Open or update the ha-upcoming tracking issue` | **skipped** — richtig, es war nichts rot |
+| `Close the ha-upcoming tracking issue` | **success** |
+
+Issue 76 ist damit **geschlossen, mit Kommentar**: „Green again against **2026.12.0b1**". Der
+Kommentar ist der Beleg, dass diesmal der Workflow geschlossen hat und nicht GitHubs
+Keyword-Parser — die beiden Fehlschließungen von heute morgen hatten null Kommentare.
+
+Damit ist die Auflage vollständig erfüllt, und der Kanal ist **einmal komplett an einem echten
+HA-Zyklus durchgelaufen**:
+
+> HA veröffentlicht `2026.12.0b0` → Nightly rot → CI legt Issue 76 an → Linie gediffed, validiert,
+> gemergt → Nightly grün → CI schließt Issue 76 selbst.
+
+Ein Nebenbefund, der nicht geplant war: validiert wurde gegen `2026.12.0b0`, grün lief der Job
+gegen **`2026.12.0b1`** — eine neuere Beta derselben Linie. Der Guard prüft die **Feature-Linie**,
+nicht das Patch, und genau diese Toleranz hat hier unbeabsichtigt ihren ersten Beweis bekommen.
+
+Offen bleiben von diesem Review nur noch die zwei niedrigen Punkte (Top-Level-`permissions` in
+`ci.yml`, neutralerer Issue-Titel) plus die aus den Vorfällen ergänzte Wiedereröffnungs-Härtung —
+alle drei im Rang-4-Bündel.
