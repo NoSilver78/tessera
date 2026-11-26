@@ -24,6 +24,7 @@ Regelt, wie Claude + Codex Tessera (und die Maison/Atrium-Familie) zusammen entw
    - **Was nur berichtet, darf direkt auf `main`**: `exchange/`, `ROADMAP.md`, Statusabschnitte in `docs/`. Mechanische Probe: ändert der Diff **ausschließlich** Berichtspfade, ist Direktpush erlaubt — sonst nicht [Cx].
    - **Die Trennlinie ist nicht „Code vs. Doku", sondern „berichtet vs. bindet".** Ein Befund ist ein Bericht; ein ADR, eine Regel oder eine festgeschriebene Entscheidung bindet künftiges Handeln und gehört damit durch dasselbe Gate wie Code.
    - **Das Repo ist öffentlich** (HACS-Default-Store seit 2026-10-18): jeder Push ist sofort publik, der Secret-/Artefakt-Check ist Pflicht und nicht Formsache. „War mal privat" ist kein Argument.
+   - **Keine GitHub-Schlüsselwörter neben Issue-Nummern in Commit-Prosa** (`close`/`closes`/`fixes`/`resolves` + `#NN`), wenn nichts geschlossen werden soll — GitHub schließt sonst beim Push auf `main` automatisch. Stattdessen „Issue #NN" oder die Nummer umstellen. **Vorfall 2026-11-26:** der Satz „a green run has to close #76" im Body von `95dc8d9` hat das Tracking-Issue zur noch unvalidierten HA-Linie geschlossen — also genau das Issue, dessen Offenbleiben der Satz festhalten wollte [Cx].
 5. **Keine Architekturfreigabe aus einem PARTIAL-Lauf** [Cx].
 6. **Kein Produkt-/Enforce-Go**, solange Muss-Gates offen sind [Cx].
 7. Jede nicht prüfbare Aussage wird als **`nicht verifizierbar`** markiert — nicht geraten [Cx].
