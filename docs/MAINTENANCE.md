@@ -41,6 +41,19 @@ Schutzschichten.
    `pip install --pre homeassistant` und fährt dieselben Contract-Tests gegen die **kommende**
    Linie. Jede bisher validierte Linie wurde erst *nach* HAs Release gediffed — in der Zwischenzeit
    stand `enforce` bei Nutzern still. Rot in diesem Job heißt: neue Linie da, diffen.
+
+   **Rot wird sichtbar, nicht nur protokolliert.** Scheitern die Contract-Tests oder `mypy` in diesem
+   Job, öffnet CI ein öffentliches Issue mit Label **`ha-upcoming`** (HA-Version, welche Prüfung rot
+   ist, Link zum Lauf); ist schon eines offen, bekommt es einen Kommentar und den aktuellen Titel. Der
+   nächste grüne Lauf schließt es selbst. Scheitert schon die Installation der Vorabversion (PyPI,
+   kaputtes Beta-Wheel), wird **kein** Issue angelegt — das ist Infrastruktur, kein Signal.
+   Anlass: Ab HA 2026.11 war der Job tagelang rot, ohne dass es jemand sah; aufgefallen ist es erst
+   durch einen Nutzer (Issue #71).
+
+   **Regel: validieren, bevor HA ausliefert.** Ein `ha-upcoming`-Issue während der Beta-Woche
+   heißt: Diff (Schritt 1 unten) und das Release mit der erweiterten Linie **vor** HAs
+   Release-Termin schneiden. Erscheint HA ohne validierte Linie, steht `enforce` bei jedem Nutzer
+   still, der sofort aktualisiert.
 2. **HACS-Mindestversion — bewusst NICHT gesetzt (Entscheidung, kein offener Punkt).**
    `hacs.json` trägt keinen `homeassistant`-Pin. Ursprünglich, weil die `hacs/action`-Validierung
    den Wert als *künftiges* Minimum ablehnte; inzwischen aus einem inhaltlichen Grund: ein Pin
