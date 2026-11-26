@@ -7,8 +7,8 @@
 **Deutsch** · [English](GUIDE.md)
 
 [![HACS](https://img.shields.io/badge/HACS-Default%20Store-41BDF5.svg?style=flat-square)](https://github.com/NoSilver78/tessera)
-[![Version](https://img.shields.io/badge/version-0.9.4-blue.svg?style=flat-square)](https://github.com/NoSilver78/tessera/releases)
-[![HA](https://img.shields.io/badge/Home%20Assistant-2026.7.x%20--%202026.11.x-41BDF5.svg?style=flat-square)](#voraussetzungen)
+[![Version](https://img.shields.io/badge/version-0.9.6-blue.svg?style=flat-square)](https://github.com/NoSilver78/tessera/releases)
+[![HA](https://img.shields.io/badge/Home%20Assistant-2026.7.x%20--%202026.12.x-41BDF5.svg?style=flat-square)](#voraussetzungen)
 [![License](https://img.shields.io/badge/license-MIT-green.svg?style=flat-square)](../LICENSE)
 
 > [!WARNING]
@@ -137,7 +137,7 @@ flowchart LR
 
 | Voraussetzung | Wert / Hinweis |
 |---|---|
-| Home Assistant (für `enforce`) | **die Linien 2026.7–2026.11** (`SUPPORTED_HA_AUTH_FEATURES`; neueste validiert 2026.11.1) |
+| Home Assistant (für `enforce`) | **die Linien 2026.7–2026.12** (`SUPPORTED_HA_AUTH_FEATURES`; zuletzt validiertes Release 2026.11.1) |
 | Home Assistant (für `off`/`monitor`) | jede Version — `monitor` ist read-only und schreibt nie |
 | HACS | installiert (Tessera ist im HACS-Default-Store) |
 | Zugriff | **Administrator** (Panel, Optionen und Services sind admin-only) |
@@ -362,8 +362,8 @@ Der wichtigste Abschnitt. Bitte vor dem Produktivbetrieb lesen.
 > [!IMPORTANT]
 > Tessera schreibt über **private/undokumentierte HA-Auth-APIs**. Ein Laufzeit-Guard
 > (`SUPPORTED_HA_AUTH_FEATURES`) erlaubt den Schreibpfad auf den validierten HA-**Feature-Linien**
-> (aktuell **2026.7**, **2026.8**, **2026.9**, **2026.10** und **2026.11**, d. h. jedes Patch innerhalb dieser
-> Linien; neueste validiert **2026.11.1**). HA liefert Auth-Store-Breaking-Changes nur in der
+> (aktuell **2026.7**, **2026.8**, **2026.9**, **2026.10**, **2026.11** und **2026.12**, d. h. jedes Patch innerhalb dieser
+> Linien; zuletzt validiertes Release **2026.11.1**). HA liefert Auth-Store-Breaking-Changes nur in der
 > Monats-Linie aus, daher
 > funktionieren Patch-Updates weiter, und nur ein **nicht validiertes Monats-Release** pausiert
 > `enforce`.

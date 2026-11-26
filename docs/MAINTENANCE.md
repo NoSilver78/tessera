@@ -15,7 +15,7 @@ Schutzschichten.
 
 1. **Code-Guard auf die validierten HA-Feature-Linien.** Der Auth-Schreibpfad prüft im Code gegen die
    Menge validierter HA-**Feature-Linien** `YEAR.MONTH` (derzeit **`2026.7`**, **`2026.8`**,
-   **`2026.9`**, **`2026.10`** und **`2026.11`**, `SUPPORTED_HA_AUTH_FEATURES`; neueste validiert `2026.11.1`). Jedes
+   **`2026.9`**, **`2026.10`**, **`2026.11`** und **`2026.12`**, `SUPPORTED_HA_AUTH_FEATURES`; zuletzt validiertes Release `2026.11.1`). Jedes
    Patch innerhalb einer validierten Linie passiert; auf einem **nicht validierten Monats-Release** wird der
    Enforce-/Schreibpfad **fail-closed blockiert** (`compute_enforce_plan` liefert einen
    `blocked`-Plan) — **kein** nativer Write; wirksam bleibt der read-only `monitor`-Zustand. HA liefert
@@ -83,6 +83,10 @@ Schutzschichten.
 
 ## Prozess pro HA-Release
 
+Der Pin `SUPPORTED_HA_AUTH_VERSION` nennt immer eine **Release-Version**. Die Contract-Matrix
+fährt bei der Vorbereitung die Beta. Für die Regel „vor HAs Liefertermin releasen“ ist der PR
+bis zum HA-Liefertermin fertig (Entscheidung Michael, 2026-11-26).
+
 Für **jedes** neue Home-Assistant-Release:
 
 1. **Quellen diffen (bevor irgendetwas angehoben wird).** Die neue Linie ist erst dann validiert, wenn
@@ -100,7 +104,7 @@ Für **jedes** neue Home-Assistant-Release:
    Rebind, Restore. `tests/test_ha_auth_contract.py` prüft dabei das installierte HA selbst.
 3. **Bei grünem Lauf:** die neue Linie zu `SUPPORTED_HA_AUTH_FEATURES` hinzufügen (die alte Linie
    **bleibt** drin, solange ihr Subset kompatibel ist) und `SUPPORTED_HA_AUTH_VERSION` auf die neueste
-   getestete Patch-Version setzen; ggf. ein neues PATCH/MINOR-Release schneiden.
+   getestete Release-Version setzen; ggf. ein neues PATCH/MINOR-Release schneiden.
 4. **Bei gebrochener interner API:**
    - den Versions-Guard anpassen (neue HA-Version erkennen, Enforce fail-closed blockieren),
    - (optional, sobald gesetzt) die `hacs.json`-Mindestversion anheben,
@@ -143,9 +147,10 @@ nachvollziehbarer Diff gegen den zuvor validierten Tag.
 | `2026.9` | 2026.8.1 | `auth_store.py` + `models.py` byte-identisch. `permissions/entities.py` geändert (Area-Sub-Policy löst jetzt die *effektive* Area eines Geräts auf, `dr.async_get_effective_area_id`, für Child-Device-Vererbung) — **für Tessera nicht erreichbar**: der Compiler emittiert ausschließlich `entity_ids`-Leaves (hart geprüft in `_assert_allow_only_policy`) | 2026-10-25 (v0.9.4) |
 | `2026.10` | 2026.9.4 | `auth_store.py` byte-identisch; `models.Group` unverändert (`models.py` bekam nur PKCE-Felder am `AuthFlowContext` = Login-Flow, nicht das Gruppenmodell). `permissions/` tauschte `voluptuous` gegen `probatio` (HA ruft `install_as_voluptuous()` beim Import) — Schema-**Bibliothek** bei identischer Policy-Shape; HAs echtes `PolicyPermissions` gewährt weiterhin genau Tesseras allow-only-Policy | 2026-10-25 (v0.9.4) |
 | `2026.11` | 2026.10.4 | Gegen das Release **2026.11.1** wiederholt: `auth_store.py`, `models.py` und alle 9 Dateien in `permissions/` **byte-identisch**. `auth/__init__.py` geändert (Login-Flow, paralleles Provider-Init, `DuplicateCredentialsError`) — die drei von Tessera aufgerufenen `AuthManager`-Methoden `async_get_users`/`async_get_user`/`async_update_user` sind **unverändert**. Device-Registry stark umgebaut (`DeviceInfo` als Dataclass), die vom Resolver gelesenen Formen bleiben (Registry-Contract grün). Contract-Tests 17/17 + `mypy --strict` grün gegen 2026.11.1. Auslöser: Issue #71 | 2026-11-15 (v0.9.5) |
+| `2026.12` | 2026.11.1 → 2026.12.0b0 | `models.py` und alle 9 Dateien in `permissions/` byte-identisch. Sechs Hunks in `auth_store.py` betreffen das Tracking für Long-Lived-Tokens mit verzögertem Speichern und Flush beim Stop. `_data_to_save()` bricht im neuen dreizeiligen Prolog den Timer ab. Serialisierung, `_groups`, `self._store` und `async_get_groups` bleiben unverändert. | 2026-11-26 (v0.9.6) |
 
 Belegt durch `tests/test_ha_auth_contract.py` gegen das jeweils installierte HA — der CI-Matrix-Job
-`HA auth contract` fährt jede dieser Linien (`2026.7.1`, `2026.8.1`, `2026.9.4`, `2026.10.4`, `2026.11.1`).
+`HA auth contract` fährt jede dieser Linien (`2026.7.1`, `2026.8.1`, `2026.9.4`, `2026.10.4`, `2026.11.1`, `2026.12.0b0`).
 
 > **Child-Devices (HA 2026.9+):** Ein Child-Device ohne eigene Area erbt die Area des
 > Eltern-Geräts. `resolver._device_area_by_id()` löst diese **effektive** Area auf — dieselbe Regel

@@ -7,8 +7,8 @@
 [Deutsch](GUIDE.de.md) · **English**
 
 [![HACS](https://img.shields.io/badge/HACS-Default%20Store-41BDF5.svg?style=flat-square)](https://github.com/NoSilver78/tessera)
-[![Version](https://img.shields.io/badge/version-0.9.4-blue.svg?style=flat-square)](https://github.com/NoSilver78/tessera/releases)
-[![HA](https://img.shields.io/badge/Home%20Assistant-2026.7.x%20--%202026.11.x-41BDF5.svg?style=flat-square)](#prerequisites)
+[![Version](https://img.shields.io/badge/version-0.9.6-blue.svg?style=flat-square)](https://github.com/NoSilver78/tessera/releases)
+[![HA](https://img.shields.io/badge/Home%20Assistant-2026.7.x%20--%202026.12.x-41BDF5.svg?style=flat-square)](#prerequisites)
 [![License](https://img.shields.io/badge/license-MIT-green.svg?style=flat-square)](../LICENSE)
 
 > [!WARNING]
@@ -135,7 +135,7 @@ flowchart LR
 
 | Requirement | Value / note |
 |---|---|
-| Home Assistant (for `enforce`) | **the 2026.7–2026.11 lines** (`SUPPORTED_HA_AUTH_FEATURES`; newest validated 2026.11.1) |
+| Home Assistant (for `enforce`) | **the 2026.7–2026.12 lines** (`SUPPORTED_HA_AUTH_FEATURES`; latest validated release 2026.11.1) |
 | Home Assistant (for `off`/`monitor`) | any version — `monitor` is read-only and never writes |
 | HACS | installed (Tessera is in the HACS default store) |
 | Access | **administrator** (panel, options and services are admin-only) |
@@ -357,8 +357,8 @@ The most important section. Please read before production use.
 > [!IMPORTANT]
 > Tessera writes through **private/undocumented HA auth APIs**. A runtime guard
 > (`SUPPORTED_HA_AUTH_FEATURES`) permits the write path on the validated HA **feature lines**
-> (currently **2026.7**, **2026.8**, **2026.9**, **2026.10** and **2026.11**, i.e. any patch inside those lines;
-> newest validated **2026.11.1**). HA ships breaking auth-store changes only in the monthly
+> (currently **2026.7**, **2026.8**, **2026.9**, **2026.10**, **2026.11** and **2026.12**, i.e. any patch inside those lines;
+> latest validated release **2026.11.1**). HA ships breaking auth-store changes only in the monthly
 > line, so patch updates keep working and only an **unvalidated monthly release** pauses
 > `enforce`.
 

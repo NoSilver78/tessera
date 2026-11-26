@@ -59,8 +59,16 @@ SUPPORTED_HA_AUTH_FEATURE = ".".join(SUPPORTED_HA_AUTH_VERSION.split(".")[:2])
 #   AuthManager methods Tessera calls — async_get_users, async_get_user,
 #   async_update_user — are unchanged; contract tests and mypy --strict green
 #   against 2026.11.1 (verified 2026-11-15, issue #71).
+#   2026.11 → 2026.12: models.py and all 9 files in permissions/ are
+#   byte-identical (2026.11.1 → 2026.12.0b0, verified 2026-11-26).
+#   auth_store.py changed in six hunks for long-lived token usage debouncing
+#   and shutdown flush. _data_to_save() gained only a three-line timer
+#   cancellation prologue; serialization, _groups, self._store and
+#   async_get_groups are unchanged.
+#   List 2026.12 explicitly after validation against the beta. The version
+#   pin follows when the 2026.12.0 release tag is available.
 SUPPORTED_HA_AUTH_FEATURES = frozenset(
-    {"2026.7", "2026.8", "2026.9", "2026.10", SUPPORTED_HA_AUTH_FEATURE}
+    {"2026.7", "2026.8", "2026.9", "2026.10", SUPPORTED_HA_AUTH_FEATURE, "2026.12"}
 )
 TESSERA_GROUP_PREFIX = "tessera:"
 GROUP_ID_ADMIN = "system-admin"
