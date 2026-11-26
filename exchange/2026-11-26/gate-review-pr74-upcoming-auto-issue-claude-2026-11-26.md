@@ -130,3 +130,42 @@ Definition of Done: YAML parst, nur die Titelzeile geändert.
 
 Abschlussbericht: geänderte Zeile, Parse-Ergebnis.
 ```
+
+---
+
+## Nachtrag 2026-11-26 — Auflage zur Hälfte erfüllt
+
+PR #74 ist als `95fa7ba` squash-gemergt (alle 8 PR-Checks grün, `upcoming` im PR korrekt
+`skipping`); CI auf `main` danach grün, `CI` und `Validate` beide `success`.
+
+Die Auflage verlangte, den nie ausgeführten Melde-Pfad per Dispatch zu beweisen. Gefahren als
+[Run 45783711847](https://github.com/NoSilver78/tessera/actions/runs/45783711847). Vorzustand
+festgehalten: kein Issue mit Label `ha-upcoming`, das Label existierte nicht.
+
+Ergebnis — die Mechanik hält:
+
+| | |
+|---|---|
+| `quality` + fünf Contract-Linien | success |
+| `HA upcoming line (pre-release)` | **failure**, bestimmungsgemäß |
+| Schritt „Contract tests against the upcoming HA" | failure (`2026.12.0b0` nicht validiert) |
+| Schritt „mypy against the upcoming HA (strict)" | **success** — läuft also trotz roter Contract-Tests, wie vorgesehen |
+| Schritt „Open or update the ha-upcoming tracking issue" | **success** |
+| Schritt „Close the ha-upcoming tracking issue" | skipped |
+
+Angelegt wurde [#76](https://github.com/NoSilver78/tessera/issues/76) „HA 2026.12.0b0: upcoming line
+not validated yet", Label `ha-upcoming`, Autor `app/github-actions`. Damit sind zwei der drei vorher
+als **nicht prüfbar** ausgewiesenen Punkte erledigt:
+
+- `gh issue create` geht im Actions-Kontext mit `issues: write` durch.
+- Der Body rendert korrekt: Markdown-Tabelle mit den richtigen Werten (Contract-Tests `failure`,
+  mypy `success` — der Beleg, dass beide Checks gemeldet werden) und ein **absoluter**
+  MAINTENANCE-Link.
+- Offen bleibt nur das Verhalten bei zwei gleichzeitigen Läufen (niedrige Auswirkung).
+
+**Noch offen:** die zweite Hälfte der Auflage — nach der 2026.12-Validierung muss ein grüner Lauf
+#76 selbst schließen. Das fällt mit
+[`ha-2026-12-codex-tasks-claude-2026-11-26.md`](ha-2026-12-codex-tasks-claude-2026-11-26.md)
+zusammen und ist dort als Definition of Done verankert („Nightly-Job gegen die Vorabversion grün").
+Ebenfalls offen und unverändert niedrig: die beiden Punkte aus den Codex-Aufgaben 1 und 2 dieses
+Reviews (Top-Level-`permissions` in `ci.yml`, neutralerer Issue-Titel).
