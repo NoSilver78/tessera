@@ -1,0 +1,328 @@
+diff --git a/custom_components/tessera/_ha_contract.py b/custom_components/tessera/_ha_contract.py
+new file mode 100644
+index 0000000..f942141
+--- /dev/null
++++ b/custom_components/tessera/_ha_contract.py
+@@ -0,0 +1,49 @@
++"""Type-level assertions about the Home Assistant internals Tessera reads.
++
++Tessera reads attributes of HA's ``auth.models.User`` that Home Assistant gives
++no stability guarantee for. Reading them through ``getattr(user, "x", default)``
++hid a removal behind a *permissive* default: a renamed ``is_owner`` would have
++made the owner look manageable. This module states the expectation instead, so
++``mypy --strict`` fails the moment the installed Home Assistant no longer
++satisfies it — per validated line in the CI contract matrix, and nightly against
++the coming line.
++
++Nothing here runs: the whole module body is ``TYPE_CHECKING`` only.
++"""
++
++from __future__ import annotations
++
++from typing import TYPE_CHECKING
++
++if TYPE_CHECKING:
++    from typing import Protocol
++
++    from homeassistant.auth import models
++    from homeassistant.auth.permissions.types import PolicyType
++
++    class _UserLike(Protocol):
++        """Exactly the ``User`` surface Tessera's adapters and guards read."""
++
++        id: str
++        is_owner: bool
++        is_active: bool
++        system_generated: bool
++
++        def invalidate_cache(self) -> None:
++            """Drop HA's cached ``permissions``/``is_admin``."""
++
++    class _GroupLike(Protocol):
++        """Exactly the ``Group`` surface the policy adapter writes."""
++
++        id: str
++        name: str | None
++        policy: PolicyType
++        system_generated: bool
++
++    def _assert_user_contract(user: models.User) -> _UserLike:
++        """Fail the type check if HA's ``User`` loses a member Tessera reads."""
++        return user
++
++    def _assert_group_contract(group: models.Group) -> _GroupLike:
++        """Fail the type check if HA's ``Group`` loses a member Tessera writes."""
++        return group
+diff --git a/custom_components/tessera/_user_helpers.py b/custom_components/tessera/_user_helpers.py
+index d00506e..1cefe16 100644
+--- a/custom_components/tessera/_user_helpers.py
++++ b/custom_components/tessera/_user_helpers.py
+@@ -14,6 +14,4 @@ def _user_group_ids(user: Any) -> list[str]:
+ 
+ def _is_unmanaged_user(user: Any) -> bool:
+     """Return whether Tessera must not manage this user."""
+-    return bool(getattr(user, "is_owner", False)) or bool(
+-        getattr(user, "system_generated", False)
+-    )
++    return bool(user.is_owner) or bool(user.system_generated)
+diff --git a/custom_components/tessera/auth_adapter.py b/custom_components/tessera/auth_adapter.py
+index a5faa2e..eb7d95d 100644
+--- a/custom_components/tessera/auth_adapter.py
++++ b/custom_components/tessera/auth_adapter.py
+@@ -309,9 +309,7 @@ class UserBindingAdapter:
+             _invalidate_permission_cache(user)
+             return
+         await self._hass.auth.async_update_user(user, group_ids=sorted_group_ids)
+-        invalidate_cache = getattr(user, "invalidate_cache", None)
+-        if callable(invalidate_cache):
+-            invalidate_cache()
++        _invalidate_permission_cache(user)
+ 
+     async def async_restore_exact_groups(
+         self, user: Any, group_ids: Collection[str]
+@@ -326,9 +324,7 @@ class UserBindingAdapter:
+         self._assert_supported_version()
+         sorted_group_ids = _validate_exact_restore_binding(user, group_ids)
+         await self._hass.auth.async_update_user(user, group_ids=sorted_group_ids)
+-        invalidate_cache = getattr(user, "invalidate_cache", None)
+-        if callable(invalidate_cache):
+-            invalidate_cache()
++        _invalidate_permission_cache(user)
+ 
+     async def async_strip_tessera_groups(self, user: Any) -> None:
+         """Remove only ``tessera:*`` ids from any user, owner included.
+@@ -349,9 +345,7 @@ class UserBindingAdapter:
+         if kept == current:
+             return
+         await self._hass.auth.async_update_user(user, group_ids=kept)
+-        invalidate_cache = getattr(user, "invalidate_cache", None)
+-        if callable(invalidate_cache):
+-            invalidate_cache()
++        _invalidate_permission_cache(user)
+ 
+     def snapshot_user_groups(self, users: Iterable[Any]) -> AuthRecoverySnapshot:
+         """Capture namespace-guarded group bindings for managed Tessera users."""
+@@ -486,10 +480,8 @@ def _make_group(group_id: str, name: str, policy: dict[str, Any]) -> AuthGroupLi
+ 
+ 
+ def _invalidate_permission_cache(user: Any) -> None:
+-    """Drop HA's cached ``User.permissions`` (test doubles may not have one)."""
+-    invalidate_cache = getattr(user, "invalidate_cache", None)
+-    if callable(invalidate_cache):
+-        invalidate_cache()
++    """Drop HA's cached ``User.permissions``."""
++    user.invalidate_cache()
+ 
+ 
+ async def _async_persist_auth_store(store: AuthStoreLike) -> None:
+@@ -628,16 +620,14 @@ def _assert_allow_only_policy(policy: Mapping[str, Any]) -> None:
+ 
+ def _is_managed_user(user: Any) -> bool:
+     """Return whether Tessera manages this user (not owner, not system-generated)."""
+-    return not getattr(user, "is_owner", False) and not getattr(
+-        user, "system_generated", False
+-    )
++    return not user.is_owner and not user.system_generated
+ 
+ 
+ def _assert_managed_user(user: Any) -> None:
+     """Reject owner/system-generated users from native binding writes."""
+-    if getattr(user, "is_owner", False):
++    if user.is_owner:
+         raise LockoutRisk("owner users are not managed by Tessera")
+-    if getattr(user, "system_generated", False):
++    if user.system_generated:
+         raise UnsafeAuthTarget("system-generated users are not managed by Tessera")
+ 
+ 
+@@ -668,11 +658,11 @@ def _assert_owner_or_admin_survives_in(
+     ``target_group_ids_by_user`` from its own source and passes its own message.
+     """
+     for user_id, user in users_by_id.items():
+-        if not getattr(user, "is_active", True):
++        if not user.is_active:
+             continue
+-        if getattr(user, "system_generated", False):
++        if user.system_generated:
+             continue
+-        if getattr(user, "is_owner", False):
++        if user.is_owner:
+             return
+         group_ids = target_group_ids_by_user.get(user_id, set(_user_group_ids(user)))
+         if GROUP_ID_ADMIN in group_ids:
+@@ -691,10 +681,10 @@ def _user_id(user: Any) -> str:
+ 
+ def _is_active_owner_or_admin(user: Any) -> bool:
+     """Return whether a user preserves the owner/admin recovery path."""
+-    if not getattr(user, "is_active", True):
++    if not user.is_active:
+         return False
+-    if getattr(user, "system_generated", False):
++    if user.system_generated:
+         return False
+-    if getattr(user, "is_owner", False):
++    if user.is_owner:
+         return True
+     return GROUP_ID_ADMIN in set(_user_group_ids(user))
+diff --git a/tests/test_ha_auth_contract.py b/tests/test_ha_auth_contract.py
+index 3444496..35f4bf3 100644
+--- a/tests/test_ha_auth_contract.py
++++ b/tests/test_ha_auth_contract.py
+@@ -113,3 +113,27 @@ def test_installed_permissions_accept_tesseras_allow_only_policy_shape() -> None
+ 
+     assert permissions.check_entity("light.kitchen", "read") is True
+     assert permissions.check_entity("light.hallway", "read") is False
++
++
++def test_installed_user_model_still_offers_the_permission_cache_drop() -> None:
++    """``User.invalidate_cache()`` must really drop the cached ``permissions``.
++
++    The adapters call it after every policy write and after a skipped bind. If
++    it stopped clearing the cache, a policy narrowed in place (an entity left a
++    granted area) would keep granting until Home Assistant restarts — the
++    behaviour, not just the name, is the contract.
++    """
++    from homeassistant.auth import models
++
++    user = models.User(name="contract", perm_lookup=None, groups=[], id="contract")
++
++    assert callable(getattr(user, "invalidate_cache", None))
++    _ = user.permissions
++    assert "permissions" in user.__dict__, "permissions is no longer cached"
++
++    user.invalidate_cache()
++
++    assert "permissions" not in user.__dict__, (
++        "invalidate_cache no longer drops the permissions cache — a policy "
++        "narrowed in place would keep granting until restart"
++    )
+diff --git a/tests/test_init.py b/tests/test_init.py
+index 414063a..2aa555c 100644
+--- a/tests/test_init.py
++++ b/tests/test_init.py
+@@ -130,6 +130,9 @@ class FakeUser:
+     system_generated: bool = False
+     is_admin: bool = False
+ 
++    def invalidate_cache(self) -> None:
++        """No-op cache drop, like HA's User."""
++
+ 
+ class FakeAuth:
+     """Small auth double exposing users without native write behavior."""
+diff --git a/tests/test_mode_manager.py b/tests/test_mode_manager.py
+index c4282c7..542cdb4 100644
+--- a/tests/test_mode_manager.py
++++ b/tests/test_mode_manager.py
+@@ -87,6 +87,7 @@ class FakeUser:
+     group_ids: list[str]
+     is_owner: bool = False
+     system_generated: bool = False
++    is_active: bool = True
+ 
+ 
+ class WriteTrapStore:
+diff --git a/tests/test_no_silent_ha_fallbacks.py b/tests/test_no_silent_ha_fallbacks.py
+new file mode 100644
+index 0000000..b100fad
+--- /dev/null
++++ b/tests/test_no_silent_ha_fallbacks.py
+@@ -0,0 +1,84 @@
++"""Guard against new *silent* fallbacks on Home Assistant internals.
++
++``getattr(obj, "attr", default)`` on a Home Assistant object hides a removed or
++renamed attribute behind the default. Where that default is permissive, the
++removal does not fail — it silently takes the less safe branch. That is how the
++owner/system-generated guards and the permissions-cache drop came to depend on
++HA internals without anything failing when they move.
++
++The rule: attributes of HA objects are read **strictly**, so a removal raises
++and the enforce path fails closed. A genuinely optional attribute — one that
++exists on some validated HA lines and not on others — is allowed, but it has to
++be listed here with its reason, so adding one is a decision instead of a habit.
++"""
++
++from __future__ import annotations
++
++import ast
++import pathlib
++
++COMPONENT = (
++    pathlib.Path(__file__).resolve().parent.parent / "custom_components" / "tessera"
++)
++
++# file name -> attribute name -> why this one may be read with a fallback
++ALLOWED: dict[str, dict[str, str]] = {
++    "resolver.py": {
++        "child_devices": "HA 2026.9+ only; absent on the validated 2026.7/2026.8 lines",
++    },
++    "d9_gate.py": {
++        "version": "custom-component manifests may legitimately carry no version",
++    },
++    # These three read the id with a fallback and then *validate* it: a missing
++    # id raises (UnsafeAuthTarget) or skips the user. The fallback is not a
++    # permissive branch, it is the input to an explicit check.
++    "__init__.py": {"id": "validated right after the read; missing id is rejected"},
++    "auth_adapter.py": {"id": "validated right after the read; missing id raises"},
++    "mode_manager.py": {"id": "validated right after the read; missing id is skipped"},
++}
++
++
++def _getattr_sites() -> list[tuple[str, str, int]]:
++    """Return (file, attribute, line) for every three-argument getattr call."""
++    sites: list[tuple[str, str, int]] = []
++    for path in sorted(COMPONENT.glob("*.py")):
++        tree = ast.parse(path.read_text(), filename=str(path))
++        for node in ast.walk(tree):
++            if (
++                isinstance(node, ast.Call)
++                and isinstance(node.func, ast.Name)
++                and node.func.id == "getattr"
++                and len(node.args) == 3
++                and isinstance(node.args[1], ast.Constant)
++                and isinstance(node.args[1].value, str)
++            ):
++                sites.append((path.name, node.args[1].value, node.lineno))
++    return sites
++
++
++def test_no_unlisted_silent_fallback_on_ha_attributes() -> None:
++    """Every fallback read of an HA attribute is listed with a reason."""
++    unlisted = [
++        f"{file}:{line} getattr(..., {attr!r}, <default>)"
++        for file, attr, line in _getattr_sites()
++        if attr not in ALLOWED.get(file, {})
++    ]
++
++    assert not unlisted, (
++        "Silent fallback on a Home Assistant attribute. Read it strictly so a "
++        "removal fails closed, or add it to ALLOWED in this test with the HA "
++        "lines that make it optional:\n  " + "\n  ".join(unlisted)
++    )
++
++
++def test_allowlist_has_no_stale_entries() -> None:
++    """An allowlist entry whose call site is gone must not linger."""
++    present = {(file, attr) for file, attr, _ in _getattr_sites()}
++    stale = [
++        f"{file}:{attr}"
++        for file, attrs in ALLOWED.items()
++        for attr in attrs
++        if (file, attr) not in present
++    ]
++
++    assert not stale, f"stale ALLOWED entries: {stale}"
+diff --git a/tests/test_restore.py b/tests/test_restore.py
+index a886dbb..33d56fe 100644
+--- a/tests/test_restore.py
++++ b/tests/test_restore.py
+@@ -28,6 +28,9 @@ class FakeUser:
+     system_generated: bool = False
+     is_active: bool = True
+ 
++    def invalidate_cache(self) -> None:
++        """No-op cache drop, like HA's User."""
++
+ 
+ class SpyPolicyStore:
+     """Policy-store spy for restore tests."""
