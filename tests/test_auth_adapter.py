@@ -40,6 +40,8 @@ def test_version_guard_is_pinned_to_the_supported_feature_line() -> None:
         SUPPORTED_HA_AUTH_VERSION,
         f"{SUPPORTED_HA_AUTH_FEATURE}.0",
         f"{SUPPORTED_HA_AUTH_FEATURE}.99",
+        "2026.12.0b0",
+        "2026.12.0",
     ],
 )
 def test_version_guard_tolerates_any_patch_in_the_feature_line(version: str) -> None:
@@ -47,7 +49,7 @@ def test_version_guard_tolerates_any_patch_in_the_feature_line(version: str) -> 
     _assert_supported_auth_version(version)  # must not raise
 
 
-@pytest.mark.parametrize("version", ["2026.12.0", "2026.6.9", "2027.7.0", "1900.1.1"])
+@pytest.mark.parametrize("version", ["2026.13.0", "2026.6.9", "2027.7.0", "1900.1.1"])
 def test_version_guard_blocks_other_feature_lines(version: str) -> None:
     """An unvalidated monthly release is fail-closed regardless of patch."""
     with pytest.raises(UnsupportedAuthVersion):

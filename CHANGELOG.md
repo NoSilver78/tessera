@@ -7,6 +7,19 @@ Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [0.9.6] — 2026-11-26
+
+### Hinzugefügt
+- **HA 2026.12 als validierte Auth-Linie.** Der Versions-Guard akzeptiert jetzt die Linien
+  **2026.7 bis 2026.12**. Der Quelldiff von `2026.11.1` zu `2026.12.0b0` bestätigt, dass
+  `auth/models.py` und alle neun Dateien in `auth/permissions/` byte-identisch sind. Die sechs
+  Hunks in `auth/auth_store.py` betreffen das Nutzungstracking für Long-Lived-Tokens.
+  `_data_to_save()` erhält einen dreizeiligen Prolog zum Abbrechen des Timers. Die Serialisierung
+  sowie `_groups`, `self._store` und `async_get_groups` bleiben unverändert.
+- Die Contract-Matrix fährt zusätzlich `2026.12.0b0`. Damit kann der Nightly-Check für die
+  installierte HA-Linie wieder grün werden. Der Release-Pin bleibt bis zum stabilen
+  HA-Release auf `2026.11.1`.
+
 ## [0.9.5] — 2026-11-15
 
 ### Hinzugefügt
