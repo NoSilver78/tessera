@@ -24,6 +24,7 @@ Alle Prompts existieren schon, hier steht nur die Zuordnung. Nicht neu formulier
 |---|---|---|---|
 | 4a | Top-Level `permissions: contents: read` in `ci.yml` | [Gate #74](gate-review-pr74-upcoming-auto-issue-claude-2026-11-26.md), Aufgabe 1 | **ein** PR mit 4b — beide fassen nur `ci.yml` an |
 | 4b | Issue-Titel neutral fassen (`… nightly upcoming-line check is red`) | [Gate #74](gate-review-pr74-upcoming-auto-issue-claude-2026-11-26.md), Aufgabe 2 | siehe 4a |
+| 4d | **Ein geschlossenes `ha-upcoming`-Issue wiedereröffnen statt ein zweites anzulegen** — der Melde-Schritt sucht heute nur nach einem *offenen* Issue. Wird eines von außen geschlossen, während die Bedingung gilt, zerfällt die Historie in Duplikate. **Zwei belegte Vorfälle am 2026-11-26** (Commits `95dc8d9` und `988f221`, beide über ein GitHub-Schlüsselwort in der Commit-Prosa) — das ist kein hypothetischer Fall. Schritt „Open or update the ha-upcoming tracking issue": zuerst nach `--state all` suchen, ein geschlossenes Issue mit `gh issue reopen` wieder öffnen und kommentieren, nur sonst neu anlegen | neu, aus dem Vorfall | **mit 4a/4b bündeln** — alle drei fassen `ci.yml` an |
 | 4c | GUIDE EN/DE: Verhalten bei blockiertem automatischem Recompile dokumentieren | [Gate #73](gate-review-pr73-auto-recompile-claude-2026-11-26.md), Aufgabe 3 | **mit Rang 1** erledigen, nicht danach — der Prompt verlangt ohnehin „erst nach Aufgabe 1", und der neue Repairs-Text soll zitiert werden |
 
 ### Zwei Punkte, für die ich *nicht* werbe
