@@ -84,5 +84,11 @@ Repo + `exchange/`-Blackboard + Dual-Config. **`TASKS.md`**-Board (Michael-Nicke
 | Codex | **ACCEPT** (v0.2-Review MODIFY → 5 Redlines eingearbeitet) | 2026-06-29 |
 | Michael | **Kernpunkte abgenickt** (OIDC-v1-Pflicht ergänzt) | 2026-06-29 |
 
+### Änderungen nach v1.0
+
+| Änderung | Status | Datum |
+|---|---|---|
+| **§2.4 neu gefasst** — Trennlinie „berichtet vs. bindet" statt Pauschalverbot direkter `main`-Arbeit · „ins private Repo" ersetzt durch die öffentliche Realität (Secret-Check Pflicht) · keine Close-Schlüsselwörter neben Issue-Nummern in Commit-Prosa. Enthält eine **Lockerung** (Berichtspfade dürfen direkt auf `main`) und zwei Verschärfungen | Vorschlag Claude → **ACCEPT Michael** (PR #78) | 2026-11-26 |
+
 ---
 **v1.0** = v0.2 + Codex' 5 v0.2-Review-Redlines (Status · Transport · Push-Regel · Naming · Doku-Scope) eingearbeitet. Künftige Änderungen via §14 (Ping-Pong + Michael-Bestätigung; Sicherheitsinvarianten nie still gelockert).
