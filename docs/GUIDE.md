@@ -514,7 +514,8 @@ Check in order:
 1. Is the user an **admin/owner**? Then the **bypass** applies — they are never restricted.
 2. Is the mode really `enforce`? (`tessera.preflight` → `mode`).
 3. Does the user have a **membership**? (without a role: default = allow-nothing).
-4. After model changes, run `tessera.recompile` if needed.
+4. Registry and user changes recompile by themselves (debounced, about 2 s). After editing
+   the Tessera model outside the panel/options flow, run `tessera.recompile`.
 
 ### Changes have no effect
 

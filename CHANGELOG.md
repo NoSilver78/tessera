@@ -7,6 +7,51 @@ Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Hinzugefügt
+- **Automatisches Neukompilieren bei Registry- und Nutzer-Änderungen** (`auto_recompile.py`).
+  Eine kompilierte Policy war ein Schnappschuss der Registries zum Compile-Zeitpunkt und blieb bis
+  zum nächsten Service-Aufruf, Options-Edit oder Neustart in Kraft. Drei Folgen davon waren
+  **Rechte-Drift nach oben**:
+  - Eine Entität oder ein Gerät, das **aus** einer freigegebenen Area wanderte (oder ein Label
+    verlor), behielt `read`/`control`.
+  - Nach einer Entity-Umbenennung blieb die alte ID in der Policy. Eine *neue* Entität mit dieser
+    ID erbte den Grant.
+  - Ein unter `enforce` angelegter Nutzer behielt HAs `system-users` (alles erlaubt).
+
+  Jetzt lösen Entity-, Device-, Area-, Floor- und Label-Registry-Events sowie
+  `user_added`/`user_removed`/`user_updated` einen **entprellten** Recompile aus (2 s; ein Schwall
+  wird zu einem Lauf). Er läuft über denselben abgesicherten Pfad wie `tessera.recompile`
+  (`mutation_lock`, Fail-safe), nur für geladene Einträge in `monitor`/`enforce`.
+  Entity-/Device-Updates, die nur Felder ändern, die der Resolver nicht liest (Name, Icon,
+  Firmware), lösen nichts aus. Gegen eine Rückkopplung (Tesseras eigene Bindungen feuern
+  `user_updated`) überspringen die Adapter Schreibvorgänge, die nichts ändern würden. Der vom
+  eigenen Write ausgelöste Lauf findet dann nichts zu tun und endet.
+
+  Belegt Ende-zu-Ende gegen echtes HA (Registries, `AuthStore`, Bus, Debouncer):
+  `tests/test_auto_recompile_e2e.py` verschiebt ein Türschloss aus dem Kinderzimmer, und das Kind
+  verliert `control` darauf; ein neuer Nutzer wird ungefragt auf `__default__` gebunden. Dabei fiel
+  ein echter Fehler auf: Ein `lambda`, das eine Coroutine zurückgibt, stuft HAs Debouncer als
+  Executor-Job ein und wartet die Coroutine nie ab. Der Recompile lief also nie. Ein eigener Test
+  hält jetzt fest, dass Setup eine Coroutine-Funktion übergibt.
+
+  Nachgeschärft nach unabhängiger Gegenprüfung (alle drei Befunde per Test belegt, jeder Fix
+  einzeln gegengeprüft):
+  - **Kritisch: Rechte-Cache.** HA cached `User.permissions` aus den Gruppen-Policies. Die neue
+    Leerlauf-Prüfung übersprang Bindungen, die sich nicht ändern. Damit fiel auch das Leeren des
+    Caches weg, und eine Policy, die sich *in place* änderte (Entität aus der Area entfernt),
+    gewährte bis zum Neustart weiter. Jetzt leert jede übersprungene Bindung und jeder echte
+    Policy-Write den Cache der betroffenen Nutzer. Das feuert kein Event, der Schleifenschutz
+    bleibt.
+  - **Hoch: blockierter Plan bei automatischem Recompile.** Ein Linter-Konflikt oder ein
+    D9-Veto, unbeaufsichtigt durch eine Registry-Änderung ausgelöst, persistierte `monitor` bei
+    weiter gebundenen Gruppen. Jeder spätere Recompile erzeugte dann nur noch eine Vorschau, und
+    die Drift fror ein. Jetzt bleibt ein **laufendes** `enforce` beim automatischen Recompile
+    `enforce`: Der zuletzt angewandte Stand bleibt, ein Repairs-Hinweis nennt den Block, und die
+    nächste Änderung versucht es erneut. Manuelle Wege (`set_mode`, `tessera.recompile`,
+    Options-Flow) behalten das bisherige Fail-safe-Verhalten.
+  - **Mittel: Unload gegen laufenden Recompile.** Das Entladen läuft jetzt unter `mutation_lock`.
+    Ein Recompile mitten im Apply kann Nutzer nicht mehr nach dem Restore erneut binden.
+
 ## [0.9.5] — 2026-11-15
 
 ### Hinzugefügt

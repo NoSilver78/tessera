@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -32,6 +33,7 @@ from .auth_adapter import (
     RecoveryController,
     UserBindingAdapter,
 )
+from .auto_recompile import async_setup_auto_recompile
 from .compiler import compile_policies
 from .config_flow import (
     set_floor_grant,
@@ -159,7 +161,31 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await _compile_for_mode_safely(
             hass, entry.entry_id, domain_data[entry.entry_id]
         )
+    # A partial of the coroutine function, not a lambda: HA's Debouncer
+    # classifies its job by the callable, and a lambda returning a coroutine is
+    # run as a plain executor job whose coroutine is never awaited.
+    async_setup_auto_recompile(
+        hass, entry.async_on_unload, partial(_auto_recompile, hass, entry.entry_id)
+    )
     return True
+
+
+async def _auto_recompile(hass: HomeAssistant, entry_id: str) -> None:
+    """Recompile one entry after a registry or user change (debounced caller).
+
+    Runs under ``mutation_lock`` like every other mode-handling path. Only a
+    live ``monitor``/``enforce`` entry recompiles; ``off`` has nothing to keep
+    in sync, and an entry unloaded meanwhile is left alone.
+    """
+    async with mutation_lock(hass):
+        entry_data = _domain_data(hass).get(entry_id)
+        if not isinstance(entry_data, dict):
+            return
+        if entry_data.get("mode") not in (MODE_MONITOR, MODE_ENFORCE):
+            return
+        await _compile_for_mode_safely(
+            hass, entry_id, entry_data, keep_enforce_on_block=True
+        )
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -176,10 +202,14 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         ``True`` once unload succeeds.
     """
     domain_data = _domain_data(hass)
-    entry_data = domain_data.get(entry.entry_id)
-    if isinstance(entry_data, dict):
-        await _restore_on_enforce_exit_safely(hass, entry.entry_id, entry_data)
-    domain_data.pop(entry.entry_id, None)
+    # Under the same lock as every mode-handling path: an automatic recompile
+    # that is mid-apply finishes first, so it cannot re-bind users after this
+    # restore. Once the bucket is gone, a pending one finds nothing to do.
+    async with mutation_lock(hass):
+        entry_data = domain_data.get(entry.entry_id)
+        if isinstance(entry_data, dict):
+            await _restore_on_enforce_exit_safely(hass, entry.entry_id, entry_data)
+        domain_data.pop(entry.entry_id, None)
     if not _has_loaded_entries(domain_data):
         if domain_data.pop(DATA_PANEL_REGISTERED, None) is True:
             async_remove_panel(hass, PANEL_URL_PATH, warn_if_unknown=False)
@@ -850,11 +880,17 @@ async def _async_register_matrix_panel(hass: HomeAssistant) -> None:
 
 
 async def _compile_for_mode_safely(
-    hass: HomeAssistant, entry_id: str, entry_data: dict[str, Any]
+    hass: HomeAssistant,
+    entry_id: str,
+    entry_data: dict[str, Any],
+    *,
+    keep_enforce_on_block: bool = False,
 ) -> None:
     """Compile/apply the active mode, failing safe to monitor on errors."""
     try:
-        await _compile_for_mode(hass, entry_id, entry_data)
+        await _compile_for_mode(
+            hass, entry_id, entry_data, keep_enforce_on_block=keep_enforce_on_block
+        )
     except Exception as err:
         await _fail_safe_to_monitor(
             hass,
@@ -873,7 +909,11 @@ async def _compile_for_mode_safely(
 
 
 async def _compile_for_mode(
-    hass: HomeAssistant, entry_id: str, entry_data: dict[str, Any]
+    hass: HomeAssistant,
+    entry_id: str,
+    entry_data: dict[str, Any],
+    *,
+    keep_enforce_on_block: bool = False,
 ) -> None:
     """Handle Tessera's current mode.
 
@@ -921,7 +961,14 @@ async def _compile_for_mode(
         return
 
     if config["mode"] == MODE_ENFORCE:
-        await _apply_enforce_mode(hass, entry_id, store, entry_data)
+        await _apply_enforce_mode(
+            hass,
+            entry_id,
+            store,
+            entry_data,
+            keep_enforce_on_block=keep_enforce_on_block
+            and previous_mode == MODE_ENFORCE,
+        )
         return
 
 
@@ -995,9 +1042,35 @@ async def _apply_enforce_mode(
     entry_id: str,
     store: TesseraStore,
     entry_data: dict[str, Any],
+    *,
+    keep_enforce_on_block: bool = False,
 ) -> None:
-    """Run the E3.5 enforce sequence through guarded callables."""
+    """Run the E3.5 enforce sequence through guarded callables.
+
+    ``keep_enforce_on_block`` is set for automatic recompiles of a live enforce
+    entry. A registry change can block the plan unattended (a linter conflict
+    after an entity move, a D9 veto from a component that registered late).
+    Failing safe to monitor there persisted ``monitor`` while the native
+    bindings stayed live, so every later recompile only previewed and the drift
+    this path exists to correct froze in place. Instead the last applied state
+    stays, enforce stays the mode, a Repairs issue names the block, and the next
+    change retries.
+    """
     plan = await compute_enforce_plan(hass, store)
+    if plan["blocked"] and keep_enforce_on_block:
+        LOGGER.warning(
+            "Tessera recompile for entry %s blocked (%s); keeping the last applied "
+            "enforce state until the block clears",
+            entry_id,
+            plan["block_reason"],
+        )
+        await _record_repair_issue(
+            hass,
+            entry_id,
+            REPAIR_ENFORCE_FAIL_SAFE,
+            reason=f"auto_recompile_blocked:{plan['block_reason']}",
+        )
+        return
     if plan["blocked"]:
         await _fail_safe_to_monitor(
             hass,
