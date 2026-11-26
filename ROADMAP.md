@@ -1,7 +1,8 @@
 # Roadmap
 
 Dieses Dokument beschreibt **wohin Tessera will**, **wo es gerade steht** und **was noch zu tun
-ist**. Stand: **2026-10-25** (v0.9.4 — im HACS-Default-Store; HA-Linien 2026.7–2026.10 validiert).
+ist**. Stand: **2026-11-26** (v0.9.5 — im HACS-Default-Store; HA-Linien 2026.7–2026.11
+validiert, 2026.12 steht aus).
 Es ist bewusst ehrlich — auch über offene Flanken (siehe ganz unten).
 
 ## Vision
@@ -73,6 +74,13 @@ geführt — und seit E3.5 (Phase 3) im Setup-Pfad verdrahtet:
 - **Dogfood:** auf einer echten, eigenen Instanz betreiben — überlebt es ein HA-Update ohne
   Vorfall?
 
+> **Erste Praxis-Evidenz, ehrlich eingeordnet (26.11.2026):** ein fremder Nutzer ist auf HA 2026.11
+> in den Versions-Guard gelaufen und hat es gemeldet
+> ([#71](https://github.com/NoSilver78/tessera/issues/71)) — `preflight` nannte den Grund, und die
+> Instanz blieb im read-only `monitor`. Der Guard hat also getan, was er soll, nachprüfbar auf einem
+> fremden Setup. Das ist **kein** Soak-Beweis: es zeigt den Schutzmechanismus, nicht den
+> Dauerbetrieb von `enforce`.
+
 ### ✅ Phase 4 — Release *(Default-Store erreicht)*
 - **HACS-Custom-Repo** (kleiner, kuratierter Kreis) → Feedback → **HACS-Default-Store**: am
   **18.10.2026** gemerged ([hacs/default#8877](https://github.com/hacs/default/pull/8877)), seit
@@ -91,14 +99,23 @@ geführt — und seit E3.5 (Phase 3) im Setup-Pfad verdrahtet:
       (`spike/reports/tessera-dev-e2e-report-2026-07-01.md`).
 - [x] Erstes getaggtes Release + Public-Flip; `continue-on-error` am HACS-Job entfernt.
 - [x] README/Doku-Feinschliff fürs öffentliche Repo (bilinguale Guides, Screenshots).
-- [x] **Versions-Tracking vom Nachlauf in den Vorlauf gedreht** (nächstes Release): Contract-Tests + `mypy
+- [x] **Versions-Tracking vom Nachlauf in den Vorlauf gedreht** (v0.9.5): Contract-Tests + `mypy
       --strict` pro validierter Linie in der CI-Matrix, plus nightly gegen die HA-**Pre-Release**,
       und der ganze Weg Grant → Compiler → HAs `PolicyPermissions` als Contract-Test.
+- [x] **Der Vorlauf hat sich zum ersten Mal bewährt** (26.11.2026): HA veröffentlichte `2026.12.0b0`
+      am 25.11., der Nightly wurde in derselben Nacht rot und CI hat
+      [#76](https://github.com/NoSilver78/tessera/issues/76) selbst angelegt — rund eine Woche vor
+      HAs Liefertermin, statt wie bisher danach. Der Diff ist gefahren, die Linie noch nicht
+      validiert.
 - [ ] **Soak-Phase + erste Dogfood-Instanz** — der größte offene Punkt: `enforce` ist gebaut,
       gegated, verdrahtet und dev-erprobt, aber nicht über Zeit in der Praxis bewiesen.
 - [ ] `SECURITY.md`-Kanal + Private Vulnerability Reporting scharfschalten.
-- [ ] Erste echte Community-Signale abwarten/einholen (Stand 25.10.2026: 0 Stars, 0 Forks,
-      0 fremde Issues) — ohne fremde Setups fehlt die Breite, die der Soak braucht.
+- [x] **Erste echte Community-Signale sind da** (Stand 26.11.2026: 2 Stars, 1 Fork, vier Issues von
+      drei verschiedenen Leuten, darunter ein echter Bug-Report zum Versions-Guard, #71). Die
+      Durststrecke nach dem Store-Eintritt ist damit vorbei; die **Breite** für einen Soak ist es
+      noch nicht.
+- [ ] HA **2026.12** validieren und v0.9.6 schneiden — Termin: HAs Release vermutlich am 2.12.
+      Aufgabe übergeben in `exchange/2026-11-26/ha-2026-12-codex-tasks-claude-2026-11-26.md`.
 
 ## Backlog / später
 
