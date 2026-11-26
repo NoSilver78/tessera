@@ -19,7 +19,12 @@ Regelt, wie Claude + Codex Tessera (und die Maison/Atrium-Familie) zusammen entw
 1. **Keine** Secrets/Token/Passwörter/Auth-Codes/LLAT/`.storage`-Werte in Chat/Logs/Reports/Commits/Evidence.
 2. `/Volumes/config` **read-only**, außer ein explizites Write-Gate nennt Ziel + Backup + Rollback + `check_config` + Verifikation.
 3. **Kein Live-/CM5-Write** ohne Backup, Rollback-Dry-Run, `check_config`, Manifest, Michael-Freigabe.
-4. **Kein Push/Commit vom Mac, wenn das Projekt Host-Autosync nutzt** (HA-Config/historian). **Ausnahme: Tessera** (kein self-sync-Host) → **Mac-Push via `gh` nur:** ins **private** Repo · von **Task-Branch/Worktree** (nie direkte `main`-Arbeit) · **kein `--force`** · **vor jedem Push `git status` + Secret-/Artefakt-Check** · Merge nach `main` **nur mit grünem Gate + CI**. Public/outward/HACS-Publish/Live **nur mit Michael-Freigabe**.
+4. **Kein Push/Commit vom Mac, wenn das Projekt Host-Autosync nutzt** (HA-Config/historian). **Ausnahme: Tessera** (kein self-sync-Host) → **Mac-Push via `gh` nur:** **kein `--force`** · **vor jedem Push `git status` + Secret-/Artefakt-Check** · Merge nach `main` **nur mit grünem Gate + CI**. Public/outward/HACS-Publish/Live **nur mit Michael-Freigabe**.
+   - **Was bindet oder ausgeliefert wird, geht über Task-Branch + PR** — nie direkt auf `main`: `custom_components/`, `tests/`, `.github/`, `decisions/` (ADRs), `CONTRACT.md`, `CLAUDE.md`, `AGENTS.md`, `docs/QUALITY.md` und die Prozessabschnitte von `docs/MAINTENANCE.md`.
+   - **Was nur berichtet, darf direkt auf `main`**: `exchange/`, `ROADMAP.md`, Statusabschnitte in `docs/`. Mechanische Probe: ändert der Diff **ausschließlich** Berichtspfade, ist Direktpush erlaubt — sonst nicht [Cx].
+   - **Die Trennlinie ist nicht „Code vs. Doku", sondern „berichtet vs. bindet".** Ein Befund ist ein Bericht; ein ADR, eine Regel oder eine festgeschriebene Entscheidung bindet künftiges Handeln und gehört damit durch dasselbe Gate wie Code.
+   - **Das Repo ist öffentlich** (HACS-Default-Store seit 2026-10-18): jeder Push ist sofort publik, der Secret-/Artefakt-Check ist Pflicht und nicht Formsache. „War mal privat" ist kein Argument.
+   - **Keine GitHub-Schlüsselwörter neben Issue-Nummern in Commit-Prosa** (`close`/`closes`/`fixes`/`resolves` + `#NN`), wenn nichts geschlossen werden soll — GitHub schließt sonst beim Push auf `main` automatisch. Stattdessen „Issue #NN" oder die Nummer umstellen. **Vorfall 2026-11-26:** der Satz „a green run has to close #76" im Body von `95dc8d9` hat das Tracking-Issue zur noch unvalidierten HA-Linie geschlossen — also genau das Issue, dessen Offenbleiben der Satz festhalten wollte [Cx].
 5. **Keine Architekturfreigabe aus einem PARTIAL-Lauf** [Cx].
 6. **Kein Produkt-/Enforce-Go**, solange Muss-Gates offen sind [Cx].
 7. Jede nicht prüfbare Aussage wird als **`nicht verifizierbar`** markiert — nicht geraten [Cx].
@@ -78,6 +83,12 @@ Repo + `exchange/`-Blackboard + Dual-Config. **`TASKS.md`**-Board (Michael-Nicke
 | Claude | **FINALIZED v1.0** | 2026-06-29 |
 | Codex | **ACCEPT** (v0.2-Review MODIFY → 5 Redlines eingearbeitet) | 2026-06-29 |
 | Michael | **Kernpunkte abgenickt** (OIDC-v1-Pflicht ergänzt) | 2026-06-29 |
+
+### Änderungen nach v1.0
+
+| Änderung | Status | Datum |
+|---|---|---|
+| **§2.4 neu gefasst** — Trennlinie „berichtet vs. bindet" statt Pauschalverbot direkter `main`-Arbeit · „ins private Repo" ersetzt durch die öffentliche Realität (Secret-Check Pflicht) · keine Close-Schlüsselwörter neben Issue-Nummern in Commit-Prosa. Enthält eine **Lockerung** (Berichtspfade dürfen direkt auf `main`) und zwei Verschärfungen | Vorschlag Claude → **ACCEPT Michael** (PR #78) | 2026-11-26 |
 
 ---
 **v1.0** = v0.2 + Codex' 5 v0.2-Review-Redlines (Status · Transport · Push-Regel · Naming · Doku-Scope) eingearbeitet. Künftige Änderungen via §14 (Ping-Pong + Michael-Bestätigung; Sicherheitsinvarianten nie still gelockert).
